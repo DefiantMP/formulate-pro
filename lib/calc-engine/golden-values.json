@@ -1,0 +1,152 @@
+{
+  "preset0_regrindOptB": {
+    "mode": "regrind",
+    "effPot": 0.07444444444444445,
+    "pwd": 14500,
+    "tMg": 35,
+    "tWt": 0.8,
+    "tabs": 30841,
+    "blend": 24672.926865671645,
+    "freshAct": 0,
+    "emdexAdd": 10172.926865671645,
+    "actInOld": 1079.4444444444446,
+    "actualMg": 35.00030623016259,
+    "variance": [
+      {
+        "weight": 0.785,
+        "step": -3,
+        "potencyMg": 34.344
+      },
+      {
+        "weight": 0.79,
+        "step": -2,
+        "potencyMg": 34.563
+      },
+      {
+        "weight": 0.795,
+        "step": -1,
+        "potencyMg": 34.781
+      },
+      {
+        "weight": 0.8,
+        "step": 0,
+        "potencyMg": 35
+      },
+      {
+        "weight": 0.805,
+        "step": 1,
+        "potencyMg": 35.219
+      },
+      {
+        "weight": 0.81,
+        "step": 2,
+        "potencyMg": 35.438
+      },
+      {
+        "weight": 0.815,
+        "step": 3,
+        "potencyMg": 35.656
+      }
+    ]
+  },
+  "preset1_fresh": {
+    "mode": "fresh",
+    "pot": 0.555,
+    "tMg": 35,
+    "tWt": 0.69,
+    "tabs": 133623,
+    "blend": 92199.87,
+    "activeG": 51170.92785,
+    "emdexG": 34574.95124999999,
+    "pvppG": 4609.9935,
+    "magsG": 1843.9974,
+    "emdexPct": 37.49999999999999,
+    "variance": [
+      {
+        "weight": 0.675,
+        "step": -3,
+        "potencyMg": 34.239
+      },
+      {
+        "weight": 0.68,
+        "step": -2,
+        "potencyMg": 34.493
+      },
+      {
+        "weight": 0.685,
+        "step": -1,
+        "potencyMg": 34.746
+      },
+      {
+        "weight": 0.69,
+        "step": 0,
+        "potencyMg": 35
+      },
+      {
+        "weight": 0.695,
+        "step": 1,
+        "potencyMg": 35.254
+      },
+      {
+        "weight": 0.7,
+        "step": 2,
+        "potencyMg": 35.507
+      },
+      {
+        "weight": 0.705,
+        "step": 3,
+        "potencyMg": 35.761
+      }
+    ]
+  },
+  "preset2_regrindOptA": {
+    "mode": "regrind",
+    "effPot": 0.555,
+    "pwd": 8000,
+    "tMg": 60,
+    "tWt": 1.15,
+    "tabs": 74000,
+    "blend": 85100,
+    "freshAct": 0,
+    "emdexAdd": 77100,
+    "actInOld": 4440,
+    "actualMg": 60,
+    "variance": [
+      {
+        "weight": 1.135,
+        "step": -3,
+        "potencyMg": 59.217
+      },
+      {
+        "weight": 1.14,
+        "step": -2,
+        "potencyMg": 59.478
+      },
+      {
+        "weight": 1.145,
+        "step": -1,
+        "potencyMg": 59.739
+      },
+      {
+        "weight": 1.15,
+        "step": 0,
+        "potencyMg": 60
+      },
+      {
+        "weight": 1.155,
+        "step": 1,
+        "potencyMg": 60.261
+      },
+      {
+        "weight": 1.16,
+        "step": 2,
+        "potencyMg": 60.522
+      },
+      {
+        "weight": 1.165,
+        "step": 3,
+        "potencyMg": 60.783
+      }
+    ]
+  }
+}

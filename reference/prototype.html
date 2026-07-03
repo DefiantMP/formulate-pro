@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Formulate Pro</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --brand: #0F6E56; --brand-mid: #1D9E75; --brand-bg: #E1F5EE; --brand-border: #9FE1CB;
+  --bg: #F4F4F1; --surface: #fff; --border: rgba(0,0,0,0.1); --border-md: rgba(0,0,0,0.18);
+  --text: #1a1a18; --text-2: #555551; --text-3: #888782;
+  --warning-bg: #FAEEDA; --warning-text: #854F0B; --warning-border: #FAC775;
+  --info-bg: #E6F1FB; --info-text: #185FA5;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; height: 100vh; overflow: hidden; }
+
+.app { display: flex; height: 100vh; }
+
+/* Sidebar */
+.sidebar { width: 196px; flex-shrink: 0; background: var(--surface); border-right: 0.5px solid var(--border); display: flex; flex-direction: column; }
+.logo { padding: 16px; border-bottom: 0.5px solid var(--border); }
+.logo-name { font-size: 16px; font-weight: 600; color: var(--brand); letter-spacing: -0.3px; }
+.logo-tag { font-size: 10px; color: var(--text-3); letter-spacing: 0.8px; text-transform: uppercase; margin-top: 1px; }
+.nav { padding: 8px; flex: 1; overflow-y: auto; }
+.nav-section { font-size: 10px; color: var(--text-3); letter-spacing: 0.7px; text-transform: uppercase; padding: 10px 8px 4px; }
+.nav-btn { width: 100%; text-align: left; border: none; background: none; display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; transition: background 0.1s; }
+.nav-btn:hover { background: var(--bg); color: var(--text); }
+.nav-btn.active { background: var(--brand-bg); color: var(--brand); font-weight: 500; }
+.nav-btn i { font-size: 15px; }
+.sidebar-foot { padding: 10px 8px; border-top: 0.5px solid var(--border); }
+.user-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+.user-row:hover { background: var(--bg); }
+.av { width: 26px; height: 26px; border-radius: 50%; background: var(--brand-bg); color: var(--brand); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.user-name { font-size: 12px; font-weight: 500; color: var(--text); }
+.user-plan { font-size: 10px; color: var(--text-3); }
+
+/* Main */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.topbar { height: 50px; padding: 0 20px; flex-shrink: 0; background: var(--surface); border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.topbar-left { display: flex; align-items: center; gap: 8px; }
+.topbar-title { font-size: 14px; font-weight: 500; }
+.mode-chip { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; background: var(--brand-bg); color: var(--brand); }
+.topbar-right { display: flex; gap: 6px; }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background 0.1s; }
+.btn:hover { background: var(--bg); }
+.btn-p { background: var(--brand); color: #fff; border-color: var(--brand); }
+.btn-p:hover { background: var(--brand-mid); }
+
+/* Content layout */
+.content { flex: 1; display: flex; gap: 14px; padding: 14px; overflow: hidden; min-height: 0; }
+.col-left { width: 270px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.col-mid { flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-width: 0; }
+.col-right { width: 220px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+
+/* Cards */
+.card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+.card-hdr { padding: 10px 14px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.card-hdr-title { font-size: 11px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.card-hdr-title i { font-size: 13px; color: var(--brand); }
+.card-body { padding: 14px; }
+
+/* Mode toggle */
+.mode-toggle { display: flex; border: 0.5px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
+.m-btn { flex: 1; padding: 6px 8px; font-size: 11px; font-weight: 500; border: none; background: none; color: var(--text-2); cursor: pointer; }
+.m-btn.active { background: var(--brand); color: #fff; }
+
+/* Fields */
+.field { margin-bottom: 10px; }
+.field:last-child { margin-bottom: 0; }
+label { display: block; font-size: 11px; color: var(--text-2); font-weight: 500; margin-bottom: 3px; }
+.row { display: flex; gap: 6px; }
+input[type=number], input[type=text] { height: 32px; width: 100%; padding: 0 9px; border: 0.5px solid var(--border-md); border-radius: 6px; font-size: 12px; background: var(--surface); color: var(--text); outline: none; font-family: inherit; }
+input:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15,110,86,0.12); }
+input[readonly] { background: var(--bg); color: var(--text-3); }
+.unit { height: 32px; padding: 0 9px; border-radius: 6px; white-space: nowrap; background: var(--bg); border: 0.5px solid var(--border); font-size: 11px; color: var(--text-3); display: flex; align-items: center; }
+.hr { height: 0.5px; background: var(--border); margin: 12px 0; }
+.sub-lbl { font-size: 10px; color: var(--text-3); letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 8px; }
+
+/* Option boxes */
+.opt-box { border: 0.5px solid var(--border-md); border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.opt-box.active { border-color: var(--brand); background: var(--brand-bg); }
+.opt-header { display: flex; align-items: flex-start; gap: 8px; }
+.opt-radio { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border-md); flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.opt-radio.active { border-color: var(--brand); background: var(--brand); }
+.opt-radio.active::after { content:''; width:5px; height:5px; border-radius:50%; background:#fff; }
+.opt-title { font-size: 12px; font-weight: 500; color: var(--text); }
+.opt-desc { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+.opt-fields { display: none; margin-top: 9px; padding-top: 9px; border-top: 0.5px solid var(--border); }
+.opt-box.active .opt-fields { display: block; }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 0.5px solid var(--border); padding: 0 14px; }
+.tab { padding: 9px 10px; font-size: 11px; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: all 0.15s; }
+.tab.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 500; }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.stat { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+.stat-lbl { font-size: 10px; color: var(--text-3); margin-bottom: 3px; }
+.stat-val { font-size: 19px; font-weight: 600; color: var(--text); }
+.stat-unit { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+
+/* Add rows */
+.add-sub { font-size: 10px; color: var(--text-3); letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 6px; }
+.add-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 7px; margin-bottom: 4px; background: var(--bg); }
+.add-row.key { background: var(--brand-bg); border: 0.5px solid var(--brand-border); }
+.add-lbl { font-size: 12px; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.add-lbl i { font-size: 13px; color: var(--text-3); }
+.add-val { font-size: 12px; font-weight: 600; color: var(--text); }
+.add-val.green { color: var(--brand); }
+.add-val.dim { color: var(--text-3); font-weight: 400; font-size: 11px; }
+.warn-row { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px; background: var(--warning-bg); border: 0.5px solid var(--warning-border); margin-top: 4px; font-size: 11px; color: var(--warning-text); }
+.warn-row i { font-size: 13px; flex-shrink: 0; }
+
+/* Variance table */
+.var-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.var-tbl th { text-align: left; font-size: 10px; font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 8px 6px; border-bottom: 0.5px solid var(--border); }
+.var-tbl td { padding: 6px 8px; color: var(--text); border-bottom: 0.5px solid var(--border); }
+.var-tbl tr:last-child td { border-bottom: none; }
+.var-tbl tr.tgt td { color: var(--brand); font-weight: 600; background: var(--brand-bg); }
+
+/* SOP */
+.sop-item { display: flex; gap: 9px; padding: 7px 0; border-bottom: 0.5px solid var(--border); font-size: 12px; color: var(--text); line-height: 1.5; }
+.sop-item:last-child { border: none; }
+.sop-n { width: 18px; height: 18px; border-radius: 50%; background: var(--brand-bg); color: var(--brand); font-size: 10px; font-weight: 600; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+
+/* Run history */
+.run-item { padding: 10px 14px; border-bottom: 0.5px solid var(--border); cursor: pointer; transition: background 0.1s; }
+.run-item:last-child { border: none; }
+.run-item:hover { background: var(--bg); }
+.run-item.loaded { background: var(--brand-bg); }
+.run-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.run-meta { font-size: 11px; color: var(--text-2); display: flex; align-items: center; gap: 5px; }
+.run-tag { font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 10px; }
+.tag-rg { background: var(--warning-bg); color: var(--warning-text); }
+.tag-fr { background: var(--info-bg); color: var(--info-text); }
+
+/* Empty state */
+.empty { text-align: center; padding: 28px 16px; color: var(--text-3); font-size: 12px; }
+.empty i { font-size: 26px; display: block; margin-bottom: 8px; opacity: 0.35; }
+
+/* Tips card */
+.tip { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 0.5px solid var(--border); font-size: 11px; color: var(--text-2); line-height: 1.6; }
+.tip:last-child { border: none; margin-bottom: 0; padding-bottom: 0; }
+.tip strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-name">Formulate</div>
+      <div class="logo-tag">Pro · Beta</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Workspace</div>
+      <button class="nav-btn active"><i class="ti ti-flask"></i> New run</button>
+      <button class="nav-btn"><i class="ti ti-history"></i> Run history</button>
+      <button class="nav-btn"><i class="ti ti-library"></i> Formulations</button>
+      <div class="nav-section" style="margin-top:8px">R&D Suite</div>
+      <button class="nav-btn"><i class="ti ti-chart-line"></i> Iterations</button>
+      <button class="nav-btn"><i class="ti ti-bug"></i> Troubleshoot</button>
+      <button class="nav-btn"><i class="ti ti-notes"></i> Lab notes</button>
+      <div class="nav-section" style="margin-top:8px">Account</div>
+      <button class="nav-btn"><i class="ti ti-building-factory-2"></i> Products</button>
+      <button class="nav-btn"><i class="ti ti-settings"></i> Settings</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="user-row">
+        <div class="av">JD</div>
+        <div>
+          <div class="user-name">J. Doe</div>
+          <div class="user-plan">Pro plan</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">New formulation run</span>
+        <span class="mode-chip" id="mode-chip">Fresh batch</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn" onclick="resetForm()"><i class="ti ti-refresh"></i> Reset</button>
+        <button class="btn btn-p"><i class="ti ti-device-floppy"></i> Save run</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- LEFT: Inputs -->
+      <div class="col-left">
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-hdr-title"><i class="ti ti-pill"></i> Inputs</div>
+          </div>
+          <div class="card-body">
+            <div class="mode-toggle">
+              <button class="m-btn active" onclick="setMode('fresh',this)">Fresh batch</button>
+              <button class="m-btn" onclick="setMode('regrind',this)">Regrind</button>
+            </div>
+
+            <!-- Fresh batch -->
+            <div id="fresh-fields">
+              <div class="field">
+                <label>Active ingredient</label>
+                <input type="text" id="f-name" placeholder="e.g. 7-OH" oninput="calc()" />
+              </div>
+              <div class="field">
+                <label>Batch potency</label>
+                <div class="row">
+                  <input type="number" id="f-pot" placeholder="55.5" step="0.001" oninput="calc()" />
+                  <div class="unit">%</div>
+                </div>
+              </div>
+              <div class="hr"></div>
+              <div class="field">
+                <label>Target mg / tablet</label>
+                <div class="row">
+                  <input type="number" id="f-tmg" placeholder="35" step="0.1" oninput="calc()" />
+                  <div class="unit">mg</div>
+                </div>
+              </div>
+              <div class="field">
+                <label>Target tablet weight</label>
+                <div class="row">
+                  <input type="number" id="f-twt" placeholder="0.690" step="0.001" oninput="calc()" />
+                  <div class="unit">g</div>
+                </div>
+              </div>
+              <div class="field">
+                <label>Tablets per run</label>
+                <div class="row">
+                  <input type="number" id="f-tabs" placeholder="66700" step="1" oninput="calc()" />
+                  <div class="unit">tabs</div>
+                </div>
+              </div>
+              <div class="hr"></div>
+              <div class="sub-lbl">Excipients</div>
+              <div class="field">
+                <label>% Magnesium stearate</label>
+                <div class="row">
+                  <input type="number" id="f-mags" value="2" step="0.1" oninput="calc()" />
+                  <div class="unit">%</div>
+                </div>
+              </div>
+              <div class="field">
+                <label>% PVPP XL</label>
+                <div class="row">
+                  <input type="number" id="f-pvpp" value="5" step="0.1" oninput="calc()" />
+                  <div class="unit">%</div>
+                </div>
+              </div>
+              <div class="field">
+                <label>% Emdex (auto)</label>
+                <div class="row">
+                  <input type="number" id="f-emdex" readonly />
+                  <div class="unit">%</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Regrind -->
+            <div id="rg-fields" style="display:none">
+              <div class="sub-lbl">Old tablet potency — pick one</div>
+
+              <div class="opt-box active" id="ob-a" onclick="selOpt('a')">
+                <div class="opt-header">
+                  <div class="opt-radio active" id="r-a"></div>
+                  <div>
+                    <div class="opt-title">Option A — bulk potency %</div>
+                    <div class="opt-desc">Raw material COA gives a % value</div>
+                  </div>
+                </div>
+                <div class="opt-fields">
+                  <div class="field" style="margin:0">
+                    <label>Potency of old batch</label>
+                    <div class="row">
+                      <input type="number" id="a-pot" placeholder="55.5" step="0.001" oninput="calc()" />
+                      <div class="unit">%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="opt-box" id="ob-b" onclick="selOpt('b')">
+                <div class="opt-header">
+                  <div class="opt-radio" id="r-b"></div>
+                  <div>
+                    <div class="opt-title">Option B — mg per tablet</div>
+                    <div class="opt-desc">Finished tablet COA gives mg / tablet</div>
+                  </div>
+                </div>
+                <div class="opt-fields">
+                  <div class="field">
+                    <label>mg active per old tablet</label>
+                    <div class="row">
+                      <input type="number" id="b-mg" placeholder="20.1" step="0.01" oninput="calc()" />
+                      <div class="unit">mg</div>
+                    </div>
+                  </div>
+                  <div class="field" style="margin:0">
+                    <label>Old tablet pressed weight</label>
+                    <div class="row">
+                      <input type="number" id="b-wt" value="0.270" step="0.001" oninput="calc()" />
+                      <div class="unit">g</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hr"></div>
+              <div class="field">
+                <label>Total reground powder weight</label>
+                <div class="row">
+                  <input type="number" id="rg-pwd" placeholder="14500" step="1" oninput="calc()" />
+                  <div class="unit">g</div>
+                </div>
+              </div>
+              <div class="hr"></div>
+              <div class="sub-lbl">Target new tablet</div>
+              <div class="field">
+                <label>Target mg / tablet</label>
+                <div class="row">
+                  <input type="number" id="rg-tmg" placeholder="35" step="0.1" oninput="calc()" />
+                  <div class="unit">mg</div>
+                </div>
+              </div>
+              <div class="field" style="margin:0">
+                <label>Target tablet weight</label>
+                <div class="row">
+                  <input type="number" id="rg-twt" placeholder="0.800" step="0.001" oninput="calc()" />
+                  <div class="unit">g</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MID: Output -->
+      <div class="col-mid">
+        <div class="card" style="flex:1;display:flex;flex-direction:column;">
+          <div class="tabs">
+            <div class="tab active" onclick="setTab('output',this)">Output</div>
+            <div class="tab" onclick="setTab('variance',this)">Variances</div>
+            <div class="tab" onclick="setTab('sop',this)">SOP</div>
+          </div>
+
+          <div id="t-output" class="card-body" style="flex:1;overflow-y:auto">
+            <div id="out-empty" class="empty"><i class="ti ti-flask-2"></i>Enter values on the left to see formulation output</div>
+            <div id="out-content" style="display:none">
+              <div class="stats">
+                <div class="stat"><div class="stat-lbl">Tablets</div><div class="stat-val" id="r-tabs">—</div><div class="stat-unit">per run</div></div>
+                <div class="stat"><div class="stat-lbl">Total blend</div><div class="stat-val" id="r-blend">—</div><div class="stat-unit">grams</div></div>
+                <div class="stat"><div class="stat-lbl">Active potency</div><div class="stat-val" id="r-pot">—</div><div class="stat-unit">of blend</div></div>
+                <div class="stat"><div class="stat-lbl">Verified mg / tab</div><div class="stat-val" id="r-mg">—</div><div class="stat-unit">mg</div></div>
+              </div>
+              <div class="add-sub">Add to V-mix</div>
+              <div id="add-rows"></div>
+            </div>
+          </div>
+
+          <div id="t-variance" class="card-body" style="display:none;flex:1;overflow-y:auto">
+            <div id="var-empty" class="empty"><i class="ti ti-ruler-measure"></i>Enter target values first</div>
+            <table class="var-tbl" id="var-tbl" style="display:none">
+              <thead><tr><th>Weight (g)</th><th>Step</th><th>Potency (mg)</th></tr></thead>
+              <tbody id="var-body"></tbody>
+            </table>
+          </div>
+
+          <div id="t-sop" class="card-body" style="display:none;flex:1;overflow-y:auto">
+            <div id="sop-empty" class="empty"><i class="ti ti-list-check"></i>SOP auto-generates from your inputs</div>
+            <div id="sop-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: History + Tips -->
+      <div class="col-right">
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-hdr-title"><i class="ti ti-history"></i> Recent runs</div>
+          </div>
+          <div style="padding: 4px 0;">
+            <div class="run-item" id="ri-0" onclick="loadRun(0)">
+              <div class="run-name">PB21RW35D</div>
+              <div class="run-meta"><span class="run-tag tag-rg">Regrind</span>35 mg · 14,500 g</div>
+            </div>
+            <div class="run-item" id="ri-1" onclick="loadRun(1)">
+              <div class="run-name">RR35 PB3</div>
+              <div class="run-meta"><span class="run-tag tag-fr">Fresh</span>35 mg · 133,623 tabs</div>
+            </div>
+            <div class="run-item" id="ri-2" onclick="loadRun(2)">
+              <div class="run-name">RG-60 Test</div>
+              <div class="run-meta"><span class="run-tag tag-rg">Regrind</span>60 mg · 8,000 g</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-hdr-title"><i class="ti ti-bulb"></i> Tips</div>
+          </div>
+          <div class="card-body">
+            <div class="tip"><strong>Regrind batches:</strong> MagSter and PVPP are already in the powder. Adding more risks soft, capping tablets.</div>
+            <div class="tip"><strong>Option B:</strong> Use the tablet's pressed weight — not any later adjusted weight — for accurate potency back-calculation.</div>
+            <div class="tip"><strong>Emdex in regrind:</strong> Only added to make up the weight difference between old and new tablet size.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+let mode='fresh', opt='a', activeTab='output';
+
+const presets=[
+  {mode:'regrind',opt:'b',bMg:20.1,bWt:0.270,pwd:14500,tMg:35,tWt:0.800},
+  {mode:'fresh',pot:55.5,tMg:35,tWt:0.69,tabs:133623,mags:2,pvpp:5},
+  {mode:'regrind',opt:'a',aPot:55.5,pwd:8000,tMg:60,tWt:1.15}
+];
+
+function setMode(m,btn){
+  mode=m;
+  document.querySelectorAll('.m-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('fresh-fields').style.display=m==='fresh'?'':'none';
+  document.getElementById('rg-fields').style.display=m==='regrind'?'':'none';
+  document.getElementById('mode-chip').textContent=m==='fresh'?'Fresh batch':'Regrind';
+  calc();
+}
+
+function selOpt(o){
+  opt=o;
+  ['a','b'].forEach(x=>{
+    document.getElementById('ob-'+x).classList.toggle('active',x===o);
+    document.getElementById('r-'+x).classList.toggle('active',x===o);
+  });
+  calc();
+}
+
+function setTab(t,el){
+  activeTab=t;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  ['output','variance','sop'].forEach(id=>{
+    document.getElementById('t-'+id).style.display=id===t?'':'none';
+  });
+}
+
+function g(id){return parseFloat(document.getElementById(id).value)||0;}
+
+function fmt(n,dec=1){
+  if(!isFinite(n)||n<=0) return '0';
+  return n.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
+function fmtK(n){
+  if(!isFinite(n)||n<=0) return '—';
+  if(n>=10000) return (n/1000).toFixed(1)+'k';
+  return Math.round(n).toLocaleString();
+}
+
+function calc(){
+  let res=null;
+  if(mode==='fresh'){
+    const pot=g('f-pot')/100,tMg=g('f-tmg'),tWt=g('f-twt'),tabs=g('f-tabs');
+    const mags=g('f-mags')/100,pvpp=g('f-pvpp')/100;
+    const emdex=Math.max(0,1-pot-mags-pvpp);
+    document.getElementById('f-emdex').value=(emdex*100).toFixed(2);
+    if(pot>0&&tMg>0&&tWt>0&&tabs>0){
+      const blend=tabs*tWt;
+      res={mode:'fresh',pot,tMg,tWt,tabs,blend,
+        activeG:blend*pot,emdexG:blend*emdex,pvppG:blend*pvpp,magsG:blend*mags};
+    }
+  } else {
+    let effPot=0;
+    if(opt==='a'){effPot=g('a-pot')/100;}
+    else{const bm=g('b-mg'),bw=g('b-wt');if(bm>0&&bw>0)effPot=bm/(bw*1000);}
+    const pwd=g('rg-pwd'),tMg=g('rg-tmg'),tWt=g('rg-twt');
+    if(effPot>0&&pwd>0&&tMg>0&&tWt>0){
+      const tabs=Math.floor(pwd*effPot*1000/tMg);
+      const rgPerTab=tMg/(effPot*1000);
+      const emdexPerTab=tWt-rgPerTab;
+      const emdexAdd=Math.max(0,tabs*emdexPerTab);
+      const actInOld=pwd*effPot;
+      const freshAct=Math.max(0,tabs*tMg/1000-actInOld);
+      const blend=pwd+freshAct+emdexAdd;
+      const actualMg=tabs>0?(actInOld+freshAct)*1000/tabs:0;
+      res={mode:'regrind',effPot,pwd,tMg,tWt,tabs,blend,freshAct,emdexAdd,actInOld,actualMg};
+    }
+  }
+  renderOutput(res); renderVariance(res); renderSOP(res);
+}
+
+function addRow(label,valStr,icon,key){
+  const cls=key?'add-row key':'add-row';
+  const vcls=key?'add-val green':'add-val';
+  return `<div class="${cls}"><div class="add-lbl"><i class="ti ti-${icon}"></i>${label}</div><div class="${vcls}">${valStr}</div></div>`;
+}
+
+function renderOutput(res){
+  const empty=document.getElementById('out-empty'),content=document.getElementById('out-content');
+  if(!res){empty.style.display='';content.style.display='none';return;}
+  empty.style.display='none';content.style.display='';
+  const pot=res.pot||res.effPot;
+  document.getElementById('r-tabs').textContent=fmtK(res.tabs);
+  document.getElementById('r-blend').textContent=res.blend>=1000?(res.blend/1000).toFixed(1)+'k':Math.round(res.blend).toLocaleString();
+  document.getElementById('r-pot').textContent=(pot*100).toFixed(3)+'%';
+  document.getElementById('r-mg').textContent=res.mode==='regrind'?res.actualMg.toFixed(3)+' mg':res.tMg.toFixed(1)+' mg';
+  let rows='';
+  if(res.mode==='regrind'){
+    rows+=addRow('Reground powder',fmt(res.pwd,0)+' g','reload',false);
+    rows+=addRow('Fresh 7-OH to add',res.freshAct>0?fmt(res.freshAct)+' g':'Not needed','plus',res.freshAct>0);
+    rows+=addRow('Emdex to add',fmt(res.emdexAdd)+' g','cube',true);
+    rows+=`<div class="warn-row"><i class="ti ti-alert-triangle"></i>Do not add fresh MagSter or PVPP — already present in regrind</div>`;
+  } else {
+    rows+=addRow('7-OH active',fmt(res.activeG)+' g','plus',true);
+    rows+=addRow('Emdex',fmt(res.emdexG)+' g','cube',true);
+    rows+=addRow('PVPP XL',fmt(res.pvppG)+' g','circle-plus',false);
+    rows+=addRow('Magnesium stearate',fmt(res.magsG)+' g','circle-plus',false);
+  }
+  document.getElementById('add-rows').innerHTML=rows;
+}
+
+function renderVariance(res){
+  const empty=document.getElementById('var-empty'),tbl=document.getElementById('var-tbl');
+  if(!res){empty.style.display='';tbl.style.display='none';return;}
+  empty.style.display='none';tbl.style.display='';
+  let html='';
+  for(let i=-3;i<=3;i++){
+    const wt=res.tWt+i*0.005,mg=res.tWt>0?(wt/res.tWt)*res.tMg:0;
+    html+=`<tr class="${i===0?'tgt':''}"><td>${wt.toFixed(3)}</td><td>${i>=0?'+':''}${i}</td><td>${mg.toFixed(3)}</td></tr>`;
+  }
+  document.getElementById('var-body').innerHTML=html;
+}
+
+function renderSOP(res){
+  const empty=document.getElementById('sop-empty'),list=document.getElementById('sop-list');
+  if(!res){empty.style.display='';list.innerHTML='';return;}
+  empty.style.display='none';
+  let steps=[];
+  if(res.mode==='regrind'){
+    steps=[
+      'Grind old tablets to fine powder',
+      `Weigh reground powder — confirm ${fmt(res.pwd,0)} g`,
+      `Add ${fmt(res.pwd,0)} g reground powder to V-mix`,
+      res.freshAct>0?`Add ${fmt(res.freshAct)} g fresh 7-OH`:'No fresh 7-OH needed — regrind active covers the full batch',
+      `Add ${fmt(res.emdexAdd)} g Emdex`,
+      'Mix for 15 minutes',
+      'Do not add MagSter or PVPP — already in regrind powder',
+      `Compress — target weight ${res.tWt.toFixed(3)} g, check against variance table`,
+    ];
+  } else {
+    steps=[
+      `Weigh ${fmt(res.activeG)} g of 7-OH active`,
+      `Weigh ${fmt(res.emdexG)} g Emdex and ${fmt(res.pvppG)} g PVPP XL`,
+      'Add active + Emdex + PVPP to V-mix',
+      'Mix for 15 minutes',
+      `Add ${fmt(res.magsG)} g Magnesium stearate`,
+      'Mix for 5 minutes',
+      `Compress — target weight ${res.tWt.toFixed(3)} g, check against variance table`,
+    ];
+  }
+  list.innerHTML=steps.map((s,i)=>`<div class="sop-item"><div class="sop-n">${i+1}</div><div>${s}</div></div>`).join('');
+}
+
+function loadRun(i){
+  document.querySelectorAll('.run-item').forEach((el,idx)=>el.classList.toggle('loaded',idx===i));
+  const p=presets[i];
+  if(p.mode==='regrind'){
+    document.querySelectorAll('.m-btn')[1].click();
+    selOpt(p.opt);
+    if(p.opt==='a'){document.getElementById('a-pot').value=p.aPot||'';}
+    else{document.getElementById('b-mg').value=p.bMg||'';document.getElementById('b-wt').value=p.bWt||0.270;}
+    document.getElementById('rg-pwd').value=p.pwd||'';
+    document.getElementById('rg-tmg').value=p.tMg||'';
+    document.getElementById('rg-twt').value=p.tWt||'';
+  } else {
+    document.querySelectorAll('.m-btn')[0].click();
+    document.getElementById('f-pot').value=p.pot||'';
+    document.getElementById('f-tmg').value=p.tMg||'';
+    document.getElementById('f-twt').value=p.tWt||'';
+    document.getElementById('f-tabs').value=p.tabs||'';
+    document.getElementById('f-mags').value=p.mags||2;
+    document.getElementById('f-pvpp').value=p.pvpp||5;
+  }
+  calc();
+}
+
+function resetForm(){
+  document.querySelectorAll('.run-item').forEach(el=>el.classList.remove('loaded'));
+  ['f-name','f-pot','f-tmg','f-twt','f-tabs','a-pot','b-mg','rg-pwd','rg-tmg','rg-twt'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('f-mags').value=2;
+  document.getElementById('f-pvpp').value=5;
+  document.getElementById('b-wt').value=0.270;
+  calc();
+}
+
+calc();
+</script>
+</body>
+</html>
