@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   calculateFreshBatch,
   calculateRegrind,
@@ -15,49 +15,20 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import InputsPanel from './InputsPanel';
 import OutputPanel, { type AddRowData, type StatsData, type TabKey } from './OutputPanel';
-import RunHistoryPanel, { type RunMeta } from './RunHistoryPanel';
+import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
 
 export type Mode = 'fresh' | 'regrind';
 export type RegrindOption = 'a' | 'b';
 
-interface FreshPreset {
-  mode: 'fresh';
-  pot: number;
-  tMg: number;
-  tWt: number;
-  tabs: number;
-  mags: number;
-  pvpp: number;
-}
-interface RegrindPreset {
-  mode: 'regrind';
-  opt: RegrindOption;
-  aPot?: number;
-  bMg?: number;
-  bWt?: number;
-  pwd: number;
-  tMg: number;
-  tWt: number;
-}
-type Preset = FreshPreset | RegrindPreset;
-
-const presets: Preset[] = [
-  { mode: 'regrind', opt: 'b', bMg: 20.1, bWt: 0.27, pwd: 14500, tMg: 35, tWt: 0.8 },
-  { mode: 'fresh', pot: 55.5, tMg: 35, tWt: 0.69, tabs: 133623, mags: 2, pvpp: 5 },
-  { mode: 'regrind', opt: 'a', aPot: 55.5, pwd: 8000, tMg: 60, tWt: 1.15 },
-];
-
-const runList: RunMeta[] = [
-  { name: 'PB21RW35D', tag: 'Regrind', tagClass: 'tag-rg', meta: '35 mg · 14,500 g' },
-  { name: 'RR35 PB3', tag: 'Fresh', tagClass: 'tag-fr', meta: '35 mg · 133,623 tabs' },
-  { name: 'RG-60 Test', tag: 'Regrind', tagClass: 'tag-rg', meta: '60 mg · 8,000 g' },
-];
-
 export default function FormulateApp() {
   const [mode, setMode] = useState<Mode>('fresh');
   const [activeTab, setActiveTab] = useState<TabKey>('output');
-  const [loadedRun, setLoadedRun] = useState<number | null>(null);
+  const [loadedRun, setLoadedRun] = useState<string | null>(null);
+
+  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [runsLoading, setRunsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [fName, setFName] = useState('');
   const [fPot, setFPot] = useState('');
@@ -197,29 +168,74 @@ export default function FormulateApp() {
       ? `Do not add fresh ${result.alreadyPresentIngredientNames.join(' or ')} — already present in regrind`
       : null;
 
-  function loadRun(i: number) {
-    const p = presets[i];
-    setLoadedRun(i);
-    if (p.mode === 'regrind') {
+  useEffect(() => {
+    fetchRuns();
+  }, []);
+
+  async function fetchRuns() {
+    setRunsLoading(true);
+    try {
+      const res = await fetch('/api/runs');
+      if (res.ok) setRuns(await res.json());
+    } finally {
+      setRunsLoading(false);
+    }
+  }
+
+  function loadRun(run: RunRecord) {
+    setLoadedRun(run.id);
+    const inputs = run.inputs;
+    if (run.mode === 'regrind') {
       setMode('regrind');
-      setOpt(p.opt);
-      if (p.opt === 'a') {
-        setAPot(String(p.aPot ?? ''));
-      } else {
-        setBMg(String(p.bMg ?? ''));
-        setBWt(String(p.bWt ?? 0.27));
-      }
-      setRgPwd(String(p.pwd ?? ''));
-      setRgTmg(String(p.tMg ?? ''));
-      setRgTwt(String(p.tWt ?? ''));
+      setOpt((inputs.opt as RegrindOption) || 'a');
+      setAPot(inputs.aPot ?? '');
+      setBMg(inputs.bMg ?? '');
+      setBWt(inputs.bWt ?? '0.270');
+      setRgPwd(inputs.rgPwd ?? '');
+      setRgTmg(inputs.rgTmg ?? '');
+      setRgTwt(inputs.rgTwt ?? '');
     } else {
       setMode('fresh');
-      setFPot(String(p.pot ?? ''));
-      setFTmg(String(p.tMg ?? ''));
-      setFTwt(String(p.tWt ?? ''));
-      setFTabs(String(p.tabs ?? ''));
-      setFMags(String(p.mags ?? 2));
-      setFPvpp(String(p.pvpp ?? 5));
+      setFName(inputs.fName ?? '');
+      setFPot(inputs.fPot ?? '');
+      setFTmg(inputs.fTmg ?? '');
+      setFTwt(inputs.fTwt ?? '');
+      setFTabs(inputs.fTabs ?? '');
+      setFMags(inputs.fMags ?? '2');
+      setFPvpp(inputs.fPvpp ?? '5');
+    }
+  }
+
+  async function saveRun() {
+    if (!result) {
+      alert('Nothing to save yet — enter values first.');
+      return;
+    }
+    const defaultLabel = `${mode === 'fresh' ? 'Fresh' : 'Regrind'} ${new Date().toLocaleString()}`;
+    const label = window.prompt('Name this run', defaultLabel);
+    if (label === null) return;
+
+    const inputs =
+      mode === 'fresh'
+        ? { fName, fPot, fTmg, fTwt, fTabs, fMags, fPvpp }
+        : { opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt };
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label.trim() || defaultLabel, mode, inputs, result }),
+      });
+      if (!res.ok) {
+        alert('Failed to save run.');
+        return;
+      }
+      const saved: RunRecord = await res.json();
+      setRuns((prev) => [saved, ...prev]);
+      setLoadedRun(saved.id);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -244,7 +260,7 @@ export default function FormulateApp() {
     <div className="app">
       <Sidebar />
       <div className="main">
-        <Topbar mode={mode} onReset={resetForm} />
+        <Topbar mode={mode} onReset={resetForm} onSaveRun={saveRun} saving={saving} />
         <div className="content">
           <div className="col-left">
             <InputsPanel
@@ -296,7 +312,7 @@ export default function FormulateApp() {
           </div>
 
           <div className="col-right">
-            <RunHistoryPanel runs={runList} loadedRun={loadedRun} onLoadRun={loadRun} />
+            <RunHistoryPanel runs={runs} loading={runsLoading} loadedRun={loadedRun} onLoadRun={loadRun} />
             <TipsCard />
           </div>
         </div>

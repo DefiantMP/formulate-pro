@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Ingredient template — matches the IngredientLine[] shape in lib/calc-engine/types.ts
+model Formulation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  ingredients Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  runs         Run[]
+  batchHistory BatchHistory[]
+}
+
+// A saved calculation: the inputs that produced it, the computed output, and
+// which formulation template was in effect.
+model Run {
+  id            String   @id @default(cuid())
+  label         String
+  mode          String // 'fresh' | 'regrind'
+  formulationId String
+  formulation   Formulation @relation(fields: [formulationId], references: [id])
+  inputs        Json
+  result        Json
+  createdAt     DateTime @default(now())
+}
+
+// Historical manufacturing batches, importable via CSV.
+model BatchHistory {
+  id                      String   @id @default(cuid())
+  date                    DateTime
+  formulationId           String?
+  formulation             Formulation? @relation(fields: [formulationId], references: [id])
+  tabletCount             Int
+  targetWeightG           Float
+  targetActiveMgPerTablet Float
+  notes                   String?
+  createdAt               DateTime @default(now())
+}

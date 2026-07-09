@@ -3,9 +3,11 @@ import type { Mode } from './FormulateApp';
 interface TopbarProps {
   mode: Mode;
   onReset: () => void;
+  onSaveRun: () => void;
+  saving: boolean;
 }
 
-export default function Topbar({ mode, onReset }: TopbarProps) {
+export default function Topbar({ mode, onReset, onSaveRun, saving }: TopbarProps) {
   return (
     <div className="topbar">
       <div className="topbar-left">
@@ -16,8 +18,8 @@ export default function Topbar({ mode, onReset }: TopbarProps) {
         <button className="btn" onClick={onReset}>
           <i className="ti ti-refresh" /> Reset
         </button>
-        <button className="btn btn-p">
-          <i className="ti ti-device-floppy" /> Save run
+        <button className="btn btn-p" onClick={onSaveRun} disabled={saving}>
+          <i className="ti ti-device-floppy" /> {saving ? 'Saving…' : 'Save run'}
         </button>
       </div>
     </div>

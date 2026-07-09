@@ -1,17 +1,30 @@
-export interface RunMeta {
-  name: string;
-  tag: string;
-  tagClass: 'tag-rg' | 'tag-fr';
-  meta: string;
+import type { CalcResult } from '@/lib/calc-engine/types';
+
+export interface RunRecord {
+  id: string;
+  label: string;
+  mode: 'fresh' | 'regrind';
+  inputs: Record<string, string>;
+  result: CalcResult;
+  createdAt: string;
 }
 
 interface RunHistoryPanelProps {
-  runs: RunMeta[];
-  loadedRun: number | null;
-  onLoadRun: (index: number) => void;
+  runs: RunRecord[];
+  loading: boolean;
+  loadedRun: string | null;
+  onLoadRun: (run: RunRecord) => void;
 }
 
-export default function RunHistoryPanel({ runs, loadedRun, onLoadRun }: RunHistoryPanelProps) {
+function metaLine(result: CalcResult): string {
+  const mg = `${result.targetActiveMgPerTablet} mg`;
+  if (result.mode === 'fresh') {
+    return `${mg} · ${result.tabletCount.toLocaleString()} tabs`;
+  }
+  return `${mg} · ${result.regroundPowderG.toLocaleString()} g`;
+}
+
+export default function RunHistoryPanel({ runs, loading, loadedRun, onLoadRun }: RunHistoryPanelProps) {
   return (
     <div className="card">
       <div className="card-hdr">
@@ -20,19 +33,33 @@ export default function RunHistoryPanel({ runs, loadedRun, onLoadRun }: RunHisto
         </div>
       </div>
       <div style={{ padding: '4px 0' }}>
-        {runs.map((run, i) => (
-          <button
-            key={run.name}
-            className={`run-item${loadedRun === i ? ' loaded' : ''}`}
-            onClick={() => onLoadRun(i)}
-          >
-            <div className="run-name">{run.name}</div>
-            <div className="run-meta">
-              <span className={`run-tag ${run.tagClass}`}>{run.tag}</span>
-              {run.meta}
-            </div>
-          </button>
-        ))}
+        {loading ? (
+          <div className="empty">
+            <i className="ti ti-history" />
+            Loading…
+          </div>
+        ) : runs.length === 0 ? (
+          <div className="empty">
+            <i className="ti ti-history" />
+            No saved runs yet
+          </div>
+        ) : (
+          runs.map((run) => (
+            <button
+              key={run.id}
+              className={`run-item${loadedRun === run.id ? ' loaded' : ''}`}
+              onClick={() => onLoadRun(run)}
+            >
+              <div className="run-name">{run.label}</div>
+              <div className="run-meta">
+                <span className={`run-tag ${run.mode === 'fresh' ? 'tag-fr' : 'tag-rg'}`}>
+                  {run.mode === 'fresh' ? 'Fresh' : 'Regrind'}
+                </span>
+                {metaLine(run.result)}
+              </div>
+            </button>
+          ))
+        )}
       </div>
     </div>
   );
