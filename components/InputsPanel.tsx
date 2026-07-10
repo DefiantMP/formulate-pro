@@ -138,6 +138,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <div className="row">
                 <input
                   type="number"
+                  placeholder="2"
                   step="0.1"
                   value={props.fMags}
                   onChange={(e) => props.setFMags(e.target.value)}
@@ -150,6 +151,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <div className="row">
                 <input
                   type="number"
+                  placeholder="5"
                   step="0.1"
                   value={props.fPvpp}
                   onChange={(e) => props.setFPvpp(e.target.value)}
@@ -229,6 +231,7 @@ export default function InputsPanel(props: InputsPanelProps) {
                   <div className="row">
                     <input
                       type="number"
+                      placeholder="0.270"
                       step="0.001"
                       value={props.bWt}
                       onChange={(e) => props.setBWt(e.target.value)}

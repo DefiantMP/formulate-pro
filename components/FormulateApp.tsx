@@ -35,13 +35,13 @@ export default function FormulateApp() {
   const [fTmg, setFTmg] = useState('');
   const [fTwt, setFTwt] = useState('');
   const [fTabs, setFTabs] = useState('');
-  const [fMags, setFMags] = useState('2');
-  const [fPvpp, setFPvpp] = useState('5');
+  const [fMags, setFMags] = useState('');
+  const [fPvpp, setFPvpp] = useState('');
 
   const [opt, setOpt] = useState<RegrindOption>('a');
   const [aPot, setAPot] = useState('');
   const [bMg, setBMg] = useState('');
-  const [bWt, setBWt] = useState('0.270');
+  const [bWt, setBWt] = useState('');
   const [rgPwd, setRgPwd] = useState('');
   const [rgTmg, setRgTmg] = useState('');
   const [rgTwt, setRgTwt] = useState('');
@@ -190,7 +190,7 @@ export default function FormulateApp() {
       setOpt((inputs.opt as RegrindOption) || 'a');
       setAPot(inputs.aPot ?? '');
       setBMg(inputs.bMg ?? '');
-      setBWt(inputs.bWt ?? '0.270');
+      setBWt(inputs.bWt ?? '');
       setRgPwd(inputs.rgPwd ?? '');
       setRgTmg(inputs.rgTmg ?? '');
       setRgTwt(inputs.rgTwt ?? '');
@@ -201,8 +201,8 @@ export default function FormulateApp() {
       setFTmg(inputs.fTmg ?? '');
       setFTwt(inputs.fTwt ?? '');
       setFTabs(inputs.fTabs ?? '');
-      setFMags(inputs.fMags ?? '2');
-      setFPvpp(inputs.fPvpp ?? '5');
+      setFMags(inputs.fMags ?? '');
+      setFPvpp(inputs.fPvpp ?? '');
     }
   }
 
@@ -246,11 +246,11 @@ export default function FormulateApp() {
     setFTmg('');
     setFTwt('');
     setFTabs('');
-    setFMags('2');
-    setFPvpp('5');
+    setFMags('');
+    setFPvpp('');
     setAPot('');
     setBMg('');
-    setBWt('0.270');
+    setBWt('');
     setRgPwd('');
     setRgTmg('');
     setRgTwt('');
