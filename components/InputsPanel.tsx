@@ -73,7 +73,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <label>Active ingredient</label>
               <input
                 type="text"
-                placeholder="e.g. 7-OH"
+                placeholder="e.g. API"
                 value={props.fName}
                 onChange={(e) => props.setFName(e.target.value)}
               />

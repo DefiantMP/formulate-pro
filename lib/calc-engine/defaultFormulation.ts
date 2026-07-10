@@ -8,7 +8,7 @@ import type { IngredientLine } from './types';
  */
 export function defaultIngredients(): IngredientLine[] {
   return [
-    { id: 'active', name: '7-OH', role: 'active', percentOfBlend: null, calculatedByDifference: false },
+    { id: 'active', name: 'API', role: 'active', percentOfBlend: null, calculatedByDifference: false },
     { id: 'emdex', name: 'Emdex', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
     { id: 'pvpp', name: 'PVPP XL', role: 'disintegrant', percentOfBlend: 5, calculatedByDifference: false },
     { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 2, calculatedByDifference: false },

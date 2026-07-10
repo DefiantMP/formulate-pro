@@ -209,7 +209,7 @@ input[readonly] { background: var(--bg); color: var(--text-3); }
             <div id="fresh-fields">
               <div class="field">
                 <label>Active ingredient</label>
-                <input type="text" id="f-name" placeholder="e.g. 7-OH" oninput="calc()" />
+                <input type="text" id="f-name" placeholder="e.g. API" oninput="calc()" />
               </div>
               <div class="field">
                 <label>Batch potency</label>
@@ -518,11 +518,11 @@ function renderOutput(res){
   let rows='';
   if(res.mode==='regrind'){
     rows+=addRow('Reground powder',fmt(res.pwd,0)+' g','reload',false);
-    rows+=addRow('Fresh 7-OH to add',res.freshAct>0?fmt(res.freshAct)+' g':'Not needed','plus',res.freshAct>0);
+    rows+=addRow('Fresh API to add',res.freshAct>0?fmt(res.freshAct)+' g':'Not needed','plus',res.freshAct>0);
     rows+=addRow('Emdex to add',fmt(res.emdexAdd)+' g','cube',true);
     rows+=`<div class="warn-row"><i class="ti ti-alert-triangle"></i>Do not add fresh MagSter or PVPP — already present in regrind</div>`;
   } else {
-    rows+=addRow('7-OH active',fmt(res.activeG)+' g','plus',true);
+    rows+=addRow('API active',fmt(res.activeG)+' g','plus',true);
     rows+=addRow('Emdex',fmt(res.emdexG)+' g','cube',true);
     rows+=addRow('PVPP XL',fmt(res.pvppG)+' g','circle-plus',false);
     rows+=addRow('Magnesium stearate',fmt(res.magsG)+' g','circle-plus',false);
@@ -552,7 +552,7 @@ function renderSOP(res){
       'Grind old tablets to fine powder',
       `Weigh reground powder — confirm ${fmt(res.pwd,0)} g`,
       `Add ${fmt(res.pwd,0)} g reground powder to V-mix`,
-      res.freshAct>0?`Add ${fmt(res.freshAct)} g fresh 7-OH`:'No fresh 7-OH needed — regrind active covers the full batch',
+      res.freshAct>0?`Add ${fmt(res.freshAct)} g fresh API`:'No fresh API needed — regrind active covers the full batch',
       `Add ${fmt(res.emdexAdd)} g Emdex`,
       'Mix for 15 minutes',
       'Do not add MagSter or PVPP — already in regrind powder',
@@ -560,7 +560,7 @@ function renderSOP(res){
     ];
   } else {
     steps=[
-      `Weigh ${fmt(res.activeG)} g of 7-OH active`,
+      `Weigh ${fmt(res.activeG)} g of API active`,
       `Weigh ${fmt(res.emdexG)} g Emdex and ${fmt(res.pvppG)} g PVPP XL`,
       'Add active + Emdex + PVPP to V-mix',
       'Mix for 15 minutes',

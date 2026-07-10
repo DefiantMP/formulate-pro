@@ -7,7 +7,7 @@ generalized to a configurable ingredient list instead of 4 hardcoded fields.
 ## Files
 
 - `src/types.ts` — ingredient/formulation/result types
-- `src/defaultFormulation.ts` — the default 4-ingredient setup (7-OH, Emdex, PVPP XL, MagSter)
+- `src/defaultFormulation.ts` — the default 4-ingredient setup (API, Emdex, PVPP XL, MagSter)
 - `src/calcEngine.ts` — `calculateFreshBatch`, `calculateRegrind`, `generateVarianceTable`
 - `src/sopGenerator.ts` — SOP step generation, ingredient-name-driven instead of hardcoded strings
 - `tests/calcEngine.test.ts` — 23 tests proving byte-parity against the prototype's actual output
