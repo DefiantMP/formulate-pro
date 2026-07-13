@@ -5,6 +5,7 @@
   --text: #1a1a18; --text-2: #555551; --text-3: #888782;
   --warning-bg: #FAEEDA; --warning-text: #854F0B; --warning-border: #FAC775;
   --info-bg: #E6F1FB; --info-text: #185FA5;
+  --danger-bg: #FDECEC; --danger-text: #A31515; --danger-border: #F3A9A9;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; height: 100vh; overflow: hidden; }
 
@@ -66,6 +67,10 @@ label { display: block; font-size: 11px; color: var(--text-2); font-weight: 500;
 input[type=number], input[type=text] { height: 32px; width: 100%; padding: 0 9px; border: 0.5px solid var(--border-md); border-radius: 6px; font-size: 12px; background: var(--surface); color: var(--text); outline: none; font-family: inherit; }
 input:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15,110,86,0.12); }
 input[readonly] { background: var(--bg); color: var(--text-3); }
+/* A placeholder hint must never be mistakable for a committed value — this
+   is a safety property, not just style, since an unfilled % field silently
+   computes as 0 and can omit an ingredient from a real batch. */
+input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .unit { height: 32px; padding: 0 9px; border-radius: 6px; white-space: nowrap; background: var(--bg); border: 0.5px solid var(--border); font-size: 11px; color: var(--text-3); display: flex; align-items: center; }
 .hr { height: 0.5px; background: var(--border); margin: 12px 0; }
 .sub-lbl { font-size: 10px; color: var(--text-3); letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 8px; }
@@ -137,3 +142,23 @@ input[readonly] { background: var(--bg); color: var(--text-3); }
 .tip { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 0.5px solid var(--border); font-size: 11px; color: var(--text-2); line-height: 1.6; }
 .tip:last-child { border: none; margin-bottom: 0; padding-bottom: 0; }
 .tip strong { color: var(--text); }
+
+/* AI math verification */
+.verify-quiet { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); padding: 1px 2px; }
+.verify-quiet i { font-size: 13px; }
+.verify-quiet.confirmed { color: var(--brand); }
+.verify-quiet.acknowledged { color: var(--warning-text); }
+
+.verify-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); }
+.verify-banner i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.verify-banner-title { font-size: 13px; font-weight: 700; }
+.verify-banner-notes { font-size: 12px; margin-top: 3px; opacity: 0.9; }
+.verify-banner-body { flex: 1; }
+
+.verify-compare { display: flex; gap: 16px; margin-top: 8px; padding: 8px 10px; background: rgba(255,255,255,0.5); border-radius: 6px; }
+.verify-compare-item { font-size: 11px; }
+.verify-compare-lbl { color: var(--danger-text); opacity: 0.75; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; }
+.verify-compare-val { font-weight: 700; font-size: 13px; margin-top: 1px; }
+
+.verify-ack-btn { margin-top: 10px; height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid var(--danger-text); background: var(--danger-text); color: #fff; cursor: pointer; }
+.verify-ack-btn:hover { opacity: 0.9; }

@@ -29,6 +29,11 @@ model Run {
   formulation   Formulation @relation(fields: [formulationId], references: [id])
   inputs        Json
   result        Json
+  // Audit trail for a Tier 2 AI-verification discrepancy the operator
+  // reviewed and acknowledged before saving: { acknowledgedAt, field,
+  // reportedValue, computedValue, delta, unit }. Null when the run had no
+  // discrepancy needing review.
+  verificationAcknowledgment Json?
   createdAt     DateTime @default(now())
 }
 

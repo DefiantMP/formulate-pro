@@ -12,7 +12,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
-  const { label, mode, inputs, result } = body ?? {};
+  const { label, mode, inputs, result, verificationAcknowledgment } = body ?? {};
 
   if (typeof label !== 'string' || !label.trim()) {
     return NextResponse.json({ error: 'label is required' }, { status: 400 });
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       formulationId: formulation.id,
       inputs,
       result,
+      verificationAcknowledgment: verificationAcknowledgment ?? undefined,
     },
   });
 

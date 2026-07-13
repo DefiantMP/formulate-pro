@@ -17,6 +17,9 @@ import InputsPanel from './InputsPanel';
 import OutputPanel, { type AddRowData, type StatsData, type TabKey } from './OutputPanel';
 import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
+import VerifyIndicator, { type VerifyDiscrepancy, type VerifyStatus } from './VerifyIndicator';
+
+const VERIFY_DEBOUNCE_MS = 800;
 
 export type Mode = 'fresh' | 'regrind';
 export type RegrindOption = 'a' | 'b';
@@ -35,8 +38,11 @@ export default function FormulateApp() {
   const [fTmg, setFTmg] = useState('');
   const [fTwt, setFTwt] = useState('');
   const [fTabs, setFTabs] = useState('');
-  const [fMags, setFMags] = useState('');
-  const [fPvpp, setFPvpp] = useState('');
+  const [excipientPercents, setExcipientPercents] = useState<Record<string, string>>({});
+
+  function setExcipientPercent(id: string, value: string) {
+    setExcipientPercents((prev) => ({ ...prev, [id]: value }));
+  }
 
   const [opt, setOpt] = useState<RegrindOption>('a');
   const [aPot, setAPot] = useState('');
@@ -49,6 +55,10 @@ export default function FormulateApp() {
   const baseIngredients = useMemo(() => defaultIngredients(), []);
   const activeIngredient = baseIngredients.find((i) => i.role === 'active')!;
   const fillerIngredient = baseIngredients.find((i) => i.calculatedByDifference)!;
+  const excipients = useMemo(
+    () => baseIngredients.filter((i) => i.role !== 'active' && !i.calculatedByDifference),
+    [baseIngredients]
+  );
   const alreadyPresentNames = baseIngredients
     .filter((i) => i.role === 'disintegrant' || i.role === 'lubricant')
     .map((i) => i.name);
@@ -56,20 +66,32 @@ export default function FormulateApp() {
   const freshIngredients = useMemo<IngredientLine[]>(
     () =>
       baseIngredients.map((i) => {
+        // The active ingredient's percentOfBlend is derived internally by
+        // calculateFreshBatch from potencyPercent — never set directly here.
         if (i.role === 'active') {
-          return { ...i, name: fName.trim() || i.name, percentOfBlend: numOrZero(fPot) };
+          return { ...i, name: fName.trim() || i.name };
         }
-        if (i.id === 'magstearate') return { ...i, percentOfBlend: numOrZero(fMags) };
-        if (i.id === 'pvpp') return { ...i, percentOfBlend: numOrZero(fPvpp) };
-        return i;
+        if (i.calculatedByDifference) return i;
+        return { ...i, percentOfBlend: numOrZero(excipientPercents[i.id] ?? '') };
       }),
-    [baseIngredients, fName, fPot, fMags, fPvpp]
+    [baseIngredients, fName, excipientPercents]
   );
 
-  const emdexDisplay = Math.max(
-    0,
-    100 - numOrZero(fPot) - numOrZero(fMags) - numOrZero(fPvpp)
-  ).toFixed(2);
+  // Live preview of the auto-filler %, mirroring the same derivation
+  // calculateFreshBatch performs internally (potency is raw-material purity,
+  // not the active ingredient's direct % of blend).
+  const potencyNum = numOrZero(fPot);
+  const targetMgNum = numOrZero(fTmg);
+  const targetWtNum = numOrZero(fTwt);
+  const derivedActivePercent =
+    potencyNum > 0 && targetMgNum > 0 && targetWtNum > 0
+      ? (targetMgNum / (potencyNum / 100) / (targetWtNum * 1000)) * 100
+      : 0;
+  const excipientPercentSum = excipients.reduce(
+    (sum, i) => sum + numOrZero(excipientPercents[i.id] ?? ''),
+    0
+  );
+  const emdexDisplay = Math.max(0, 100 - derivedActivePercent - excipientPercentSum).toFixed(2);
 
   const freshResult = useMemo(() => {
     try {
@@ -77,12 +99,13 @@ export default function FormulateApp() {
         tabletCount: numOrZero(fTabs),
         targetWeightG: numOrZero(fTwt),
         targetActiveMgPerTablet: numOrZero(fTmg),
+        potencyPercent: numOrZero(fPot),
         ingredients: freshIngredients,
       });
     } catch {
       return null;
     }
-  }, [fTabs, fTwt, fTmg, freshIngredients]);
+  }, [fTabs, fTwt, fTmg, fPot, freshIngredients]);
 
   const regrindResult = useMemo(() => {
     const potency: PotencyInput =
@@ -133,18 +156,21 @@ export default function FormulateApp() {
   const addRows: AddRowData[] = useMemo(() => {
     if (!result) return [];
     if (result.mode === 'fresh') {
-      const activeG = result.ingredientGrams[activeIngredient.id];
-      const fillerG = result.ingredientGrams[fillerIngredient.id];
-      const pvppIngredient = baseIngredients.find((i) => i.id === 'pvpp')!;
-      const magIngredient = baseIngredients.find((i) => i.id === 'magstearate')!;
-      const pvppG = result.ingredientGrams[pvppIngredient.id];
-      const magG = result.ingredientGrams[magIngredient.id];
-      return [
-        { label: `${freshIngredients[0].name} active`, value: `${fmt(activeG)} g`, icon: 'plus', key: true },
-        { label: fillerIngredient.name, value: `${fmt(fillerG)} g`, icon: 'cube', key: true },
-        { label: pvppIngredient.name, value: `${fmt(pvppG)} g`, icon: 'circle-plus', key: false },
-        { label: magIngredient.name, value: `${fmt(magG)} g`, icon: 'circle-plus', key: false },
-      ];
+      return freshIngredients
+        .map((ing) => {
+          const grams = result.ingredientGrams[ing.id] ?? 0;
+          if (grams <= 0) return null;
+          const isActive = ing.role === 'active';
+          const isFiller = ing.calculatedByDifference;
+          const row: AddRowData = {
+            label: isActive ? `${ing.name} active` : ing.name,
+            value: `${fmt(grams)} g`,
+            icon: isActive ? 'plus' : isFiller ? 'cube' : 'circle-plus',
+            key: isActive || isFiller,
+          };
+          return row;
+        })
+        .filter((row): row is AddRowData => row !== null);
     }
     return [
       { label: 'Reground powder', value: `${fmt(result.regroundPowderG, 0)} g`, icon: 'reload', key: false },
@@ -161,12 +187,76 @@ export default function FormulateApp() {
         key: true,
       },
     ];
-  }, [result, activeIngredient, fillerIngredient, baseIngredients, freshIngredients]);
+  }, [result, activeIngredient, freshIngredients]);
 
   const warnRow =
     result && result.mode === 'regrind'
       ? `Do not add fresh ${result.alreadyPresentIngredientNames.join(' or ')} — already present in regrind`
       : null;
+
+  const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('idle');
+  const [verifyNotes, setVerifyNotes] = useState('');
+  const [verifyDiscrepancy, setVerifyDiscrepancy] = useState<VerifyDiscrepancy | null>(null);
+  const [verifyAcknowledgedAt, setVerifyAcknowledgedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!result) {
+      setVerifyStatus('idle');
+      setVerifyNotes('');
+      setVerifyDiscrepancy(null);
+      setVerifyAcknowledgedAt(null);
+      return;
+    }
+
+    const inputsSnapshot =
+      mode === 'fresh'
+        ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
+        : { opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt };
+
+    setVerifyStatus('checking');
+    setVerifyDiscrepancy(null);
+    setVerifyAcknowledgedAt(null);
+    const controller = new AbortController();
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/ai/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, inputs: inputsSnapshot, result }),
+          signal: controller.signal,
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.status === 'confirmed') {
+          setVerifyStatus('confirmed');
+          setVerifyNotes(data.notes ?? '');
+          setVerifyDiscrepancy(null);
+        } else if (res.ok && data?.status === 'discrepancy') {
+          setVerifyStatus('needs_review');
+          setVerifyNotes(data.notes ?? '');
+          setVerifyDiscrepancy(data.discrepancy ?? null);
+        } else {
+          setVerifyStatus('error');
+          setVerifyNotes('Verification unavailable right now.');
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setVerifyStatus('error');
+          setVerifyNotes('Verification unavailable right now.');
+        }
+      }
+    }, VERIFY_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [result, mode, fName, fPot, fTmg, fTwt, fTabs, excipientPercents, opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt]);
+
+  function acknowledgeDiscrepancy() {
+    setVerifyAcknowledgedAt(new Date().toISOString());
+    setVerifyStatus('acknowledged');
+  }
 
   useEffect(() => {
     fetchRuns();
@@ -185,24 +275,30 @@ export default function FormulateApp() {
   function loadRun(run: RunRecord) {
     setLoadedRun(run.id);
     const inputs = run.inputs;
+    const str = (key: string) => (typeof inputs[key] === 'string' ? (inputs[key] as string) : '');
     if (run.mode === 'regrind') {
       setMode('regrind');
       setOpt((inputs.opt as RegrindOption) || 'a');
-      setAPot(inputs.aPot ?? '');
-      setBMg(inputs.bMg ?? '');
-      setBWt(inputs.bWt ?? '');
-      setRgPwd(inputs.rgPwd ?? '');
-      setRgTmg(inputs.rgTmg ?? '');
-      setRgTwt(inputs.rgTwt ?? '');
+      setAPot(str('aPot'));
+      setBMg(str('bMg'));
+      setBWt(str('bWt'));
+      setRgPwd(str('rgPwd'));
+      setRgTmg(str('rgTmg'));
+      setRgTwt(str('rgTwt'));
     } else {
       setMode('fresh');
-      setFName(inputs.fName ?? '');
-      setFPot(inputs.fPot ?? '');
-      setFTmg(inputs.fTmg ?? '');
-      setFTwt(inputs.fTwt ?? '');
-      setFTabs(inputs.fTabs ?? '');
-      setFMags(inputs.fMags ?? '');
-      setFPvpp(inputs.fPvpp ?? '');
+      setFName(str('fName'));
+      setFPot(str('fPot'));
+      setFTmg(str('fTmg'));
+      setFTwt(str('fTwt'));
+      setFTabs(str('fTabs'));
+      // Backward compat: runs saved before excipients became generic stored
+      // fixed fMags/fPvpp fields instead of a per-ingredient map.
+      const legacy: Record<string, string> = {};
+      if (typeof inputs.fMags === 'string') legacy.magstearate = inputs.fMags;
+      if (typeof inputs.fPvpp === 'string') legacy.pvpp = inputs.fPvpp;
+      const savedExcipients = (inputs.excipients as Record<string, string> | undefined) ?? {};
+      setExcipientPercents({ ...legacy, ...savedExcipients });
     }
   }
 
@@ -211,21 +307,57 @@ export default function FormulateApp() {
       alert('Nothing to save yet — enter values first.');
       return;
     }
+    if (mode === 'fresh') {
+      const uncommitted = excipients.filter((ing) => (excipientPercents[ing.id] ?? '') === '');
+      if (uncommitted.length > 0) {
+        const names = uncommitted.map((i) => i.name);
+        const joined =
+          names.length <= 2
+            ? names.join(' and ')
+            : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+        alert(
+          `Enter a value for ${joined} before saving — use 0 if it's not used in this batch. An empty field can't be told apart from a forgotten one.`
+        );
+        return;
+      }
+    }
+    if (verifyStatus === 'needs_review') {
+      alert('Review the verification discrepancy above and click "Reviewed, proceeding" before saving this run.');
+      return;
+    }
     const defaultLabel = `${mode === 'fresh' ? 'Fresh' : 'Regrind'} ${new Date().toLocaleString()}`;
     const label = window.prompt('Name this run', defaultLabel);
     if (label === null) return;
 
     const inputs =
       mode === 'fresh'
-        ? { fName, fPot, fTmg, fTwt, fTabs, fMags, fPvpp }
+        ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
         : { opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt };
+
+    const verificationAcknowledgment =
+      verifyStatus === 'acknowledged' && verifyDiscrepancy && verifyAcknowledgedAt
+        ? {
+            acknowledgedAt: verifyAcknowledgedAt,
+            field: verifyDiscrepancy.field,
+            reportedValue: verifyDiscrepancy.reportedValue,
+            computedValue: verifyDiscrepancy.computedValue,
+            delta: verifyDiscrepancy.computedValue - verifyDiscrepancy.reportedValue,
+            unit: verifyDiscrepancy.unit,
+          }
+        : null;
 
     setSaving(true);
     try {
       const res = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: label.trim() || defaultLabel, mode, inputs, result }),
+        body: JSON.stringify({
+          label: label.trim() || defaultLabel,
+          mode,
+          inputs,
+          result,
+          verificationAcknowledgment,
+        }),
       });
       if (!res.ok) {
         alert('Failed to save run.');
@@ -246,8 +378,7 @@ export default function FormulateApp() {
     setFTmg('');
     setFTwt('');
     setFTabs('');
-    setFMags('');
-    setFPvpp('');
+    setExcipientPercents({});
     setAPot('');
     setBMg('');
     setBWt('');
@@ -276,10 +407,10 @@ export default function FormulateApp() {
               setFTwt={setFTwt}
               fTabs={fTabs}
               setFTabs={setFTabs}
-              fMags={fMags}
-              setFMags={setFMags}
-              fPvpp={fPvpp}
-              setFPvpp={setFPvpp}
+              excipients={excipients}
+              excipientPercents={excipientPercents}
+              setExcipientPercent={setExcipientPercent}
+              fillerName={fillerIngredient.name}
               emdexDisplay={emdexDisplay}
               opt={opt}
               onOptChange={setOpt}
@@ -299,6 +430,12 @@ export default function FormulateApp() {
           </div>
 
           <div className="col-mid">
+            <VerifyIndicator
+              status={verifyStatus}
+              notes={verifyNotes}
+              discrepancy={verifyDiscrepancy}
+              onAcknowledge={acknowledgeDiscrepancy}
+            />
             <OutputPanel
               activeTab={activeTab}
               onTabChange={setActiveTab}
