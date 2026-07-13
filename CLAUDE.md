@@ -1,0 +1,47 @@
+# Formulate Pro — Project Memory
+
+Tablet formulation calculator for nutraceutical manufacturing. Used by operators making products and by client companies requesting them. Next.js 14 App Router + TypeScript, rebuilt from an HTML prototype to add real reactive state and AI-assisted verification.
+
+## Source of Truth
+
+- `formulate-pro-engine/` (moved into `lib/calc-engine/`) is the tested calculation engine. Do not rewrite its math logic without explicit instruction. It has a passing test suite (23 tests at last check) — run tests before and after any change that touches calculation code.
+- `reference/prototype.html` shows the original intended visual design/layout only. It is not a source of truth for math or data flow.
+
+## Domain Rules — Ingredient Architecture
+
+- A formulation is a list of ingredients. Exactly one ingredient has role `"active"`. Exactly one ingredient has role `"calculatedByDifference"` (the filler — defaults to Emdex). All other ingredients carry fixed percentages.
+- The architecture must support any number of ingredients, not just the original 4-ingredient default. Real production formulations (e.g. RR77-PB9) use 5+ ingredients.
+- Fresh-batch mode vs. regrind mode use different math — this distinction caused a real production-blocking bug once already:
+  - **Regrind mode:** raw material potency percentage = the active ingredient's percentage of the blend directly.
+  - **Fresh-batch mode:** blend percentage must be derived from potency + target mg/tablet + target tablet weight. It is NOT the same as raw potency percentage. Any change to fresh-batch calculation must be validated against a known-correct production sheet before being trusted.
+- Known-good validation case (RR77-PB9, 5 ingredients including EZTAB at 10%): 855.00g active, 5,530.23g Emdex, 300.48g PVPP XL, 75.12g Magnesium stearate, 751.20g EZTAB, total 7,512.03g. Use this to sanity-check any engine changes.
+- Regrind mode has a real-formulation validation pass still pending (waiting on a colleague's regrind sheet) — treat regrind math as less battle-tested than fresh-batch until that lands.
+
+## AI Verification Layer — Integrity Rules
+
+- AI math verification must never perform arithmetic in free-form token generation. It must go through a genuine tool-use round-trip: TypeScript computes the actual numbers server-side, feeds results back to the model, and only then can the model conclude "confirmed" or "discrepancy."
+- There is an integrity gate that rejects any AI response containing a reported number that doesn't trace back to an actual tool output. Don't loosen or bypass this gate for convenience.
+- Verification UX is two-tier: sub-threshold floating-point noise auto-confirms; real discrepancies require explicit human "Reviewed, proceeding" acknowledgment, logged to an audit trail, with save blocked until acknowledged.
+
+## Secrets & Environment
+
+- Anthropic API key lives in `.env.local`, which is gitignored (`.env*.local` pattern) — confirmed not tracked. `.env` (DATABASE_URL only, not a secret) was previously tracked in git despite not matching the old gitignore pattern; it's now untracked and `.env` was added to `.gitignore`. Verify this is actually the case before committing — don't assume.
+- Persistence is Prisma + SQLite (not Supabase). Revisit this only if the project needs true multi-device/remote access (e.g. client companies submitting requests remotely) — don't migrate prematurely.
+
+## Working Style / Process
+
+- Commit after each verified milestone, not in large batches — e.g. engine move, UI wiring, persistence layer, each Phase 4 sub-piece (verification round-trip, integrity gate) as separate commits. This project has already had two real bugs (fresh-batch math, false-positive AI verification) where clean commit history would have made isolating the cause easier.
+- Validate against real production data before trusting new output — don't rely on unit tests alone for anything touching the calc engine.
+- Test both happy paths and failure modes manually before considering a feature done.
+- The app has not yet been used for real production batches — treat that as the bar for "done," not just passing tests.
+
+## Outstanding Items (update as these close out)
+
+- [x] Save confirmation banner — no visual feedback currently on save (done: "Run saved" toast added)
+- [ ] CSV batch import UI — backend endpoint exists at `/api/batch-history/import`, no frontend yet
+- [ ] Regrind mode validation pass — pending a real regrind formulation sheet
+- [ ] Phase 4 remainder: recommendation engine, excipient suggestions layer — not yet started
+
+## Environment Notes
+
+Project lives at `~/Documents/formulate-pro` (moved from home directory to resolve macOS TCC permission blocking). Claude has Documents folder access granted, not Full Disk Access — keep it that way; deny unrelated permission prompts (Music, Photos, Contacts, etc.).
