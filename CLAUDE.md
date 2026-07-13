@@ -4,8 +4,9 @@ Tablet formulation calculator for nutraceutical manufacturing. Used by operators
 
 ## Source of Truth
 
-- `formulate-pro-engine/` (moved into `lib/calc-engine/`) is the tested calculation engine. Do not rewrite its math logic without explicit instruction. It has a passing test suite (23 tests at last check) — run tests before and after any change that touches calculation code.
+- `formulate-pro-engine/` (moved into `lib/calc-engine/`) is the tested calculation engine. Do not rewrite its math logic without explicit instruction. Passing test suite, 42 tests at last check across `lib/calc-engine/tests/`, `lib/arithmetic.test.ts`, and `lib/aiVerification.test.ts` (`npm test`) — run before and after any change that touches calculation or AI-verification code.
 - `reference/prototype.html` shows the original intended visual design/layout only. It is not a source of truth for math or data flow.
+- `app/api/ai/verify/route.ts` is a thin Next.js handler only — Next.js route files may only export route handlers, so it can't hold business logic. The actual model↔tool conversation loop, system prompt, and integrity gate live in `lib/aiVerification.ts`; the calculator tool's expression evaluator (real deterministic arithmetic, no `eval`) lives in `lib/arithmetic.ts`. Edit those, not `route.ts`, for verification logic changes.
 
 ## Domain Rules — Ingredient Architecture
 
@@ -14,7 +15,7 @@ Tablet formulation calculator for nutraceutical manufacturing. Used by operators
 - Fresh-batch mode vs. regrind mode use different math — this distinction caused a real production-blocking bug once already:
   - **Regrind mode:** raw material potency percentage = the active ingredient's percentage of the blend directly.
   - **Fresh-batch mode:** blend percentage must be derived from potency + target mg/tablet + target tablet weight. It is NOT the same as raw potency percentage. Any change to fresh-batch calculation must be validated against a known-correct production sheet before being trusted.
-- Known-good validation case (RR77-PB9, 5 ingredients including EZTAB at 10%): 855.00g active, 5,530.23g Emdex, 300.48g PVPP XL, 75.12g Magnesium stearate, 751.20g EZTAB, total 7,512.03g. Use this to sanity-check any engine changes.
+- Known-good validation case (RR77-PB9, default 5-ingredient formulation — PVPP XL 5%, Magnesium stearate 2%, EZTAB 10% — at potency 76.4%, target 60mg/tablet, target weight 0.69g, 10,887 tablets): 855.00g active, 5,379.98g Emdex, 375.60g PVPP XL, 150.24g Magnesium stearate, 751.20g EZTAB, total 7,512.03g. Verified directly against `calculateFreshBatch` on 2026-07-13 and matches `lib/calc-engine/tests/calcEngine.test.ts`. (An earlier version of this note had different Emdex/PVPP XL/Magnesium stearate figures — those were wrong, presumably transcribed from a formulation with different excipient percentages; corrected here.) Use this to sanity-check any engine changes.
 - Regrind mode has a real-formulation validation pass still pending (waiting on a colleague's regrind sheet) — treat regrind math as less battle-tested than fresh-batch until that lands.
 
 ## AI Verification Layer — Integrity Rules
