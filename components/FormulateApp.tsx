@@ -156,21 +156,21 @@ export default function FormulateApp() {
   const addRows: AddRowData[] = useMemo(() => {
     if (!result) return [];
     if (result.mode === 'fresh') {
-      return freshIngredients
-        .map((ing) => {
-          const grams = result.ingredientGrams[ing.id] ?? 0;
-          if (grams <= 0) return null;
-          const isActive = ing.role === 'active';
-          const isFiller = ing.calculatedByDifference;
-          const row: AddRowData = {
-            label: isActive ? `${ing.name} active` : ing.name,
-            value: `${fmt(grams)} g`,
-            icon: isActive ? 'plus' : isFiller ? 'cube' : 'circle-plus',
-            key: isActive || isFiller,
-          };
-          return row;
-        })
-        .filter((row): row is AddRowData => row !== null);
+      // Always one row per ingredient with a defined role, even at 0g — an
+      // untouched or zero excipient should be visibly 0, never silently
+      // absent, so it can't be mistaken for "not part of this formulation."
+      return freshIngredients.map((ing) => {
+        const grams = result.ingredientGrams[ing.id] ?? 0;
+        const isActive = ing.role === 'active';
+        const isFiller = ing.calculatedByDifference;
+        const row: AddRowData = {
+          label: isActive ? `${ing.name} active` : ing.name,
+          value: `${fmt(grams)} g`,
+          icon: isActive ? 'plus' : isFiller ? 'cube' : 'circle-plus',
+          key: isActive || isFiller,
+        };
+        return row;
+      });
     }
     return [
       { label: 'Reground powder', value: `${fmt(result.regroundPowderG, 0)} g`, icon: 'reload', key: false },

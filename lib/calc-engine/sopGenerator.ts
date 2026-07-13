@@ -13,20 +13,22 @@ function joinNatural(items: string[]): string {
 }
 
 /**
- * Generic across any ingredient count: every ingredient with a non-zero
- * computed amount gets a weigh + V-mix step, in the order it appears in
- * `ingredients`. Lubricants are added last (and mixed briefly after), since
- * over-mixing lubricant is a real capping/hardness risk — everything else
- * (active, filler, disintegrant, or any other role) goes into the initial
- * V-mix together.
+ * Generic across any ingredient count: every ingredient gets a weigh + V-mix
+ * step (even at 0g, so a zero amount is visible rather than silently
+ * omitted), in the order it appears in `ingredients`. Lubricants are added
+ * last (and mixed briefly after), since over-mixing lubricant is a real
+ * capping/hardness risk — everything else (active, filler, disintegrant, or
+ * any other role) goes into the initial V-mix together.
  */
 export function generateFreshBatchSOP(
   result: FreshBatchResult,
   ingredients: IngredientLine[]
 ): string[] {
-  const present = ingredients.filter((i) => (result.ingredientGrams[i.id] ?? 0) > 0);
-  const lubricants = present.filter((i) => i.role === 'lubricant');
-  const primary = present.filter((i) => i.role !== 'lubricant');
+  // Every ingredient gets a step, even at 0g — omitting a zero/untouched
+  // ingredient here would silently hide it from the SOP instead of making
+  // the zero visible.
+  const lubricants = ingredients.filter((i) => i.role === 'lubricant');
+  const primary = ingredients.filter((i) => i.role !== 'lubricant');
   const active = primary.find((i) => i.role === 'active');
   const otherPrimary = primary.filter((i) => i.role !== 'active');
 
