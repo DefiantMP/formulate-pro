@@ -32,6 +32,15 @@ export default function FormulateApp() {
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // A counter rather than a boolean so back-to-back saves each restart the
+  // dismiss timer, even if the toast is already showing.
+  const [saveToastToken, setSaveToastToken] = useState(0);
+
+  useEffect(() => {
+    if (saveToastToken === 0) return;
+    const timer = setTimeout(() => setSaveToastToken(0), 3000);
+    return () => clearTimeout(timer);
+  }, [saveToastToken]);
 
   const [fName, setFName] = useState('');
   const [fPot, setFPot] = useState('');
@@ -366,6 +375,7 @@ export default function FormulateApp() {
       const saved: RunRecord = await res.json();
       setRuns((prev) => [saved, ...prev]);
       setLoadedRun(saved.id);
+      setSaveToastToken((prev) => prev + 1);
     } finally {
       setSaving(false);
     }
@@ -454,6 +464,11 @@ export default function FormulateApp() {
           </div>
         </div>
       </div>
+      {saveToastToken > 0 && (
+        <div className="toast" role="status">
+          <i className="ti ti-circle-check" /> Run saved
+        </div>
+      )}
     </div>
   );
 }
