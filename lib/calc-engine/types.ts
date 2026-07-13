@@ -31,9 +31,18 @@ export interface IngredientLine {
 export interface FreshBatchInput {
   tabletCount: number;
   targetWeightG: number;
-  /** Target active mg/tablet. Stored and displayed, NOT cross-verified against
-   *  potency/blend math in this port — preserved from prototype behavior. */
   targetActiveMgPerTablet: number;
+  /**
+   * Purity of the raw active-ingredient material, as a percent (0-100) —
+   * e.g. a raw material assayed at 76.4% active. This is NOT the active
+   * ingredient's % of the finished blend. The active ingredient's blend
+   * percentage is derived from this plus targetActiveMgPerTablet and
+   * targetWeightG (raw material mg needed per tablet = targetActiveMgPerTablet
+   * / (potencyPercent / 100)), matching how regrind mode already works.
+   * Any percentOfBlend set on the active ingredient in `ingredients` is
+   * ignored — it is always computed internally.
+   */
+  potencyPercent: number;
   ingredients: IngredientLine[];
 }
 

@@ -5,33 +5,53 @@ function fmt(n: number, dec = 1): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
+/** Joins items as "A", "A and B", or "A, B, and C" — natural for a weighing instruction. */
+function joinNatural(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  if (items.length === 2) return items.join(' and ');
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+/**
+ * Generic across any ingredient count: every ingredient with a non-zero
+ * computed amount gets a weigh + V-mix step, in the order it appears in
+ * `ingredients`. Lubricants are added last (and mixed briefly after), since
+ * over-mixing lubricant is a real capping/hardness risk — everything else
+ * (active, filler, disintegrant, or any other role) goes into the initial
+ * V-mix together.
+ */
 export function generateFreshBatchSOP(
   result: FreshBatchResult,
   ingredients: IngredientLine[]
 ): string[] {
-  const active = ingredients.find((i) => i.role === 'active')!;
-  const lubricant = ingredients.find((i) => i.role === 'lubricant');
-  const disintegrant = ingredients.find((i) => i.role === 'disintegrant');
-  const filler = ingredients.find((i) => i.calculatedByDifference)!;
+  const present = ingredients.filter((i) => (result.ingredientGrams[i.id] ?? 0) > 0);
+  const lubricants = present.filter((i) => i.role === 'lubricant');
+  const primary = present.filter((i) => i.role !== 'lubricant');
+  const active = primary.find((i) => i.role === 'active');
+  const otherPrimary = primary.filter((i) => i.role !== 'active');
 
-  const activeG = result.ingredientGrams[active.id];
-  const fillerG = result.ingredientGrams[filler.id];
-  const lubricantG = lubricant ? result.ingredientGrams[lubricant.id] : undefined;
-  const disintegrantG = disintegrant ? result.ingredientGrams[disintegrant.id] : undefined;
+  const steps: string[] = [];
 
-  const steps: string[] = [`Weigh ${fmt(activeG)} g of ${active.name}`];
-
-  const nonLubricantParts = [`${fmt(fillerG)} g ${filler.name}`];
-  if (disintegrant && disintegrantG !== undefined) {
-    nonLubricantParts.push(`${fmt(disintegrantG)} g ${disintegrant.name}`);
+  if (active) {
+    steps.push(`Weigh ${fmt(result.ingredientGrams[active.id])} g of ${active.name}`);
   }
-  steps.push(`Weigh ${nonLubricantParts.join(' and ')}`);
-  steps.push(`Add active + ${nonLubricantParts.map((p) => p.split(' ').slice(2).join(' ')).join(' + ')} to V-mix`);
-  steps.push('Mix for 15 minutes');
-  if (lubricant && lubricantG !== undefined) {
-    steps.push(`Add ${fmt(lubricantG)} g ${lubricant.name}`);
+  if (otherPrimary.length > 0) {
+    steps.push(
+      `Weigh ${joinNatural(otherPrimary.map((i) => `${fmt(result.ingredientGrams[i.id])} g ${i.name}`))}`
+    );
+  }
+  if (primary.length > 0) {
+    steps.push(`Add ${primary.map((i) => i.name).join(' + ')} to V-mix`);
+    steps.push('Mix for 15 minutes');
+  }
+
+  for (const lube of lubricants) {
+    steps.push(`Add ${fmt(result.ingredientGrams[lube.id])} g ${lube.name}`);
+  }
+  if (lubricants.length > 0) {
     steps.push('Mix for 5 minutes');
   }
+
   steps.push(
     `Compress — target weight ${result.targetWeightG.toFixed(3)} g, check against variance table`
   );

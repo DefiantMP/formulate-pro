@@ -8,6 +8,11 @@ export default function TipsCard() {
       </div>
       <div className="card-body">
         <div className="tip">
+          <strong>Raw material potency:</strong> this is the purity of the raw active-ingredient
+          material (e.g. an assay result), not the ingredient&apos;s % of the finished blend. The
+          blend % is calculated for you from potency, target mg/tablet, and target tablet weight.
+        </div>
+        <div className="tip">
           <strong>Regrind batches:</strong> MagSter and PVPP are already in the powder. Adding more
           risks soft, capping tablets.
         </div>

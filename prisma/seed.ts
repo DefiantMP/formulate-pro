@@ -20,17 +20,28 @@ async function main() {
   }
 
   const freshIngredients: IngredientLine[] = ingredients.map((i) => {
-    if (i.role === 'active') return { ...i, percentOfBlend: 55.5 };
     if (i.id === 'magstearate') return { ...i, percentOfBlend: 2 };
     if (i.id === 'pvpp') return { ...i, percentOfBlend: 5 };
-    return i;
+    return i; // any other excipient (e.g. EZTAB) keeps its formulation default
   });
   const freshResult = calculateFreshBatch({
     tabletCount: 133623,
     targetWeightG: 0.69,
     targetActiveMgPerTablet: 35,
+    potencyPercent: 55.5,
     ingredients: freshIngredients,
   });
+
+  // Built generically (not hardcoded to pvpp/magstearate) so this stays in
+  // sync with whatever excipients the default formulation actually has —
+  // otherwise reloading this run in the UI would silently drop any
+  // ingredient not captured here back to 0%.
+  const freshExcipients: Record<string, string> = {};
+  for (const i of freshIngredients) {
+    if (i.role !== 'active' && !i.calculatedByDifference) {
+      freshExcipients[i.id] = String(i.percentOfBlend ?? '');
+    }
+  }
 
   const regrindBPotency: PotencyInput = {
     method: 'mgPerTablet',
@@ -76,7 +87,7 @@ async function main() {
         label: 'RR35 PB3',
         mode: 'fresh',
         formulationId: formulation.id,
-        inputs: asJson({ fName: '', fPot: '55.5', fTmg: '35', fTwt: '0.69', fTabs: '133623', fMags: '2', fPvpp: '5' }),
+        inputs: asJson({ fName: '', fPot: '55.5', fTmg: '35', fTwt: '0.69', fTabs: '133623', excipients: freshExcipients }),
         result: asJson(freshResult),
         createdAt: new Date(now - 60_000),
       },

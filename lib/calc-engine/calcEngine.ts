@@ -25,7 +25,10 @@ function validateIngredients(ingredients: IngredientLine[]): void {
     );
   }
   for (const ing of ingredients) {
-    if (!ing.calculatedByDifference && ing.percentOfBlend == null) {
+    // The active ingredient's percentOfBlend is always derived internally
+    // (see calculateFreshBatch) rather than required as a direct input.
+    if (ing.role === 'active' || ing.calculatedByDifference) continue;
+    if (ing.percentOfBlend == null) {
       throw new Error(
         `Ingredient "${ing.name}" has no percentOfBlend and is not the calculated-by-difference ingredient.`
       );
@@ -35,24 +38,37 @@ function validateIngredients(ingredients: IngredientLine[]): void {
 
 /**
  * Fresh batch calculation. Generalized port of the prototype's calc() for
- * mode === 'fresh'. Numerically identical to the original for the default
- * 4-ingredient formulation — see tests/calcEngine.test.ts.
+ * mode === 'fresh', with one correction from the original: the active
+ * ingredient's % of blend is derived from raw-material potency, not taken
+ * as a direct input — see FreshBatchInput.potencyPercent and
+ * tests/calcEngine.test.ts.
  */
 export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | null {
-  const { tabletCount, targetWeightG, targetActiveMgPerTablet, ingredients } = input;
+  const { tabletCount, targetWeightG, targetActiveMgPerTablet, potencyPercent, ingredients } = input;
   validateIngredients(ingredients);
 
-  const active = ingredients.find((i) => i.role === 'active')!;
   const filler = ingredients.find((i) => i.calculatedByDifference)!;
-  const activePercent = active.percentOfBlend ?? 0;
 
-  if (activePercent <= 0 || targetActiveMgPerTablet <= 0 || targetWeightG <= 0 || tabletCount <= 0) {
+  if (
+    potencyPercent <= 0 ||
+    targetActiveMgPerTablet <= 0 ||
+    targetWeightG <= 0 ||
+    tabletCount <= 0
+  ) {
     return null;
   }
 
-  const fixedPercentSum = ingredients
-    .filter((i) => !i.calculatedByDifference)
-    .reduce((sum, i) => sum + (i.percentOfBlend ?? 0), 0);
+  // How much of the (impure) raw material is needed per tablet to deliver
+  // targetActiveMgPerTablet of actual active ingredient, then expressed as
+  // that raw material's % of the finished tablet's total weight.
+  const rawMaterialMgPerTablet = targetActiveMgPerTablet / (potencyPercent / 100);
+  const activePercent = (rawMaterialMgPerTablet / (targetWeightG * 1000)) * 100;
+
+  const fixedPercentSum =
+    activePercent +
+    ingredients
+      .filter((i) => !i.calculatedByDifference && i.role !== 'active')
+      .reduce((sum, i) => sum + (i.percentOfBlend ?? 0), 0);
   const fillerPercent = Math.max(0, 100 - fixedPercentSum);
 
   const totalBlendG = tabletCount * targetWeightG;
@@ -60,7 +76,10 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
   const ingredientPercents: Record<string, number> = {};
   const ingredientGrams: Record<string, number> = {};
   for (const ing of ingredients) {
-    const pct = ing.calculatedByDifference ? fillerPercent : ing.percentOfBlend ?? 0;
+    let pct: number;
+    if (ing.calculatedByDifference) pct = fillerPercent;
+    else if (ing.role === 'active') pct = activePercent;
+    else pct = ing.percentOfBlend ?? 0;
     ingredientPercents[ing.id] = pct;
     ingredientGrams[ing.id] = totalBlendG * (pct / 100);
   }

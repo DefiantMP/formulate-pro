@@ -4,7 +4,8 @@ export interface RunRecord {
   id: string;
   label: string;
   mode: 'fresh' | 'regrind';
-  inputs: Record<string, string>;
+  /** Flat string fields plus, for fresh-mode runs, a nested `excipients` map. */
+  inputs: Record<string, unknown>;
   result: CalcResult;
   createdAt: string;
 }

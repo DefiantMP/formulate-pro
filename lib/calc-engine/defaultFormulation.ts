@@ -12,5 +12,6 @@ export function defaultIngredients(): IngredientLine[] {
     { id: 'emdex', name: 'Emdex', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
     { id: 'pvpp', name: 'PVPP XL', role: 'disintegrant', percentOfBlend: 5, calculatedByDifference: false },
     { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 2, calculatedByDifference: false },
+    { id: 'eztab', name: 'EZTAB', role: 'other', percentOfBlend: 10, calculatedByDifference: false },
   ];
 }

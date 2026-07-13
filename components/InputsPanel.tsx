@@ -1,6 +1,7 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
+import type { IngredientLine } from '@/lib/calc-engine/types';
 import type { Mode, RegrindOption } from './FormulateApp';
 
 type StrSetter = Dispatch<SetStateAction<string>>;
@@ -19,10 +20,11 @@ interface InputsPanelProps {
   setFTwt: StrSetter;
   fTabs: string;
   setFTabs: StrSetter;
-  fMags: string;
-  setFMags: StrSetter;
-  fPvpp: string;
-  setFPvpp: StrSetter;
+  /** Every non-active, non-filler ingredient in the active formulation — one % field is rendered per entry. */
+  excipients: IngredientLine[];
+  excipientPercents: Record<string, string>;
+  setExcipientPercent: (id: string, value: string) => void;
+  fillerName: string;
   emdexDisplay: string;
 
   opt: RegrindOption;
@@ -79,11 +81,11 @@ export default function InputsPanel(props: InputsPanelProps) {
               />
             </div>
             <div className="field">
-              <label>Batch potency</label>
+              <label>Raw material potency</label>
               <div className="row">
                 <input
                   type="number"
-                  placeholder="55.5"
+                  placeholder="76.4"
                   step="0.001"
                   value={props.fPot}
                   onChange={(e) => props.setFPot(e.target.value)}
@@ -133,34 +135,23 @@ export default function InputsPanel(props: InputsPanelProps) {
             </div>
             <div className="hr" />
             <div className="sub-lbl">Excipients</div>
-            <div className="field">
-              <label>% Magnesium stearate</label>
-              <div className="row">
-                <input
-                  type="number"
-                  placeholder="2"
-                  step="0.1"
-                  value={props.fMags}
-                  onChange={(e) => props.setFMags(e.target.value)}
-                />
-                <div className="unit">%</div>
+            {props.excipients.map((ing) => (
+              <div className="field" key={ing.id}>
+                <label>% {ing.name}</label>
+                <div className="row">
+                  <input
+                    type="number"
+                    placeholder={ing.percentOfBlend != null ? String(ing.percentOfBlend) : undefined}
+                    step="0.1"
+                    value={props.excipientPercents[ing.id] ?? ''}
+                    onChange={(e) => props.setExcipientPercent(ing.id, e.target.value)}
+                  />
+                  <div className="unit">%</div>
+                </div>
               </div>
-            </div>
+            ))}
             <div className="field">
-              <label>% PVPP XL</label>
-              <div className="row">
-                <input
-                  type="number"
-                  placeholder="5"
-                  step="0.1"
-                  value={props.fPvpp}
-                  onChange={(e) => props.setFPvpp(e.target.value)}
-                />
-                <div className="unit">%</div>
-              </div>
-            </div>
-            <div className="field">
-              <label>% Emdex (auto)</label>
+              <label>% {props.fillerName} (auto)</label>
               <div className="row">
                 <input type="number" readOnly value={props.emdexDisplay} />
                 <div className="unit">%</div>
