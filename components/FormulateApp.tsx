@@ -174,7 +174,7 @@ export default function FormulateApp() {
         const isFiller = ing.calculatedByDifference;
         const row: AddRowData = {
           label: isActive ? `${ing.name} active` : ing.name,
-          value: `${fmt(grams)} g`,
+          value: `${fmt(grams, 2)} g`,
           icon: isActive ? 'plus' : isFiller ? 'cube' : 'circle-plus',
           key: isActive || isFiller,
         };

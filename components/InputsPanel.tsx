@@ -85,7 +85,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <div className="row">
                 <input
                   type="number"
-                  placeholder="76.4"
+                  placeholder="0.00"
                   step="0.001"
                   value={props.fPot}
                   onChange={(e) => props.setFPot(e.target.value)}
@@ -99,7 +99,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <div className="row">
                 <input
                   type="number"
-                  placeholder="35"
+                  placeholder="0.00"
                   step="0.1"
                   value={props.fTmg}
                   onChange={(e) => props.setFTmg(e.target.value)}
@@ -112,7 +112,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <div className="row">
                 <input
                   type="number"
-                  placeholder="0.690"
+                  placeholder="0.00"
                   step="0.001"
                   value={props.fTwt}
                   onChange={(e) => props.setFTwt(e.target.value)}
@@ -125,7 +125,7 @@ export default function InputsPanel(props: InputsPanelProps) {
               <div className="row">
                 <input
                   type="number"
-                  placeholder="66700"
+                  placeholder="0"
                   step="1"
                   value={props.fTabs}
                   onChange={(e) => props.setFTabs(e.target.value)}
@@ -141,7 +141,7 @@ export default function InputsPanel(props: InputsPanelProps) {
                 <div className="row">
                   <input
                     type="number"
-                    placeholder={ing.percentOfBlend != null ? String(ing.percentOfBlend) : undefined}
+                    placeholder="0.00"
                     step="0.1"
                     value={props.excipientPercents[ing.id] ?? ''}
                     onChange={(e) => props.setExcipientPercent(ing.id, e.target.value)}
