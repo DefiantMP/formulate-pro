@@ -50,7 +50,7 @@ Field meanings:
 - ingredientGrams / ingredientPercents (fresh only): grams and % of total blend for each ingredient, keyed by ingredient id
 - activePercentOfBlend (fresh only): the active ingredient's derived % of the blend by weight (NOT the same number as inputs.fPot — see above)
 - regroundPowderG (regrind only): the operator-entered total grams of ground-up old tablets being reused — this is the authoritative mass used everywhere below, even if it doesn't exactly equal the sum of lot weights
-- lots (regrind only): array of { id, label, effectivePotency (0-1 fraction), weightG, activeContentG, isStart }. activeContentG for each lot = weightG × effectivePotency.
+- lots (regrind only): array of { id, label, effectivePotency (0-1 fraction), weightG, activeContentG, isStart, fillerType }. activeContentG for each lot = weightG × effectivePotency. fillerType is a free-text label (e.g. "EasyTab") — informational record-keeping only, never part of any calculation, ignore it for verification purposes.
 - lotWeightSum (regrind only): sum of lots[].weightG — a cross-check figure, not the mass used in the math (that's regroundPowderG)
 - regroundPowderMismatch (regrind only): boolean flag, true when regroundPowderG disagrees with lotWeightSum beyond a small tolerance — this is an expected/valid state, not itself an arithmetic error to flag, unless the reported boolean is wrong given the two numbers
 - effectivePotency (regrind only): the BLENDED fraction (0-1) of the reground powder that is active ingredient — equals activeInOldPowderG ÷ regroundPowderG

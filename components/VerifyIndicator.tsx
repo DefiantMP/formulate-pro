@@ -12,6 +12,11 @@ interface VerifyIndicatorProps {
   notes: string;
   discrepancy: VerifyDiscrepancy | null;
   onAcknowledge: () => void;
+  /** True once there's a calculation result to verify — nothing to show otherwise. */
+  canVerify: boolean;
+  /** True when inputs have changed since the shown result was computed against. */
+  stale: boolean;
+  onVerify: () => void;
 }
 
 const QUIET_STATES: Record<'checking' | 'confirmed' | 'acknowledged' | 'error', { icon: string; text: string }> = {
@@ -25,8 +30,47 @@ function fmtNum(n: number): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
-export default function VerifyIndicator({ status, notes, discrepancy, onAcknowledge }: VerifyIndicatorProps) {
-  if (status === 'idle') return null;
+export default function VerifyIndicator({
+  status,
+  notes,
+  discrepancy,
+  onAcknowledge,
+  canVerify,
+  stale,
+  onVerify,
+}: VerifyIndicatorProps) {
+  if (!canVerify) return null;
+
+  if (status === 'idle') {
+    return (
+      <button type="button" className="verify-run-btn" onClick={onVerify}>
+        <i className="ti ti-shield-check" /> Verify with AI
+      </button>
+    );
+  }
+
+  if (status === 'checking') {
+    return (
+      <div className="verify-quiet">
+        <i className="ti ti-loader-2" />
+        Checking…
+      </div>
+    );
+  }
+
+  if (stale) {
+    return (
+      <div className="verify-stale">
+        <span className="verify-stale-lbl">
+          <i className="ti ti-alert-circle" />
+          Outdated — inputs changed
+        </span>
+        <button type="button" className="verify-run-btn" onClick={onVerify}>
+          Verify with AI
+        </button>
+      </div>
+    );
+  }
 
   if (status === 'needs_review') {
     const delta = discrepancy ? discrepancy.computedValue - discrepancy.reportedValue : null;

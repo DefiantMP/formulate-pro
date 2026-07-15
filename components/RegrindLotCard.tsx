@@ -170,6 +170,22 @@ export default function RegrindLotCard({
         </div>
       </div>
 
+      <div className="field" style={{ marginTop: 8 }}>
+        <label>Filler type</label>
+        <input
+          type="text"
+          list={`filler-type-options-${lot.id}`}
+          placeholder="e.g. EasyTab, Emdex"
+          value={lot.fillerType}
+          onChange={(e) => onChange(lot.id, { fillerType: e.target.value })}
+        />
+        <datalist id={`filler-type-options-${lot.id}`}>
+          <option value="EasyTab" />
+          <option value="Emdex" />
+          <option value="Other" />
+        </datalist>
+      </div>
+
       <div className="lot-field-grid">
         <div className="field" style={{ margin: 0 }}>
           <label>Disintegrant %</label>

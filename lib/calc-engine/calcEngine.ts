@@ -145,6 +145,7 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
       weightG: lot.weightG,
       activeContentG,
       isStart: lot.isStart,
+      fillerType: lot.fillerType,
     };
   });
 

@@ -77,6 +77,8 @@ export interface RegrindLot {
   disintegrantPercent: number | null;
   /** Informational only — captured for record-keeping, does not affect calculation. */
   lubricantPercent: number | null;
+  /** Informational only — captured for record-keeping, does not affect calculation (e.g. EasyTab, Emdex). */
+  fillerType: string;
   /**
    * "Press starts" lots (inconsistent fill/compression before a press
    * stabilizes) have structurally unreliable potency figures — estimates,
@@ -108,6 +110,8 @@ export interface RegrindLotResult {
   /** Grams of active ingredient contributed by this lot (weightG * effectivePotency). */
   activeContentG: number;
   isStart: boolean;
+  /** Informational only — carried through from RegrindLot for display in the UI/SOP. */
+  fillerType: string;
 }
 
 export interface RegrindResult {

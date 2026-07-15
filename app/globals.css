@@ -149,6 +149,14 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .verify-quiet.confirmed { color: var(--brand); }
 .verify-quiet.acknowledged { color: var(--warning-text); }
 
+.verify-run-btn { height: 26px; padding: 0 11px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid var(--border-md); background: var(--surface); color: var(--text-2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.verify-run-btn:hover { background: var(--bg); color: var(--text); border-color: var(--text-3); }
+.verify-run-btn i { font-size: 13px; }
+
+.verify-stale { display: flex; align-items: center; gap: 8px; }
+.verify-stale-lbl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); opacity: 0.7; }
+.verify-stale-lbl i { font-size: 13px; }
+
 .verify-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); }
 .verify-banner i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
 .verify-banner-title { font-size: 13px; font-weight: 700; }
@@ -186,6 +194,7 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .add-lot-btn:hover { background: var(--bg); border-color: var(--text-3); }
 .lot-breakdown-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 7px; margin-bottom: 4px; background: var(--bg); font-size: 11px; }
 .lot-breakdown-lbl { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.lot-breakdown-filler { font-size: 10px; font-weight: 400; color: var(--text-3); }
 .lot-breakdown-val { color: var(--text-2); }
 
 /* Save confirmation toast */

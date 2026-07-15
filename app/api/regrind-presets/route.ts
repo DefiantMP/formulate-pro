@@ -9,7 +9,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
-  const { name, potency, disintegrantPercent, lubricantPercent } = body ?? {};
+  const { name, potency, disintegrantPercent, lubricantPercent, fillerType } = body ?? {};
 
   if (typeof name !== 'string' || !name.trim()) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 });
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       potency: potency as PotencyInput,
       disintegrantPercent: typeof disintegrantPercent === 'number' ? disintegrantPercent : null,
       lubricantPercent: typeof lubricantPercent === 'number' ? lubricantPercent : null,
+      fillerType: typeof fillerType === 'string' && fillerType.trim() ? fillerType.trim() : null,
     });
     return NextResponse.json(preset, { status: 201 });
   } catch {

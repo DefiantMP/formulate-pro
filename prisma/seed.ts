@@ -11,6 +11,7 @@ function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
       weightG,
       disintegrantPercent: null,
       lubricantPercent: null,
+      fillerType: '',
       isStart: false,
       note: '',
     },

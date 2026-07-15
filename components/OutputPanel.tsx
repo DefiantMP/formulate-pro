@@ -21,6 +21,7 @@ export interface LotBreakdownRow {
   weightG: number;
   potencyPercent: number;
   isStart: boolean;
+  fillerType: string;
 }
 
 interface OutputPanelProps {
@@ -126,6 +127,7 @@ export default function OutputPanel({
                       <div className="lot-breakdown-row" key={lot.label}>
                         <div className="lot-breakdown-lbl">
                           {lot.label}
+                          {lot.fillerType && <span className="lot-breakdown-filler">{lot.fillerType}</span>}
                           {lot.isStart && <span className="lot-badge">Starts</span>}
                         </div>
                         <div className="lot-breakdown-val">

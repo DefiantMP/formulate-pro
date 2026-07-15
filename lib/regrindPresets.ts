@@ -11,6 +11,7 @@ export function createRegrindLotPreset(data: {
   potency: PotencyInput;
   disintegrantPercent: number | null;
   lubricantPercent: number | null;
+  fillerType: string | null;
 }) {
   return prisma.regrindLotPreset.create({
     data: {
@@ -18,6 +19,7 @@ export function createRegrindLotPreset(data: {
       potency: data.potency as unknown as Prisma.InputJsonValue,
       disintegrantPercent: data.disintegrantPercent,
       lubricantPercent: data.lubricantPercent,
+      fillerType: data.fillerType,
     },
   });
 }

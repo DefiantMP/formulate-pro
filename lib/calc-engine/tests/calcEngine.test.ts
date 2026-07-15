@@ -13,6 +13,7 @@ function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
       weightG,
       disintegrantPercent: null,
       lubricantPercent: null,
+      fillerType: '',
       isStart: false,
       note: '',
     },
@@ -225,6 +226,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       weightG: 8000,
       disintegrantPercent: 4.5,
       lubricantPercent: 1.8,
+      fillerType: 'EasyTab',
       isStart: true,
       note: 'press starts, weight estimated',
     },
@@ -235,6 +237,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       weightG: 6500,
       disintegrantPercent: null,
       lubricantPercent: null,
+      fillerType: '',
       isStart: false,
       note: '',
     },
@@ -255,6 +258,19 @@ describe('calculateRegrind — multi-lot blending', () => {
     expect(result!.lots).toHaveLength(2);
     expect(result!.lots[0].activeContentG).toBeCloseTo(lot1Active, 6);
     expect(result!.lots[1].activeContentG).toBeCloseTo(lot2Active, 6);
+  });
+
+  it('carries fillerType through per lot without affecting the math', () => {
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG: 14500,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+    });
+    expect(result!.lots[0].fillerType).toBe('EasyTab');
+    expect(result!.lots[1].fillerType).toBe('');
   });
 
   it('flags hasStartsLot when any lot is marked as starts, without excluding it from the total', () => {

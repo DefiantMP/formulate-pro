@@ -19,8 +19,6 @@ import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
 import VerifyIndicator, { type VerifyDiscrepancy, type VerifyStatus } from './VerifyIndicator';
 
-const VERIFY_DEBOUNCE_MS = 800;
-
 export type Mode = 'fresh' | 'regrind';
 export type RegrindOption = 'a' | 'b';
 
@@ -35,6 +33,7 @@ export interface RegrindLotState {
   weightG: string;
   disintegrantPercent: string;
   lubricantPercent: string;
+  fillerType: string;
   isStart: boolean;
   note: string;
 }
@@ -45,6 +44,7 @@ export interface RegrindLotPresetRecord {
   potency: PotencyInput;
   disintegrantPercent: number | null;
   lubricantPercent: number | null;
+  fillerType: string | null;
 }
 
 let lotIdCounter = 0;
@@ -64,6 +64,7 @@ function blankLot(label: string): RegrindLotState {
     weightG: '',
     disintegrantPercent: '',
     lubricantPercent: '',
+    fillerType: '',
     isStart: false,
     note: '',
   };
@@ -145,6 +146,7 @@ export default function FormulateApp() {
       ...potencyPatch,
       disintegrantPercent: preset.disintegrantPercent != null ? String(preset.disintegrantPercent) : '',
       lubricantPercent: preset.lubricantPercent != null ? String(preset.lubricantPercent) : '',
+      fillerType: preset.fillerType ?? '',
     });
   }
 
@@ -162,6 +164,7 @@ export default function FormulateApp() {
           potency: lotStateToPotency(lot),
           disintegrantPercent: lot.disintegrantPercent === '' ? null : numOrZero(lot.disintegrantPercent),
           lubricantPercent: lot.lubricantPercent === '' ? null : numOrZero(lot.lubricantPercent),
+          fillerType: lot.fillerType === '' ? null : lot.fillerType,
         }),
       });
       if (!res.ok) {
@@ -253,6 +256,7 @@ export default function FormulateApp() {
         weightG: numOrZero(lot.weightG),
         disintegrantPercent: lot.disintegrantPercent === '' ? null : numOrZero(lot.disintegrantPercent),
         lubricantPercent: lot.lubricantPercent === '' ? null : numOrZero(lot.lubricantPercent),
+        fillerType: lot.fillerType,
         isStart: lot.isStart,
         note: lot.note,
       })),
@@ -358,6 +362,7 @@ export default function FormulateApp() {
       weightG: lot.weightG,
       potencyPercent: lot.effectivePotency * 100,
       isStart: lot.isStart,
+      fillerType: lot.fillerType,
     }));
   }, [result]);
 
@@ -366,59 +371,72 @@ export default function FormulateApp() {
   const [verifyDiscrepancy, setVerifyDiscrepancy] = useState<VerifyDiscrepancy | null>(null);
   const [verifyAcknowledgedAt, setVerifyAcknowledgedAt] = useState<string | null>(null);
 
+  const verifyInputsSnapshot = useMemo(
+    () =>
+      mode === 'fresh'
+        ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
+        : { lots: regrindLots, rgPwd, rgTmg, rgTwt },
+    [mode, fName, fPot, fTmg, fTwt, fTabs, excipientPercents, regrindLots, rgPwd, rgTmg, rgTwt]
+  );
+
+  // Identifies the exact inputs+result a verification result was computed
+  // against, so a later input change can be detected and surfaced as stale
+  // rather than silently leaving a check that no longer matches.
+  const [verifiedSnapshotKey, setVerifiedSnapshotKey] = useState<string | null>(null);
+  const currentSnapshotKey = useMemo(
+    () => (result ? JSON.stringify({ mode, verifyInputsSnapshot, result }) : null),
+    [result, mode, verifyInputsSnapshot]
+  );
+  const verifyStale =
+    verifyStatus !== 'idle' &&
+    verifyStatus !== 'checking' &&
+    verifiedSnapshotKey !== null &&
+    verifiedSnapshotKey !== currentSnapshotKey;
+
   useEffect(() => {
     if (!result) {
       setVerifyStatus('idle');
       setVerifyNotes('');
       setVerifyDiscrepancy(null);
       setVerifyAcknowledgedAt(null);
-      return;
+      setVerifiedSnapshotKey(null);
     }
+  }, [result]);
 
-    const inputsSnapshot =
-      mode === 'fresh'
-        ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
-        : { lots: regrindLots, rgPwd, rgTmg, rgTwt };
+  async function runVerification() {
+    if (!result) return;
+    const snapshotKey = currentSnapshotKey;
 
     setVerifyStatus('checking');
+    setVerifyNotes('');
     setVerifyDiscrepancy(null);
     setVerifyAcknowledgedAt(null);
-    const controller = new AbortController();
 
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/ai/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, inputs: inputsSnapshot, result }),
-          signal: controller.signal,
-        });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.status === 'confirmed') {
-          setVerifyStatus('confirmed');
-          setVerifyNotes(data.notes ?? '');
-          setVerifyDiscrepancy(null);
-        } else if (res.ok && data?.status === 'discrepancy') {
-          setVerifyStatus('needs_review');
-          setVerifyNotes(data.notes ?? '');
-          setVerifyDiscrepancy(data.discrepancy ?? null);
-        } else {
-          setVerifyStatus('error');
-          setVerifyNotes('Verification unavailable right now.');
-        }
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-          setVerifyStatus('error');
-          setVerifyNotes('Verification unavailable right now.');
-        }
+    try {
+      const res = await fetch('/api/ai/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, inputs: verifyInputsSnapshot, result }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.status === 'confirmed') {
+        setVerifyStatus('confirmed');
+        setVerifyNotes(data.notes ?? '');
+        setVerifyDiscrepancy(null);
+      } else if (res.ok && data?.status === 'discrepancy') {
+        setVerifyStatus('needs_review');
+        setVerifyNotes(data.notes ?? '');
+        setVerifyDiscrepancy(data.discrepancy ?? null);
+      } else {
+        setVerifyStatus('error');
+        setVerifyNotes('Verification unavailable right now.');
       }
-    }, VERIFY_DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [result, mode, fName, fPot, fTmg, fTwt, fTabs, excipientPercents, regrindLots, rgPwd, rgTmg, rgTwt]);
+    } catch {
+      setVerifyStatus('error');
+      setVerifyNotes('Verification unavailable right now.');
+    }
+    setVerifiedSnapshotKey(snapshotKey);
+  }
 
   function acknowledgeDiscrepancy() {
     setVerifyAcknowledgedAt(new Date().toISOString());
@@ -461,6 +479,7 @@ export default function FormulateApp() {
               weightG: l.weightG != null ? String(l.weightG) : '',
               disintegrantPercent: l.disintegrantPercent != null ? String(l.disintegrantPercent) : '',
               lubricantPercent: l.lubricantPercent != null ? String(l.lubricantPercent) : '',
+              fillerType: l.fillerType ?? '',
               isStart: l.isStart ?? false,
               note: l.note ?? '',
             };
@@ -480,6 +499,7 @@ export default function FormulateApp() {
             weightG: str('rgPwd'),
             disintegrantPercent: '',
             lubricantPercent: '',
+            fillerType: '',
             isStart: false,
             note: '',
           },
@@ -637,6 +657,9 @@ export default function FormulateApp() {
               notes={verifyNotes}
               discrepancy={verifyDiscrepancy}
               onAcknowledge={acknowledgeDiscrepancy}
+              canVerify={!!result}
+              stale={verifyStale}
+              onVerify={runVerification}
             />
             <OutputPanel
               activeTab={activeTab}

@@ -73,8 +73,9 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
   } else {
     // Per-lot notes are shown in the UI lot breakdown, not duplicated into the SOP text.
     for (const lot of result.lots) {
+      const fillerNote = lot.fillerType ? ` — filler: ${lot.fillerType}` : '';
       const flag = lot.isStart ? ' (starts — estimated, low confidence)' : '';
-      steps.push(`Weigh lot "${lot.label}" — ${fmt(lot.weightG, 0)} g${flag}`);
+      steps.push(`Weigh lot "${lot.label}" — ${fmt(lot.weightG, 0)} g${fillerNote}${flag}`);
     }
     const mismatchNote = result.regroundPowderMismatch
       ? ` — does not match entered lot weights (${fmt(result.lotWeightSum, 0)} g), re-check`
