@@ -1,6 +1,21 @@
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { defaultIngredients, calculateFreshBatch, calculateRegrind } from '../lib/calc-engine';
-import type { IngredientLine, PotencyInput } from '../lib/calc-engine/types';
+import type { IngredientLine, PotencyInput, RegrindLot } from '../lib/calc-engine/types';
+
+function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
+  return [
+    {
+      id: 'lot1',
+      label: 'Lot 1',
+      potency,
+      weightG,
+      disintegrantPercent: null,
+      lubricantPercent: null,
+      isStart: false,
+      note: '',
+    },
+  ];
+}
 import { getOrCreateDefaultFormulation } from '../lib/formulations';
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -49,7 +64,7 @@ async function main() {
     oldTabletWeightG: 0.27,
   };
   const regrindBResult = calculateRegrind({
-    potency: regrindBPotency,
+    lots: singleLot(regrindBPotency, 14500),
     regroundPowderG: 14500,
     targetActiveMgPerTablet: 35,
     targetWeightG: 0.8,
@@ -59,7 +74,7 @@ async function main() {
 
   const regrindAPotency: PotencyInput = { method: 'bulkPercent', percent: 55.5 };
   const regrindAResult = calculateRegrind({
-    potency: regrindAPotency,
+    lots: singleLot(regrindAPotency, 8000),
     regroundPowderG: 8000,
     targetActiveMgPerTablet: 60,
     targetWeightG: 1.15,

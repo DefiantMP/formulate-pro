@@ -30,6 +30,7 @@ You will be given the raw operator inputs and the calculator's computed outputs 
 - Flag an active-ingredient mass per tablet that exceeds the physical target tablet weight.
 - Flag potency math that doesn't reconcile with the blend totals — for fresh batches, inputs.fPot is the RAW MATERIAL's purity as a percent (e.g. an assay result), NOT the active ingredient's direct % of the finished blend. The correct derivation is: raw material mg needed per tablet = targetActiveMgPerTablet / (fPot / 100); active % of blend = that mg amount / (targetWeightG × 1000) × 100. Recompute this independently and confirm it matches the reported activePercentOfBlend and active-ingredient grams.
 - Flag tablet-count inconsistencies (e.g. a tablet count that doesn't follow from the reground powder weight, potency, and target mg per tablet, for regrind runs).
+- Regrind runs may blend multiple lots of ground-up old tablets, each with its own potency and weight (inputs.lots / result.lots). The reported activeInOldPowderG must equal the SUM, across all lots, of (that lot's weightG × that lot's own effectivePotency) — recompute each lot's contribution independently via calculate, then sum them, and confirm the total matches. Do not assume a single potency applies to the whole reground powder weight when more than one lot is present. A lot flagged isStart is still included in this sum — it is not excluded, only lower-confidence.
 
 YOU DO NOT DO ARITHMETIC YOURSELF. You have a "calculate" tool that evaluates a real arithmetic expression with real floating-point code — you MUST call it for every multiplication, division, addition, or subtraction in your independent recomputation, including intermediate steps. Never write a computed number into report_verification (as reportedValue, computedValue, or inside notes) unless that exact number came back from a calculate tool call in this conversation, and quote it to at least 2 decimal places from the tool's result rather than rounding coarsely. You may call calculate as many times as you need, one expression per call (you can chain a full formula into a single expression using parentheses, e.g. "60 / (76.4 / 100)"). Only call report_verification once you are done computing.
 
@@ -48,11 +49,14 @@ Field meanings:
 - totalBlendG: total weight of the full powder blend across all tablets, in grams
 - ingredientGrams / ingredientPercents (fresh only): grams and % of total blend for each ingredient, keyed by ingredient id
 - activePercentOfBlend (fresh only): the active ingredient's derived % of the blend by weight (NOT the same number as inputs.fPot — see above)
-- regroundPowderG (regrind only): grams of ground-up old tablets being reused
-- effectivePotency (regrind only): fraction (0-1) of the reground powder that is active ingredient
+- regroundPowderG (regrind only): the operator-entered total grams of ground-up old tablets being reused — this is the authoritative mass used everywhere below, even if it doesn't exactly equal the sum of lot weights
+- lots (regrind only): array of { id, label, effectivePotency (0-1 fraction), weightG, activeContentG, isStart }. activeContentG for each lot = weightG × effectivePotency.
+- lotWeightSum (regrind only): sum of lots[].weightG — a cross-check figure, not the mass used in the math (that's regroundPowderG)
+- regroundPowderMismatch (regrind only): boolean flag, true when regroundPowderG disagrees with lotWeightSum beyond a small tolerance — this is an expected/valid state, not itself an arithmetic error to flag, unless the reported boolean is wrong given the two numbers
+- effectivePotency (regrind only): the BLENDED fraction (0-1) of the reground powder that is active ingredient — equals activeInOldPowderG ÷ regroundPowderG
 - freshActiveG (regrind only): grams of fresh active ingredient added on top of what's already in the regrind powder
 - fillerAddG (regrind only): grams of filler added to make up the target tablet weight
-- activeInOldPowderG (regrind only): grams of active ingredient already present in the reground powder
+- activeInOldPowderG (regrind only): total grams of active ingredient already present in the reground powder — the SUM of every lot's activeContentG (see above), not a single potency × regroundPowderG multiplication when multiple lots are present
 - actualMgPerTablet (regrind only): the actual verified mg of active per tablet given the above`;
 
 const calculateTool: Anthropic.Tool = {

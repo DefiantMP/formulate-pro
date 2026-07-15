@@ -1,7 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { calculateFreshBatch, calculateRegrind, generateVarianceTable } from '../calcEngine';
 import { defaultIngredients } from '../defaultFormulation';
-import type { IngredientLine } from '../types';
+import type { IngredientLine, PotencyInput, RegrindLot } from '../types';
+
+/** A single-lot array whose weight matches regroundPowderG — reduces exactly to the pre-multi-lot formula. */
+function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
+  return [
+    {
+      id: 'lot1',
+      label: 'Lot 1',
+      potency,
+      weightG,
+      disintegrantPercent: null,
+      lubricantPercent: null,
+      isStart: false,
+      note: '',
+    },
+  ];
+}
 
 // Fresh-batch tests below are verified against real production data
 // (RR77-PB9), not the original prototype's output — the prototype had a
@@ -120,9 +136,13 @@ describe('calculateFreshBatch — generic ingredient count', () => {
   });
 });
 
-describe('calculateRegrind (bulkPercent) — preset2_regrindOptA', () => {
+// Single-lot regrind runs (lot weight === regroundPowderG) must reduce to
+// exactly the pre-multi-lot formula — these are the same golden fixtures
+// used before lots existed, now expressed as a one-element lots array, per
+// the "single-lot regrind behavior stays identical to today" constraint.
+describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', () => {
   const result = calculateRegrind({
-    potency: { method: 'bulkPercent', percent: 55.5 },
+    lots: singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000),
     regroundPowderG: 8000,
     targetActiveMgPerTablet: 60,
     targetWeightG: 1.15,
@@ -153,11 +173,17 @@ describe('calculateRegrind (bulkPercent) — preset2_regrindOptA', () => {
   it('matches golden freshActiveG (0 — old powder covers full batch)', () => {
     expect(result!.freshActiveG).toBe(0);
   });
+
+  it('has no powder-weight mismatch and no starts lot', () => {
+    expect(result!.regroundPowderMismatch).toBe(false);
+    expect(result!.hasStartsLot).toBe(false);
+    expect(result!.lotWeightSum).toBeCloseTo(8000, 6);
+  });
 });
 
-describe('calculateRegrind (mgPerTablet) — preset0_regrindOptB', () => {
+describe('calculateRegrind (mgPerTablet, single lot) — preset0_regrindOptB', () => {
   const result = calculateRegrind({
-    potency: { method: 'mgPerTablet', mgPerOldTablet: 20.1, oldTabletWeightG: 0.27 },
+    lots: singleLot({ method: 'mgPerTablet', mgPerOldTablet: 20.1, oldTabletWeightG: 0.27 }, 14500),
     regroundPowderG: 14500,
     targetActiveMgPerTablet: 35,
     targetWeightG: 0.8,
@@ -187,6 +213,101 @@ describe('calculateRegrind (mgPerTablet) — preset0_regrindOptB', () => {
 
   it('matches golden actualMgPerTablet', () => {
     expect(result!.actualMgPerTablet).toBeCloseTo(35.00030623016259, 6);
+  });
+});
+
+describe('calculateRegrind — multi-lot blending', () => {
+  const lots: RegrindLot[] = [
+    {
+      id: 'lot1',
+      label: '77 starts',
+      potency: { method: 'bulkPercent', percent: 55.5 },
+      weightG: 8000,
+      disintegrantPercent: 4.5,
+      lubricantPercent: 1.8,
+      isStart: true,
+      note: 'press starts, weight estimated',
+    },
+    {
+      id: 'lot2',
+      label: '21 powder',
+      potency: { method: 'mgPerTablet', mgPerOldTablet: 20.1, oldTabletWeightG: 0.27 },
+      weightG: 6500,
+      disintegrantPercent: null,
+      lubricantPercent: null,
+      isStart: false,
+      note: '',
+    },
+  ];
+
+  it('blends activeInOldPowderG as the sum of each lot weight * lot potency', () => {
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG: 14500,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: ['Magnesium stearate', 'PVPP XL'],
+    });
+    const lot1Active = 8000 * 0.555;
+    const lot2Active = 6500 * (20.1 / (0.27 * 1000));
+    expect(result!.activeInOldPowderG).toBeCloseTo(lot1Active + lot2Active, 6);
+    expect(result!.lots).toHaveLength(2);
+    expect(result!.lots[0].activeContentG).toBeCloseTo(lot1Active, 6);
+    expect(result!.lots[1].activeContentG).toBeCloseTo(lot2Active, 6);
+  });
+
+  it('flags hasStartsLot when any lot is marked as starts, without excluding it from the total', () => {
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG: 14500,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+    });
+    expect(result!.hasStartsLot).toBe(true);
+    expect(result!.lots[0].isStart).toBe(true);
+    // The starts lot's active content is still included in the blended total.
+    expect(result!.activeInOldPowderG).toBeGreaterThan(result!.lots[1].activeContentG);
+  });
+
+  it('flags regroundPowderMismatch when the entered total disagrees with the lot-weight sum', () => {
+    const mismatched = calculateRegrind({
+      lots,
+      regroundPowderG: 14000, // lots sum to 14500
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+    });
+    expect(mismatched!.lotWeightSum).toBeCloseTo(14500, 6);
+    expect(mismatched!.regroundPowderMismatch).toBe(true);
+
+    const matched = calculateRegrind({
+      lots,
+      regroundPowderG: 14500,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+    });
+    expect(matched!.regroundPowderMismatch).toBe(false);
+  });
+
+  it('the entered regroundPowderG (not the lot-weight sum) drives the downstream math', () => {
+    // Deliberately mismatched: the manual entry stays authoritative even
+    // though it disagrees with the lot sum — only a warning is raised.
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG: 14000,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+    });
+    const activeInOldPowderG = 8000 * 0.555 + 6500 * (20.1 / (0.27 * 1000));
+    expect(result!.effectivePotency).toBeCloseTo(activeInOldPowderG / 14000, 10);
   });
 });
 

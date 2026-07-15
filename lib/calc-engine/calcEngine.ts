@@ -3,6 +3,9 @@ import type {
   FreshBatchResult,
   RegrindInput,
   RegrindResult,
+  RegrindLot,
+  RegrindLotResult,
+  PotencyInput,
   VarianceRow,
   IngredientLine,
 } from './types';
@@ -96,13 +99,35 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
   };
 }
 
+/** Resolves a lot's potency input (bulk % or mg-per-tablet) to a 0-1 active fraction. */
+function lotEffectivePotency(potency: PotencyInput): number {
+  if (potency.method === 'bulkPercent') {
+    return potency.percent / 100;
+  }
+  if (potency.mgPerOldTablet > 0 && potency.oldTabletWeightG > 0) {
+    return potency.mgPerOldTablet / (potency.oldTabletWeightG * 1000);
+  }
+  return 0;
+}
+
+/**
+ * A mismatch between the entered total and the lot-weight sum is only ever
+ * surfaced as a warning (see RegrindResult.regroundPowderMismatch) — the
+ * entered regroundPowderG remains the authoritative scale reading that
+ * drives every downstream calculation, exactly as before lots existed.
+ */
+const POWDER_WEIGHT_MISMATCH_TOLERANCE_G = 0.01;
+
 /**
  * Regrind calculation. Generalized port of the prototype's calc() for
- * mode === 'regrind', covering both potency-input methods (bulk % / mg-per-tablet).
+ * mode === 'regrind', covering both potency-input methods (bulk % / mg-per-tablet),
+ * now blended across one or more lots. With a single lot whose weightG equals
+ * regroundPowderG, effectivePotency reduces to exactly that lot's own potency
+ * fraction — identical output to the original single-potency formula.
  */
 export function calculateRegrind(input: RegrindInput): RegrindResult | null {
   const {
-    potency,
+    lots,
     regroundPowderG,
     targetActiveMgPerTablet,
     targetWeightG,
@@ -110,14 +135,28 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     alreadyPresentIngredientNames,
   } = input;
 
-  let effectivePotency = 0;
-  if (potency.method === 'bulkPercent') {
-    effectivePotency = potency.percent / 100;
-  } else {
-    if (potency.mgPerOldTablet > 0 && potency.oldTabletWeightG > 0) {
-      effectivePotency = potency.mgPerOldTablet / (potency.oldTabletWeightG * 1000);
-    }
-  }
+  const lotResults: RegrindLotResult[] = lots.map((lot: RegrindLot) => {
+    const lotPotency = lotEffectivePotency(lot.potency);
+    const activeContentG = lot.weightG > 0 && lotPotency > 0 ? lot.weightG * lotPotency : 0;
+    return {
+      id: lot.id,
+      label: lot.label,
+      effectivePotency: lotPotency,
+      weightG: lot.weightG,
+      activeContentG,
+      isStart: lot.isStart,
+    };
+  });
+
+  const activeInOldPowderG = lotResults.reduce((sum, l) => sum + l.activeContentG, 0);
+  const lotWeightSum = lotResults.reduce((sum, l) => sum + l.weightG, 0);
+  const regroundPowderMismatch =
+    regroundPowderG > 0 &&
+    lotWeightSum > 0 &&
+    Math.abs(regroundPowderG - lotWeightSum) > POWDER_WEIGHT_MISMATCH_TOLERANCE_G;
+  const hasStartsLot = lotResults.some((l) => l.isStart);
+
+  const effectivePotency = regroundPowderG > 0 ? activeInOldPowderG / regroundPowderG : 0;
 
   if (
     effectivePotency <= 0 ||
@@ -134,7 +173,6 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
   const regrindPerTabletG = targetActiveMgPerTablet / (effectivePotency * 1000);
   const fillerPerTabletG = targetWeightG - regrindPerTabletG;
   const fillerAddG = Math.max(0, tabletCount * fillerPerTabletG);
-  const activeInOldPowderG = regroundPowderG * effectivePotency;
   const freshActiveG = Math.max(
     0,
     (tabletCount * targetActiveMgPerTablet) / 1000 - activeInOldPowderG
@@ -145,6 +183,10 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
 
   return {
     mode: 'regrind',
+    lots: lotResults,
+    lotWeightSum,
+    regroundPowderMismatch,
+    hasStartsLot,
     effectivePotency,
     regroundPowderG,
     targetActiveMgPerTablet,

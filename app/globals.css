@@ -163,6 +163,31 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .verify-ack-btn { margin-top: 10px; height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid var(--danger-text); background: var(--danger-text); color: #fff; cursor: pointer; }
 .verify-ack-btn:hover { opacity: 0.9; }
 
+/* Regrind lots */
+.lot-card { border: 0.5px solid var(--border-md); border-radius: 8px; padding: 10px 11px; margin-bottom: 10px; }
+.lot-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lot-name-input { height: 26px; padding: 0 7px; border: 0.5px solid transparent; border-radius: 5px; font-size: 12px; font-weight: 600; background: none; color: var(--text); outline: none; font-family: inherit; flex: 1; }
+.lot-name-input:hover, .lot-name-input:focus { border-color: var(--border-md); background: var(--bg); }
+.lot-card-actions { display: flex; align-items: center; gap: 4px; }
+.lot-icon-btn { width: 24px; height: 24px; border-radius: 5px; border: none; background: none; color: var(--text-3); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.lot-icon-btn:hover { background: var(--bg); color: var(--text); }
+.lot-icon-btn.danger:hover { background: var(--danger-bg); color: var(--danger-text); }
+.lot-preset-list { margin-bottom: 8px; }
+.lot-preset-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.lot-preset-name-btn { flex: 1; text-align: left; height: 28px; padding: 0 9px; border: 0.5px solid var(--border-md); border-radius: 5px; font-size: 11px; background: var(--surface); color: var(--text); font-family: inherit; cursor: pointer; }
+.lot-preset-name-btn:hover { background: var(--bg); border-color: var(--text-3); }
+.lot-check-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); margin-top: 8px; cursor: pointer; }
+.lot-check-row input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--warning-text); cursor: pointer; }
+.lot-note-input { margin-top: 6px; height: 30px; width: 100%; padding: 0 9px; border: 0.5px solid var(--warning-border); border-radius: 6px; font-size: 11px; background: var(--warning-bg); color: var(--warning-text); outline: none; font-family: inherit; }
+.lot-note-input::placeholder { color: var(--warning-text); opacity: 0.6; }
+.lot-badge { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: var(--warning-bg); color: var(--warning-text); border: 0.5px solid var(--warning-border); text-transform: uppercase; letter-spacing: 0.4px; }
+.lot-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.add-lot-btn { width: 100%; height: 32px; border-radius: 6px; font-size: 11px; font-weight: 500; border: 1px dashed var(--border-md); background: none; color: var(--text-2); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.add-lot-btn:hover { background: var(--bg); border-color: var(--text-3); }
+.lot-breakdown-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 7px; margin-bottom: 4px; background: var(--bg); font-size: 11px; }
+.lot-breakdown-lbl { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.lot-breakdown-val { color: var(--text-2); }
+
 /* Save confirmation toast */
 .toast { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 8px; background: var(--brand); color: #fff; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.18); animation: toast-in 0.2s ease-out; }
 .toast i { font-size: 16px; }

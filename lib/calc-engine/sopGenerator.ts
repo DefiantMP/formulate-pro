@@ -62,16 +62,36 @@ export function generateFreshBatchSOP(
 
 export function generateRegrindSOP(result: RegrindResult): string[] {
   const alreadyPresent = result.alreadyPresentIngredientNames.join(' or ');
-  const steps: string[] = [
-    'Grind old tablets to fine powder',
-    `Weigh reground powder — confirm ${fmt(result.regroundPowderG, 0)} g`,
-    `Add ${fmt(result.regroundPowderG, 0)} g reground powder to V-mix`,
+  const steps: string[] = ['Grind old tablets to fine powder'];
+
+  if (result.lots.length <= 1) {
+    // Single-lot wording is unchanged from before lots existed.
+    steps.push(
+      `Weigh reground powder — confirm ${fmt(result.regroundPowderG, 0)} g`,
+      `Add ${fmt(result.regroundPowderG, 0)} g reground powder to V-mix`
+    );
+  } else {
+    // Per-lot notes are shown in the UI lot breakdown, not duplicated into the SOP text.
+    for (const lot of result.lots) {
+      const flag = lot.isStart ? ' (starts — estimated, low confidence)' : '';
+      steps.push(`Weigh lot "${lot.label}" — ${fmt(lot.weightG, 0)} g${flag}`);
+    }
+    const mismatchNote = result.regroundPowderMismatch
+      ? ` — does not match entered lot weights (${fmt(result.lotWeightSum, 0)} g), re-check`
+      : '';
+    steps.push(
+      `Combine all lots — confirm total reground powder ${fmt(result.regroundPowderG, 0)} g${mismatchNote}`,
+      `Add ${fmt(result.regroundPowderG, 0)} g combined reground powder to V-mix`
+    );
+  }
+
+  steps.push(
     result.freshActiveG > 0
       ? `Add ${fmt(result.freshActiveG)} g fresh active`
       : 'No fresh active needed — regrind active covers the full batch',
     `Add ${fmt(result.fillerAddG)} g ${result.fillerIngredientName}`,
-    'Mix for 15 minutes',
-  ];
+    'Mix for 15 minutes'
+  );
   if (alreadyPresent) {
     steps.push(`Do not add fresh ${alreadyPresent} — already present in regrind`);
   }

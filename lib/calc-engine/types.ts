@@ -63,8 +63,33 @@ export type PotencyInput =
   | { method: 'bulkPercent'; percent: number }
   | { method: 'mgPerTablet'; mgPerOldTablet: number; oldTabletWeightG: number };
 
-export interface RegrindInput {
+/**
+ * One lot of ground-up old tablets within a regrind run. A regrind batch is
+ * often a blend of multiple lots with different potencies, pressed weights,
+ * and excipient makeups — see calculateRegrind for how these are blended.
+ */
+export interface RegrindLot {
+  id: string;
+  label: string;
   potency: PotencyInput;
+  weightG: number;
+  /** Informational only — captured for record-keeping, does not affect calculation. */
+  disintegrantPercent: number | null;
+  /** Informational only — captured for record-keeping, does not affect calculation. */
+  lubricantPercent: number | null;
+  /**
+   * "Press starts" lots (inconsistent fill/compression before a press
+   * stabilizes) have structurally unreliable potency figures — estimates,
+   * not measurements. Flagging this never excludes the lot from the blended
+   * calculation; it only marks the figure as low-confidence for review.
+   */
+  isStart: boolean;
+  note: string;
+}
+
+export interface RegrindInput {
+  /** At least one lot — a single-lot run reduces exactly to today's single-potency math. */
+  lots: RegrindLot[];
   regroundPowderG: number;
   targetActiveMgPerTablet: number;
   targetWeightG: number;
@@ -74,8 +99,25 @@ export interface RegrindInput {
   alreadyPresentIngredientNames: string[];
 }
 
+export interface RegrindLotResult {
+  id: string;
+  label: string;
+  /** Fraction (0-1) of this lot that is active ingredient. */
+  effectivePotency: number;
+  weightG: number;
+  /** Grams of active ingredient contributed by this lot (weightG * effectivePotency). */
+  activeContentG: number;
+  isStart: boolean;
+}
+
 export interface RegrindResult {
   mode: 'regrind';
+  lots: RegrindLotResult[];
+  /** Sum of lots[].weightG, for cross-checking against the entered regroundPowderG. */
+  lotWeightSum: number;
+  /** True when regroundPowderG disagrees with lotWeightSum by more than a small tolerance. */
+  regroundPowderMismatch: boolean;
+  hasStartsLot: boolean;
   effectivePotency: number;
   regroundPowderG: number;
   targetActiveMgPerTablet: number;
@@ -84,6 +126,7 @@ export interface RegrindResult {
   totalBlendG: number;
   freshActiveG: number;
   fillerAddG: number;
+  /** Grams of active ingredient already present across all lots (sum of lots[].activeContentG). */
   activeInOldPowderG: number;
   actualMgPerTablet: number;
   fillerIngredientName: string;

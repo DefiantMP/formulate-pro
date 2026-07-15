@@ -2,7 +2,8 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { IngredientLine } from '@/lib/calc-engine/types';
-import type { Mode, RegrindOption } from './FormulateApp';
+import type { Mode, RegrindLotState, RegrindLotPresetRecord } from './FormulateApp';
+import RegrindLotCard from './RegrindLotCard';
 
 type StrSetter = Dispatch<SetStateAction<string>>;
 
@@ -27,14 +28,14 @@ interface InputsPanelProps {
   fillerName: string;
   emdexDisplay: string;
 
-  opt: RegrindOption;
-  onOptChange: (opt: RegrindOption) => void;
-  aPot: string;
-  setAPot: StrSetter;
-  bMg: string;
-  setBMg: StrSetter;
-  bWt: string;
-  setBWt: StrSetter;
+  lots: RegrindLotState[];
+  onUpdateLot: (id: string, patch: Partial<RegrindLotState>) => void;
+  onAddLot: () => void;
+  onRemoveLot: (id: string) => void;
+  presets: RegrindLotPresetRecord[];
+  onLoadPreset: (id: string, presetId: string) => void;
+  onSaveAsPreset: (id: string) => void;
+  onDeletePreset: (presetId: string) => void;
   rgPwd: string;
   setRgPwd: StrSetter;
   rgTmg: string;
@@ -160,79 +161,25 @@ export default function InputsPanel(props: InputsPanelProps) {
           </div>
         ) : (
           <div>
-            <div className="sub-lbl">Old tablet potency — pick one</div>
+            <div className="sub-lbl">Regrind lots</div>
 
-            <div
-              className={`opt-box${props.opt === 'a' ? ' active' : ''}`}
-              onClick={() => props.onOptChange('a')}
-            >
-              <div className="opt-header">
-                <div className={`opt-radio${props.opt === 'a' ? ' active' : ''}`} />
-                <div>
-                  <div className="opt-title">Option A — bulk potency %</div>
-                  <div className="opt-desc">Raw material COA gives a % value</div>
-                </div>
-              </div>
-              <div className="opt-fields">
-                <div className="field" style={{ margin: 0 }}>
-                  <label>Potency of old batch</label>
-                  <div className="row">
-                    <input
-                      type="number"
-                      placeholder="55.5"
-                      step="0.001"
-                      value={props.aPot}
-                      onChange={(e) => props.setAPot(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="unit">%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {props.lots.map((lot) => (
+              <RegrindLotCard
+                key={lot.id}
+                lot={lot}
+                canRemove={props.lots.length > 1}
+                presets={props.presets}
+                onChange={props.onUpdateLot}
+                onRemove={props.onRemoveLot}
+                onLoadPreset={props.onLoadPreset}
+                onSaveAsPreset={props.onSaveAsPreset}
+                onDeletePreset={props.onDeletePreset}
+              />
+            ))}
 
-            <div
-              className={`opt-box${props.opt === 'b' ? ' active' : ''}`}
-              onClick={() => props.onOptChange('b')}
-            >
-              <div className="opt-header">
-                <div className={`opt-radio${props.opt === 'b' ? ' active' : ''}`} />
-                <div>
-                  <div className="opt-title">Option B — mg per tablet</div>
-                  <div className="opt-desc">Finished tablet COA gives mg / tablet</div>
-                </div>
-              </div>
-              <div className="opt-fields">
-                <div className="field">
-                  <label>mg active per old tablet</label>
-                  <div className="row">
-                    <input
-                      type="number"
-                      placeholder="20.1"
-                      step="0.01"
-                      value={props.bMg}
-                      onChange={(e) => props.setBMg(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="unit">mg</div>
-                  </div>
-                </div>
-                <div className="field" style={{ margin: 0 }}>
-                  <label>Old tablet pressed weight</label>
-                  <div className="row">
-                    <input
-                      type="number"
-                      placeholder="0.270"
-                      step="0.001"
-                      value={props.bWt}
-                      onChange={(e) => props.setBWt(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="unit">g</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <button type="button" className="add-lot-btn" onClick={props.onAddLot}>
+              <i className="ti ti-plus" /> Add another mix
+            </button>
 
             <div className="hr" />
             <div className="field">

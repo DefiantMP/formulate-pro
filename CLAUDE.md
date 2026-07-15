@@ -4,7 +4,7 @@ Tablet formulation calculator for nutraceutical manufacturing. Used by operators
 
 ## Source of Truth
 
-- `formulate-pro-engine/` (moved into `lib/calc-engine/`) is the tested calculation engine. Do not rewrite its math logic without explicit instruction. Passing test suite, 42 tests at last check across `lib/calc-engine/tests/`, `lib/arithmetic.test.ts`, and `lib/aiVerification.test.ts` (`npm test`) — run before and after any change that touches calculation or AI-verification code.
+- `formulate-pro-engine/` (moved into `lib/calc-engine/`) is the tested calculation engine. Do not rewrite its math logic without explicit instruction. Passing test suite, 47 tests at last check across `lib/calc-engine/tests/`, `lib/arithmetic.test.ts`, and `lib/aiVerification.test.ts` (`npm test`) — run before and after any change that touches calculation or AI-verification code.
 - `reference/prototype.html` shows the original intended visual design/layout only. It is not a source of truth for math or data flow.
 - `app/api/ai/verify/route.ts` is a thin Next.js handler only — Next.js route files may only export route handlers, so it can't hold business logic. The actual model↔tool conversation loop, system prompt, and integrity gate live in `lib/aiVerification.ts`; the calculator tool's expression evaluator (real deterministic arithmetic, no `eval`) lives in `lib/arithmetic.ts`. Edit those, not `route.ts`, for verification logic changes.
 
@@ -17,6 +17,7 @@ Tablet formulation calculator for nutraceutical manufacturing. Used by operators
   - **Fresh-batch mode:** blend percentage must be derived from potency + target mg/tablet + target tablet weight. It is NOT the same as raw potency percentage. Any change to fresh-batch calculation must be validated against a known-correct production sheet before being trusted.
 - Known-good validation case (RR77-PB9, default 5-ingredient formulation — PVPP XL 5%, Magnesium stearate 2%, EZTAB 10% — at potency 76.4%, target 60mg/tablet, target weight 0.69g, 10,887 tablets): 855.00g active, 5,379.98g Emdex, 375.60g PVPP XL, 150.24g Magnesium stearate, 751.20g EZTAB, total 7,512.03g. Verified directly against `calculateFreshBatch` on 2026-07-13 and matches `lib/calc-engine/tests/calcEngine.test.ts`. (An earlier version of this note had different Emdex/PVPP XL/Magnesium stearate figures — those were wrong, presumably transcribed from a formulation with different excipient percentages; corrected here.) Use this to sanity-check any engine changes.
 - Regrind mode has a real-formulation validation pass still pending (waiting on a colleague's regrind sheet) — treat regrind math as less battle-tested than fresh-batch until that lands.
+- Regrind mode supports multiple lots per run (`RegrindLot[]` in `lib/calc-engine/types.ts`): each lot has its own potency, pressed weight, and powder weight; `calculateRegrind` blends `activeInOldPowderG` as the sum of each lot's `weightG × effectivePotency`, divided by the operator-entered `regroundPowderG` (which stays authoritative for all downstream math — the lot-weight sum only drives a mismatch warning, never overrides it). Single-lot behavior is proven byte-for-byte identical to the pre-multi-lot formula by regression tests in `calcEngine.test.ts` against the original golden fixtures. This blended math is new and, like single-lot regrind above, has not yet been validated against a real (ideally multi-lot) production sheet — added 2026-07-14, still pending that validation.
 
 ## AI Verification Layer — Integrity Rules
 
@@ -40,7 +41,7 @@ Tablet formulation calculator for nutraceutical manufacturing. Used by operators
 
 - [x] Save confirmation banner — no visual feedback currently on save (done: "Run saved" toast added)
 - [ ] CSV batch import UI — backend endpoint exists at `/api/batch-history/import`, no frontend yet
-- [ ] Regrind mode validation pass — pending a real regrind formulation sheet
+- [ ] Regrind mode validation pass — pending a real regrind formulation sheet, now ideally multi-lot since multi-lot blending shipped 2026-07-14
 - [ ] Phase 4 remainder: recommendation engine, excipient suggestions layer — not yet started
 
 ## Environment Notes

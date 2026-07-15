@@ -9,12 +9,12 @@ import {
   generateRegrindSOP,
   defaultIngredients,
 } from '@/lib/calc-engine';
-import type { IngredientLine, PotencyInput } from '@/lib/calc-engine/types';
+import type { IngredientLine, PotencyInput, RegrindLot } from '@/lib/calc-engine/types';
 import { fmt, fmtK, numOrZero } from '@/lib/format';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import InputsPanel from './InputsPanel';
-import OutputPanel, { type AddRowData, type StatsData, type TabKey } from './OutputPanel';
+import OutputPanel, { type AddRowData, type StatsData, type TabKey, type LotBreakdownRow } from './OutputPanel';
 import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
 import VerifyIndicator, { type VerifyDiscrepancy, type VerifyStatus } from './VerifyIndicator';
@@ -23,6 +23,57 @@ const VERIFY_DEBOUNCE_MS = 800;
 
 export type Mode = 'fresh' | 'regrind';
 export type RegrindOption = 'a' | 'b';
+
+/** One regrind lot's UI state — string inputs, mirroring the app's existing input-state convention. */
+export interface RegrindLotState {
+  id: string;
+  label: string;
+  opt: RegrindOption;
+  aPot: string;
+  bMg: string;
+  bWt: string;
+  weightG: string;
+  disintegrantPercent: string;
+  lubricantPercent: string;
+  isStart: boolean;
+  note: string;
+}
+
+export interface RegrindLotPresetRecord {
+  id: string;
+  name: string;
+  potency: PotencyInput;
+  disintegrantPercent: number | null;
+  lubricantPercent: number | null;
+}
+
+let lotIdCounter = 0;
+function makeLotId(): string {
+  lotIdCounter += 1;
+  return `lot-${Date.now()}-${lotIdCounter}`;
+}
+
+function blankLot(label: string): RegrindLotState {
+  return {
+    id: makeLotId(),
+    label,
+    opt: 'a',
+    aPot: '',
+    bMg: '',
+    bWt: '',
+    weightG: '',
+    disintegrantPercent: '',
+    lubricantPercent: '',
+    isStart: false,
+    note: '',
+  };
+}
+
+function lotStateToPotency(lot: RegrindLotState): PotencyInput {
+  return lot.opt === 'a'
+    ? { method: 'bulkPercent', percent: numOrZero(lot.aPot) }
+    : { method: 'mgPerTablet', mgPerOldTablet: numOrZero(lot.bMg), oldTabletWeightG: numOrZero(lot.bWt) };
+}
 
 export default function FormulateApp() {
   const [mode, setMode] = useState<Mode>('fresh');
@@ -53,13 +104,90 @@ export default function FormulateApp() {
     setExcipientPercents((prev) => ({ ...prev, [id]: value }));
   }
 
-  const [opt, setOpt] = useState<RegrindOption>('a');
-  const [aPot, setAPot] = useState('');
-  const [bMg, setBMg] = useState('');
-  const [bWt, setBWt] = useState('');
+  const [lots, setLots] = useState<RegrindLotState[]>(() => [blankLot('Lot 1')]);
   const [rgPwd, setRgPwd] = useState('');
   const [rgTmg, setRgTmg] = useState('');
   const [rgTwt, setRgTwt] = useState('');
+
+  const [presets, setPresets] = useState<RegrindLotPresetRecord[]>([]);
+
+  useEffect(() => {
+    fetch('/api/regrind-presets')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setPresets(Array.isArray(data) ? data : []))
+      .catch(() => setPresets([]));
+  }, []);
+
+  function updateLot(id: string, patch: Partial<RegrindLotState>) {
+    setLots((prev) => prev.map((lot) => (lot.id === id ? { ...lot, ...patch } : lot)));
+  }
+
+  function addLot() {
+    setLots((prev) => [...prev, blankLot(`Lot ${prev.length + 1}`)]);
+  }
+
+  function removeLot(id: string) {
+    setLots((prev) => (prev.length <= 1 ? prev : prev.filter((lot) => lot.id !== id)));
+  }
+
+  function loadPresetIntoLot(id: string, presetId: string) {
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+    const potencyPatch: Partial<RegrindLotState> =
+      preset.potency.method === 'bulkPercent'
+        ? { opt: 'a', aPot: String(preset.potency.percent) }
+        : {
+            opt: 'b',
+            bMg: String(preset.potency.mgPerOldTablet),
+            bWt: String(preset.potency.oldTabletWeightG),
+          };
+    updateLot(id, {
+      ...potencyPatch,
+      disintegrantPercent: preset.disintegrantPercent != null ? String(preset.disintegrantPercent) : '',
+      lubricantPercent: preset.lubricantPercent != null ? String(preset.lubricantPercent) : '',
+    });
+  }
+
+  async function saveLotAsPreset(id: string) {
+    const lot = lots.find((l) => l.id === id);
+    if (!lot) return;
+    const name = window.prompt('Name this preset', lot.label);
+    if (!name || !name.trim()) return;
+    try {
+      const res = await fetch('/api/regrind-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          potency: lotStateToPotency(lot),
+          disintegrantPercent: lot.disintegrantPercent === '' ? null : numOrZero(lot.disintegrantPercent),
+          lubricantPercent: lot.lubricantPercent === '' ? null : numOrZero(lot.lubricantPercent),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        alert(body?.error ?? 'Failed to save preset.');
+        return;
+      }
+      const saved: RegrindLotPresetRecord = await res.json();
+      setPresets((prev) => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)));
+    } catch {
+      alert('Failed to save preset.');
+    }
+  }
+
+  async function deletePreset(presetId: string) {
+    try {
+      const res = await fetch(`/api/regrind-presets/${presetId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert('Failed to delete preset.');
+        return;
+      }
+      setPresets((prev) => prev.filter((p) => p.id !== presetId));
+    } catch {
+      alert('Failed to delete preset.');
+    }
+  }
 
   const baseIngredients = useMemo(() => defaultIngredients(), []);
   const activeIngredient = baseIngredients.find((i) => i.role === 'active')!;
@@ -116,20 +244,31 @@ export default function FormulateApp() {
     }
   }, [fTabs, fTwt, fTmg, fPot, freshIngredients]);
 
+  const regrindLots = useMemo<RegrindLot[]>(
+    () =>
+      lots.map((lot) => ({
+        id: lot.id,
+        label: lot.label,
+        potency: lotStateToPotency(lot),
+        weightG: numOrZero(lot.weightG),
+        disintegrantPercent: lot.disintegrantPercent === '' ? null : numOrZero(lot.disintegrantPercent),
+        lubricantPercent: lot.lubricantPercent === '' ? null : numOrZero(lot.lubricantPercent),
+        isStart: lot.isStart,
+        note: lot.note,
+      })),
+    [lots]
+  );
+
   const regrindResult = useMemo(() => {
-    const potency: PotencyInput =
-      opt === 'a'
-        ? { method: 'bulkPercent', percent: numOrZero(aPot) }
-        : { method: 'mgPerTablet', mgPerOldTablet: numOrZero(bMg), oldTabletWeightG: numOrZero(bWt) };
     return calculateRegrind({
-      potency,
+      lots: regrindLots,
       regroundPowderG: numOrZero(rgPwd),
       targetActiveMgPerTablet: numOrZero(rgTmg),
       targetWeightG: numOrZero(rgTwt),
       fillerIngredientName: fillerIngredient.name,
       alreadyPresentIngredientNames: alreadyPresentNames,
     });
-  }, [opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt, fillerIngredient, alreadyPresentNames]);
+  }, [regrindLots, rgPwd, rgTmg, rgTwt, fillerIngredient, alreadyPresentNames]);
 
   const result = mode === 'fresh' ? freshResult : regrindResult;
 
@@ -198,10 +337,29 @@ export default function FormulateApp() {
     ];
   }, [result, activeIngredient, freshIngredients]);
 
-  const warnRow =
-    result && result.mode === 'regrind'
-      ? `Do not add fresh ${result.alreadyPresentIngredientNames.join(' or ')} — already present in regrind`
-      : null;
+  const warnRows: string[] = useMemo(() => {
+    if (!result || result.mode !== 'regrind') return [];
+    const rows: string[] = [];
+    if (result.alreadyPresentIngredientNames.length > 0) {
+      rows.push(`Do not add fresh ${result.alreadyPresentIngredientNames.join(' or ')} — already present in regrind`);
+    }
+    if (result.regroundPowderMismatch) {
+      rows.push(
+        `Total reground powder weight (${fmt(result.regroundPowderG, 0)} g) doesn't match the sum of lot weights (${fmt(result.lotWeightSum, 0)} g) — re-check before proceeding`
+      );
+    }
+    return rows;
+  }, [result]);
+
+  const lotBreakdown: LotBreakdownRow[] | null = useMemo(() => {
+    if (!result || result.mode !== 'regrind' || result.lots.length <= 1) return null;
+    return result.lots.map((lot) => ({
+      label: lot.label,
+      weightG: lot.weightG,
+      potencyPercent: lot.effectivePotency * 100,
+      isStart: lot.isStart,
+    }));
+  }, [result]);
 
   const [verifyStatus, setVerifyStatus] = useState<VerifyStatus>('idle');
   const [verifyNotes, setVerifyNotes] = useState('');
@@ -220,7 +378,7 @@ export default function FormulateApp() {
     const inputsSnapshot =
       mode === 'fresh'
         ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
-        : { opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt };
+        : { lots: regrindLots, rgPwd, rgTmg, rgTwt };
 
     setVerifyStatus('checking');
     setVerifyDiscrepancy(null);
@@ -260,7 +418,7 @@ export default function FormulateApp() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [result, mode, fName, fPot, fTmg, fTwt, fTabs, excipientPercents, opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt]);
+  }, [result, mode, fName, fPot, fTmg, fTwt, fTabs, excipientPercents, regrindLots, rgPwd, rgTmg, rgTwt]);
 
   function acknowledgeDiscrepancy() {
     setVerifyAcknowledgedAt(new Date().toISOString());
@@ -287,10 +445,46 @@ export default function FormulateApp() {
     const str = (key: string) => (typeof inputs[key] === 'string' ? (inputs[key] as string) : '');
     if (run.mode === 'regrind') {
       setMode('regrind');
-      setOpt((inputs.opt as RegrindOption) || 'a');
-      setAPot(str('aPot'));
-      setBMg(str('bMg'));
-      setBWt(str('bWt'));
+      const savedLots = inputs.lots;
+      if (Array.isArray(savedLots) && savedLots.length > 0) {
+        setLots(
+          savedLots.map((raw) => {
+            const l = raw as Partial<RegrindLot> & { id?: string; label?: string };
+            const potency = l.potency as PotencyInput | undefined;
+            return {
+              id: l.id || makeLotId(),
+              label: l.label || 'Lot',
+              opt: potency?.method === 'mgPerTablet' ? 'b' : 'a',
+              aPot: potency?.method === 'bulkPercent' ? String(potency.percent) : '',
+              bMg: potency?.method === 'mgPerTablet' ? String(potency.mgPerOldTablet) : '',
+              bWt: potency?.method === 'mgPerTablet' ? String(potency.oldTabletWeightG) : '',
+              weightG: l.weightG != null ? String(l.weightG) : '',
+              disintegrantPercent: l.disintegrantPercent != null ? String(l.disintegrantPercent) : '',
+              lubricantPercent: l.lubricantPercent != null ? String(l.lubricantPercent) : '',
+              isStart: l.isStart ?? false,
+              note: l.note ?? '',
+            };
+          })
+        );
+      } else {
+        // Backward compat: runs saved before multi-lot support used flat
+        // opt/aPot/bMg/bWt fields for a single implicit lot.
+        setLots([
+          {
+            id: makeLotId(),
+            label: 'Lot 1',
+            opt: (inputs.opt as RegrindOption) || 'a',
+            aPot: str('aPot'),
+            bMg: str('bMg'),
+            bWt: str('bWt'),
+            weightG: str('rgPwd'),
+            disintegrantPercent: '',
+            lubricantPercent: '',
+            isStart: false,
+            note: '',
+          },
+        ]);
+      }
       setRgPwd(str('rgPwd'));
       setRgTmg(str('rgTmg'));
       setRgTwt(str('rgTwt'));
@@ -341,7 +535,7 @@ export default function FormulateApp() {
     const inputs =
       mode === 'fresh'
         ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
-        : { opt, aPot, bMg, bWt, rgPwd, rgTmg, rgTwt };
+        : { lots: regrindLots, rgPwd, rgTmg, rgTwt };
 
     const verificationAcknowledgment =
       verifyStatus === 'acknowledged' && verifyDiscrepancy && verifyAcknowledgedAt
@@ -389,9 +583,7 @@ export default function FormulateApp() {
     setFTwt('');
     setFTabs('');
     setExcipientPercents({});
-    setAPot('');
-    setBMg('');
-    setBWt('');
+    setLots([blankLot('Lot 1')]);
     setRgPwd('');
     setRgTmg('');
     setRgTwt('');
@@ -422,14 +614,14 @@ export default function FormulateApp() {
               setExcipientPercent={setExcipientPercent}
               fillerName={fillerIngredient.name}
               emdexDisplay={emdexDisplay}
-              opt={opt}
-              onOptChange={setOpt}
-              aPot={aPot}
-              setAPot={setAPot}
-              bMg={bMg}
-              setBMg={setBMg}
-              bWt={bWt}
-              setBWt={setBWt}
+              lots={lots}
+              onUpdateLot={updateLot}
+              onAddLot={addLot}
+              onRemoveLot={removeLot}
+              presets={presets}
+              onLoadPreset={loadPresetIntoLot}
+              onSaveAsPreset={saveLotAsPreset}
+              onDeletePreset={deletePreset}
               rgPwd={rgPwd}
               setRgPwd={setRgPwd}
               rgTmg={rgTmg}
@@ -452,7 +644,8 @@ export default function FormulateApp() {
               hasResult={!!result}
               stats={stats}
               addRows={addRows}
-              warnRow={warnRow}
+              warnRows={warnRows}
+              lotBreakdown={lotBreakdown}
               varianceRows={varianceRows}
               sopSteps={sopSteps}
             />

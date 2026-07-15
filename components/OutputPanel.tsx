@@ -16,13 +16,21 @@ export interface StatsData {
   mgPerTab: string;
 }
 
+export interface LotBreakdownRow {
+  label: string;
+  weightG: number;
+  potencyPercent: number;
+  isStart: boolean;
+}
+
 interface OutputPanelProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   hasResult: boolean;
   stats: StatsData | null;
   addRows: AddRowData[];
-  warnRow: string | null;
+  warnRows: string[];
+  lotBreakdown: LotBreakdownRow[] | null;
   varianceRows: VarianceRow[];
   sopSteps: string[];
 }
@@ -33,7 +41,8 @@ export default function OutputPanel({
   hasResult,
   stats,
   addRows,
-  warnRow,
+  warnRows,
+  lotBreakdown,
   varianceRows,
   sopSteps,
 }: OutputPanelProps) {
@@ -102,13 +111,32 @@ export default function OutputPanel({
                     <div className={`add-val${row.key ? ' green' : ''}`}>{row.value}</div>
                   </div>
                 ))}
-                {warnRow && (
-                  <div className="warn-row">
+                {warnRows.map((warning) => (
+                  <div className="warn-row" key={warning}>
                     <i className="ti ti-alert-triangle" />
-                    {warnRow}
+                    {warning}
                   </div>
-                )}
+                ))}
               </div>
+              {lotBreakdown && (
+                <div style={{ marginTop: 14 }}>
+                  <div className="add-sub">Lot breakdown</div>
+                  <div>
+                    {lotBreakdown.map((lot) => (
+                      <div className="lot-breakdown-row" key={lot.label}>
+                        <div className="lot-breakdown-lbl">
+                          {lot.label}
+                          {lot.isStart && <span className="lot-badge">Starts</span>}
+                        </div>
+                        <div className="lot-breakdown-val">
+                          {lot.weightG.toLocaleString('en-US', { maximumFractionDigits: 0 })} g @{' '}
+                          {lot.potencyPercent.toFixed(2)}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
