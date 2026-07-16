@@ -57,13 +57,13 @@ export default function InputsPanel(props: InputsPanelProps) {
   const { mode, onModeChange } = props;
 
   return (
-    <div className="card">
+    <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div className="card-hdr">
         <div className="card-hdr-title">
           <i className="ti ti-pill" /> Inputs
         </div>
       </div>
-      <div className="card-body">
+      <div className="card-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         <div className="mode-toggle">
           <button
             className={`m-btn${mode === 'fresh' ? ' active' : ''}`}
