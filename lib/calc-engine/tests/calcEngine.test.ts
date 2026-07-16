@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateFreshBatch, calculateRegrind, generateVarianceTable } from '../calcEngine';
+import { calculateFreshBatch, calculateRegrind, solveRegrindLotWeight, generateVarianceTable } from '../calcEngine';
 import { defaultIngredients } from '../defaultFormulation';
 import type { IngredientLine, PotencyInput, RegrindLot, FreshApiEntry, FreshApiPotency } from '../types';
 
@@ -14,6 +14,7 @@ function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
       disintegrantPercent: null,
       lubricantPercent: null,
       fillerType: '',
+      availableStockG: null,
       isStart: false,
       note: '',
     },
@@ -326,6 +327,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       disintegrantPercent: 4.5,
       lubricantPercent: 1.8,
       fillerType: 'EasyTab',
+      availableStockG: null,
       isStart: true,
       note: 'press starts, weight estimated',
     },
@@ -337,6 +339,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       disintegrantPercent: null,
       lubricantPercent: null,
       fillerType: '',
+      availableStockG: null,
       isStart: false,
       note: '',
     },
@@ -423,6 +426,171 @@ describe('calculateRegrind — multi-lot blending', () => {
     });
     const activeInOldPowderG = 8000 * 0.555 + 6500 * (20.1 / (0.27 * 1000));
     expect(result!.effectivePotency).toBeCloseTo(activeInOldPowderG / 14000, 10);
+  });
+});
+
+// Known-correct example (see conversation): Lot 1 fixed at 11,346.14g,
+// 14mg/730mg potency; Lot 2 solved, 40mg/690mg potency; target 100,000
+// tablets, 14mg/tablet, 0.8g/tablet. Solving precisely gives Lot 2 =
+// 20,396.45g (rounds to 20,396.4 or 20,396.5 depending on rounding
+// convention — the two provided reference numbers, 20,396.5g for the lot
+// and 48,257.4g for filler, are not simultaneously exact to 1 decimal from
+// the same precise total-blend/lot-1-weight inputs; filler matches exactly,
+// the lot figure is off by 0.05g, consistent with a rounding artifact in
+// how that number was manually derived rather than a formula error).
+describe('solveRegrindLotWeight — known-correct example', () => {
+  const fixedLots = [{ weightG: 11346.14, potency: { method: 'bulkPercent' as const, percent: (14 / 730) * 100 } }];
+  const solvingLotPotency = { method: 'bulkPercent' as const, percent: (40 / 690) * 100 };
+
+  it('solves Lot 2 weight to match the precise value derived from the given formulas', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots,
+      solvingLotPotency,
+      targetTabletCount: 100000,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.solvedWeightG).toBeCloseTo(20396.45, 1);
+      expect(result.totalBlendG).toBeCloseTo(80000, 6);
+    }
+  });
+
+  it('matches the provided filler figure (48,257.4 g) exactly', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots,
+      solvingLotPotency,
+      targetTabletCount: 100000,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fillerAddG).toBeCloseTo(48257.4, 1);
+    }
+  });
+
+  it('feeding the solved weight into calculateRegrind reproduces the same filler and total blend', () => {
+    const solve = solveRegrindLotWeight({
+      fixedLots,
+      solvingLotPotency,
+      targetTabletCount: 100000,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(solve.ok).toBe(true);
+    if (!solve.ok) return;
+
+    const lots: RegrindLot[] = [
+      {
+        id: 'lot1',
+        label: 'Lot 1',
+        potency: fixedLots[0].potency,
+        weightG: fixedLots[0].weightG,
+        disintegrantPercent: null,
+        lubricantPercent: null,
+        fillerType: '',
+        availableStockG: null,
+        isStart: false,
+        note: '',
+      },
+      {
+        id: 'lot2',
+        label: 'Lot 2',
+        potency: solvingLotPotency,
+        weightG: solve.solvedWeightG,
+        disintegrantPercent: null,
+        lubricantPercent: null,
+        fillerType: '',
+        availableStockG: null,
+        isStart: false,
+        note: '',
+      },
+    ];
+    const regroundPowderG = lots.reduce((sum, l) => sum + l.weightG, 0);
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+    });
+    expect(result).not.toBeNull();
+    expect(result!.tabletCount).toBe(100000);
+    expect(result!.fillerAddG).toBeCloseTo(solve.fillerAddG, 6);
+    expect(result!.totalBlendG).toBeCloseTo(solve.totalBlendG, 6);
+    expect(result!.regroundPowderMismatch).toBe(false);
+  });
+});
+
+describe('solveRegrindLotWeight — infeasibility guards', () => {
+  it('returns ok:false when fixed lots alone already meet or exceed the target active mass', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots: [{ weightG: 100000, potency: { method: 'bulkPercent', percent: 100 } }],
+      solvingLotPotency: { method: 'bulkPercent', percent: 50 },
+      targetTabletCount: 100000,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/nothing left/i);
+    }
+  });
+
+  it('returns ok:false when the solved lot plus fixed lots would exceed the total blend mass', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots: [{ weightG: 79999, potency: { method: 'bulkPercent', percent: 0.001 } }],
+      solvingLotPotency: { method: 'bulkPercent', percent: 0.001 },
+      targetTabletCount: 100000,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/isn't achievable/i);
+    }
+  });
+
+  it('returns ok:false for a zero target tablet count', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots: [],
+      solvingLotPotency: { method: 'bulkPercent', percent: 50 },
+      targetTabletCount: 0,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('returns ok:false when the solving lot has no valid potency', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots: [],
+      solvingLotPotency: { method: 'bulkPercent', percent: 0 },
+      targetTabletCount: 1000,
+      targetActiveMgPerTablet: 14,
+      targetWeightG: 0.8,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('handles zero fixed lots — the solving lot alone must supply the full target', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots: [],
+      solvingLotPotency: { method: 'bulkPercent', percent: 50 },
+      targetTabletCount: 1000,
+      targetActiveMgPerTablet: 10,
+      targetWeightG: 1.0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // 1000 tablets * 10mg / 1000 = 10g active needed, at 50% potency -> 20g.
+      expect(result.solvedWeightG).toBeCloseTo(20, 6);
+      expect(result.totalBlendG).toBeCloseTo(1000, 6);
+      expect(result.fillerAddG).toBeCloseTo(980, 6);
+    }
   });
 });
 

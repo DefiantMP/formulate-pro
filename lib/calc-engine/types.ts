@@ -120,6 +120,8 @@ export interface RegrindLot {
   lubricantPercent: number | null;
   /** Informational only — captured for record-keeping, does not affect calculation (e.g. EasyTab, Emdex). */
   fillerType: string;
+  /** Informational only — how much of this lot's material is on hand, for a stock-shortage warning. Never affects calculation. */
+  availableStockG: number | null;
   /**
    * "Press starts" lots (inconsistent fill/compression before a press
    * stabilizes) have structurally unreliable potency figures — estimates,
@@ -153,6 +155,8 @@ export interface RegrindLotResult {
   isStart: boolean;
   /** Informational only — carried through from RegrindLot for display in the UI/SOP. */
   fillerType: string;
+  /** Informational only — carried through from RegrindLot, for a stock-shortage warning in the UI. */
+  availableStockG: number | null;
 }
 
 export interface RegrindResult {
@@ -177,6 +181,38 @@ export interface RegrindResult {
   fillerIngredientName: string;
   alreadyPresentIngredientNames: string[];
 }
+
+/**
+ * Solves for the weight of one unknown regrind lot, given a target tablet
+ * count — the inverse of the normal regrind flow, where every lot weight is
+ * known and regroundPowderG (hence tabletCount) is derived from it. Deliberately
+ * a separate, standalone calculation: it produces a single lot weight, which
+ * the caller then feeds back into the ordinary (unmodified) calculateRegrind
+ * as ordinary lot data — so the two known-weight lots plus the solved one
+ * flow through the exact same battle-tested math as any other regrind run.
+ */
+export interface RegrindSolveInput {
+  /** Every lot except the one being solved for — must have a known weightG. */
+  fixedLots: { weightG: number; potency: PotencyInput }[];
+  /** Potency of the lot whose weight is unknown. */
+  solvingLotPotency: PotencyInput;
+  targetTabletCount: number;
+  targetActiveMgPerTablet: number;
+  targetWeightG: number;
+}
+
+export type RegrindSolveResult =
+  | {
+      ok: true;
+      solvedWeightG: number;
+      /** Sum of every fixed lot's weightG (excludes the solved lot). */
+      fixedLotWeightSumG: number;
+      /** target tablet count * targetWeightG. */
+      totalBlendG: number;
+      /** totalBlendG - fixedLotWeightSumG - solvedWeightG. */
+      fillerAddG: number;
+    }
+  | { ok: false; reason: string };
 
 export type CalcResult = FreshBatchResult | RegrindResult;
 

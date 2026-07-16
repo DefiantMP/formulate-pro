@@ -34,6 +34,8 @@ interface OutputPanelProps {
   lotBreakdown: LotBreakdownRow[] | null;
   varianceRows: VarianceRow[];
   sopSteps: string[];
+  /** Overrides the default empty-state text — e.g. a regrind solve-mode validation or infeasibility error. */
+  emptyMessage?: string | null;
 }
 
 export default function OutputPanel({
@@ -46,6 +48,7 @@ export default function OutputPanel({
   lotBreakdown,
   varianceRows,
   sopSteps,
+  emptyMessage,
 }: OutputPanelProps) {
   return (
     <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -74,8 +77,8 @@ export default function OutputPanel({
         <div className="card-body" style={{ flex: 1, overflowY: 'auto' }}>
           {!hasResult || !stats ? (
             <div className="empty">
-              <i className="ti ti-flask-2" />
-              Enter values on the left to see formulation output
+              <i className={`ti ti-${emptyMessage ? 'alert-triangle' : 'flask-2'}`} />
+              {emptyMessage ?? 'Enter values on the left to see formulation output'}
             </div>
           ) : (
             <div>
@@ -148,8 +151,8 @@ export default function OutputPanel({
         <div className="card-body" style={{ flex: 1, overflowY: 'auto' }}>
           {!hasResult || varianceRows.length === 0 ? (
             <div className="empty">
-              <i className="ti ti-ruler-measure" />
-              Enter target values first
+              <i className={`ti ti-${emptyMessage ? 'alert-triangle' : 'ruler-measure'}`} />
+              {emptyMessage ?? 'Enter target values first'}
             </div>
           ) : (
             <table className="var-tbl">
@@ -181,8 +184,8 @@ export default function OutputPanel({
         <div className="card-body" style={{ flex: 1, overflowY: 'auto' }}>
           {!hasResult || sopSteps.length === 0 ? (
             <div className="empty">
-              <i className="ti ti-list-check" />
-              SOP auto-generates from your inputs
+              <i className={`ti ti-${emptyMessage ? 'alert-triangle' : 'list-check'}`} />
+              {emptyMessage ?? 'SOP auto-generates from your inputs'}
             </div>
           ) : (
             <div>

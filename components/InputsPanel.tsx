@@ -51,6 +51,12 @@ interface InputsPanelProps {
   setRgTmg: StrSetter;
   rgTwt: string;
   setRgTwt: StrSetter;
+  regrindSolveMode: boolean;
+  onRegrindSolveModeChange: (on: boolean) => void;
+  rgTargetTablets: string;
+  setRgTargetTablets: StrSetter;
+  /** The solving lot's computed weight, once solved — null until then. */
+  solvedWeightG: number | null;
 }
 
 export default function InputsPanel(props: InputsPanelProps) {
@@ -192,6 +198,15 @@ export default function InputsPanel(props: InputsPanelProps) {
           </div>
         ) : (
           <div>
+            <label className="lot-check-row" style={{ marginBottom: 10 }}>
+              <input
+                type="checkbox"
+                checked={props.regrindSolveMode}
+                onChange={(e) => props.onRegrindSolveModeChange(e.target.checked)}
+              />
+              Solve for target tablet count
+            </label>
+
             <div className="sub-lbl">Regrind lots</div>
 
             {props.lots.map((lot) => (
@@ -200,6 +215,8 @@ export default function InputsPanel(props: InputsPanelProps) {
                 lot={lot}
                 canRemove={props.lots.length > 1}
                 presets={props.presets}
+                solveMode={props.regrindSolveMode}
+                solvedWeightG={lot.isSolving ? props.solvedWeightG : null}
                 onChange={props.onUpdateLot}
                 onRemove={props.onRemoveLot}
                 onLoadPreset={props.onLoadPreset}
@@ -213,19 +230,35 @@ export default function InputsPanel(props: InputsPanelProps) {
             </button>
 
             <div className="hr" />
-            <div className="field">
-              <label>Total reground powder weight</label>
-              <div className="row">
-                <input
-                  type="number"
-                  placeholder="14500"
-                  step="1"
-                  value={props.rgPwd}
-                  onChange={(e) => props.setRgPwd(e.target.value)}
-                />
-                <div className="unit">g</div>
+            {props.regrindSolveMode ? (
+              <div className="field">
+                <label>Target tablet count</label>
+                <div className="row">
+                  <input
+                    type="number"
+                    placeholder="100000"
+                    step="1"
+                    value={props.rgTargetTablets}
+                    onChange={(e) => props.setRgTargetTablets(e.target.value)}
+                  />
+                  <div className="unit">tabs</div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="field">
+                <label>Total reground powder weight</label>
+                <div className="row">
+                  <input
+                    type="number"
+                    placeholder="14500"
+                    step="1"
+                    value={props.rgPwd}
+                    onChange={(e) => props.setRgPwd(e.target.value)}
+                  />
+                  <div className="unit">g</div>
+                </div>
+              </div>
+            )}
             <div className="hr" />
             <div className="sub-lbl">Target new tablet</div>
             <div className="field">

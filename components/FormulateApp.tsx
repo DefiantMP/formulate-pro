@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   calculateFreshBatch,
   calculateRegrind,
+  solveRegrindLotWeight,
   generateVarianceTable,
   generateFreshBatchSOP,
   generateRegrindSOP,
@@ -41,6 +42,10 @@ export interface RegrindLotState {
   disintegrantPercent: string;
   lubricantPercent: string;
   fillerType: string;
+  /** Optional, informational only — used for a stock-shortage warning, never affects calculation. */
+  availableStockG: string;
+  /** Solve-mode only: exactly one lot must have this true when regrindSolveMode is on. */
+  isSolving: boolean;
   isStart: boolean;
   note: string;
 }
@@ -72,6 +77,8 @@ function blankLot(label: string): RegrindLotState {
     disintegrantPercent: '',
     lubricantPercent: '',
     fillerType: '',
+    availableStockG: '',
+    isSolving: false,
     isStart: false,
     note: '',
   };
@@ -165,6 +172,8 @@ export default function FormulateApp() {
   const [rgPwd, setRgPwd] = useState('');
   const [rgTmg, setRgTmg] = useState('');
   const [rgTwt, setRgTwt] = useState('');
+  const [regrindSolveMode, setRegrindSolveMode] = useState(false);
+  const [rgTargetTablets, setRgTargetTablets] = useState('');
 
   const [presets, setPresets] = useState<RegrindLotPresetRecord[]>([]);
 
@@ -334,13 +343,89 @@ export default function FormulateApp() {
         disintegrantPercent: lot.disintegrantPercent === '' ? null : numOrZero(lot.disintegrantPercent),
         lubricantPercent: lot.lubricantPercent === '' ? null : numOrZero(lot.lubricantPercent),
         fillerType: lot.fillerType,
+        availableStockG: lot.availableStockG === '' ? null : numOrZero(lot.availableStockG),
         isStart: lot.isStart,
         note: lot.note,
       })),
     [lots]
   );
 
+  // Solve-mode validation: exactly one lot must be marked "solve for amount
+  // needed" — zero or multiple is a blocking, user-visible error rather than
+  // an ordinary null result.
+  const regrindSolveValidationError = useMemo(() => {
+    if (!regrindSolveMode) return null;
+    const solvingCount = lots.filter((l) => l.isSolving).length;
+    if (solvingCount === 0) return 'Mark exactly one lot "Solve for amount needed" before calculating.';
+    if (solvingCount > 1) return 'Only one lot can be marked "Solve for amount needed" at a time — uncheck the extras.';
+    return null;
+  }, [regrindSolveMode, lots]);
+
+  const regrindSolveOutcome = useMemo(() => {
+    if (!regrindSolveMode || regrindSolveValidationError) return null;
+    const solvingLotId = lots.find((l) => l.isSolving)!.id;
+    const fixedLots = regrindLots
+      .filter((l) => l.id !== solvingLotId)
+      .map((l) => ({ weightG: l.weightG, potency: l.potency }));
+    const solvingLotPotency = regrindLots.find((l) => l.id === solvingLotId)!.potency;
+    return solveRegrindLotWeight({
+      fixedLots,
+      solvingLotPotency,
+      targetTabletCount: numOrZero(rgTargetTablets),
+      targetActiveMgPerTablet: numOrZero(rgTmg),
+      targetWeightG: numOrZero(rgTwt),
+    });
+  }, [regrindSolveMode, regrindSolveValidationError, lots, regrindLots, rgTargetTablets, rgTmg, rgTwt]);
+
+  // Not shown to the user directly — surfaced via regrindSolveError below,
+  // which also covers the "exactly one lot marked" validation case.
+  const regrindSolveError =
+    regrindSolveMode && (regrindSolveValidationError || (regrindSolveOutcome && !regrindSolveOutcome.ok))
+      ? regrindSolveValidationError ?? (regrindSolveOutcome as { ok: false; reason: string }).reason
+      : null;
+
+  // The lot being solved for, with its computed weight filled in — feeds
+  // into the exact same (unmodified) calculateRegrind used for the normal,
+  // all-weights-known flow, so solve mode reuses that already-tested math
+  // rather than duplicating it.
+  const resolvedRegrindLots = useMemo<RegrindLot[]>(() => {
+    if (regrindSolveMode && regrindSolveOutcome?.ok) {
+      const solvingLotId = lots.find((l) => l.isSolving)?.id;
+      return regrindLots.map((l) =>
+        l.id === solvingLotId ? { ...l, weightG: regrindSolveOutcome.solvedWeightG } : l
+      );
+    }
+    return regrindLots;
+  }, [regrindSolveMode, regrindSolveOutcome, lots, regrindLots]);
+
+  const solvedLotDisplay = useMemo(() => {
+    if (!regrindSolveMode || !regrindSolveOutcome?.ok) return null;
+    const solvingLot = lots.find((l) => l.isSolving);
+    if (!solvingLot) return null;
+    return { label: solvingLot.label, weightG: regrindSolveOutcome.solvedWeightG };
+  }, [regrindSolveMode, regrindSolveOutcome, lots]);
+
+  // Only meaningful when regrindSolveMode is on and solving succeeded — the
+  // total lot weight (solved lot included), which becomes the authoritative
+  // regroundPowderG fed into calculateRegrind, and what gets persisted as
+  // rgPwd when the run is saved (see saveRun / verifyInputsSnapshot).
+  const solvedTotalRegroundPowderG = useMemo(
+    () => resolvedRegrindLots.reduce((sum, l) => sum + l.weightG, 0),
+    [resolvedRegrindLots]
+  );
+
   const regrindResult = useMemo(() => {
+    if (regrindSolveMode) {
+      if (regrindSolveError || !regrindSolveOutcome?.ok) return null;
+      return calculateRegrind({
+        lots: resolvedRegrindLots,
+        regroundPowderG: solvedTotalRegroundPowderG,
+        targetActiveMgPerTablet: numOrZero(rgTmg),
+        targetWeightG: numOrZero(rgTwt),
+        fillerIngredientName: fillerIngredient.name,
+        alreadyPresentIngredientNames: alreadyPresentNames,
+      });
+    }
     return calculateRegrind({
       lots: regrindLots,
       regroundPowderG: numOrZero(rgPwd),
@@ -349,7 +434,19 @@ export default function FormulateApp() {
       fillerIngredientName: fillerIngredient.name,
       alreadyPresentIngredientNames: alreadyPresentNames,
     });
-  }, [regrindLots, rgPwd, rgTmg, rgTwt, fillerIngredient, alreadyPresentNames]);
+  }, [
+    regrindSolveMode,
+    regrindSolveError,
+    regrindSolveOutcome,
+    resolvedRegrindLots,
+    solvedTotalRegroundPowderG,
+    regrindLots,
+    rgPwd,
+    rgTmg,
+    rgTwt,
+    fillerIngredient,
+    alreadyPresentNames,
+  ]);
 
   const result = mode === 'fresh' ? freshResult : regrindResult;
 
@@ -407,7 +504,18 @@ export default function FormulateApp() {
       });
       return [...apiRows, ...otherRows];
     }
+    const solvedRow: AddRowData[] = solvedLotDisplay
+      ? [
+          {
+            label: `${solvedLotDisplay.label} needed`,
+            value: `${fmt(solvedLotDisplay.weightG, 1)} g`,
+            icon: 'calculator',
+            key: true,
+          },
+        ]
+      : [];
     return [
+      ...solvedRow,
       { label: 'Reground powder', value: `${fmt(result.regroundPowderG, 0)} g`, icon: 'reload', key: false },
       {
         label: `Fresh ${activeIngredient.name} to add`,
@@ -422,7 +530,7 @@ export default function FormulateApp() {
         key: true,
       },
     ];
-  }, [result, activeIngredient, freshIngredients]);
+  }, [result, activeIngredient, freshIngredients, solvedLotDisplay]);
 
   const warnRows: string[] = useMemo(() => {
     if (!result || result.mode !== 'regrind') return [];
@@ -434,6 +542,13 @@ export default function FormulateApp() {
       rows.push(
         `Total reground powder weight (${fmt(result.regroundPowderG, 0)} g) doesn't match the sum of lot weights (${fmt(result.lotWeightSum, 0)} g) — re-check before proceeding`
       );
+    }
+    for (const lot of result.lots) {
+      if (lot.availableStockG != null && lot.weightG > lot.availableStockG) {
+        rows.push(
+          `Lot "${lot.label}" needs ${fmt(lot.weightG, 1)} g but only ${fmt(lot.availableStockG, 1)} g is available in stock`
+        );
+      }
     }
     return rows;
   }, [result]);
@@ -465,8 +580,31 @@ export default function FormulateApp() {
             excipients: excipientPercents,
             fillerType: fFillerType,
           }
-        : { lots: regrindLots, rgPwd, rgTmg, rgTwt },
-    [mode, freshApiEntries, fPotMethod, fTwt, fTabs, excipientPercents, fFillerType, regrindLots, rgPwd, rgTmg, rgTwt]
+        : {
+            lots: regrindSolveMode ? resolvedRegrindLots : regrindLots,
+            rgPwd: regrindSolveMode ? String(solvedTotalRegroundPowderG) : rgPwd,
+            rgTmg,
+            rgTwt,
+            regrindSolveMode,
+            rgTargetTablets,
+          },
+    [
+      mode,
+      freshApiEntries,
+      fPotMethod,
+      fTwt,
+      fTabs,
+      excipientPercents,
+      fFillerType,
+      regrindSolveMode,
+      resolvedRegrindLots,
+      solvedTotalRegroundPowderG,
+      regrindLots,
+      rgPwd,
+      rgTmg,
+      rgTwt,
+      rgTargetTablets,
+    ]
   );
 
   // Identifies the exact inputs+result a verification result was computed
@@ -570,6 +708,11 @@ export default function FormulateApp() {
               disintegrantPercent: l.disintegrantPercent != null ? String(l.disintegrantPercent) : '',
               lubricantPercent: l.lubricantPercent != null ? String(l.lubricantPercent) : '',
               fillerType: l.fillerType ?? '',
+              availableStockG: l.availableStockG != null ? String(l.availableStockG) : '',
+              // Solve mode is never re-entered on load — a saved run always
+              // stores the final, resolved lot weights (see saveRun), so
+              // every lot restores as an ordinary fixed-weight lot.
+              isSolving: false,
               isStart: l.isStart ?? false,
               note: l.note ?? '',
             };
@@ -590,6 +733,8 @@ export default function FormulateApp() {
             disintegrantPercent: '',
             lubricantPercent: '',
             fillerType: '',
+            availableStockG: '',
+            isSolving: false,
             isStart: false,
             note: '',
           },
@@ -598,6 +743,10 @@ export default function FormulateApp() {
       setRgPwd(str('rgPwd'));
       setRgTmg(str('rgTmg'));
       setRgTwt(str('rgTwt'));
+      // Always restore into the ordinary, all-weights-known flow — a saved
+      // run's lots already carry their final resolved weights either way.
+      setRegrindSolveMode(false);
+      setRgTargetTablets('');
     } else {
       setMode('fresh');
       const savedApis = inputs.apis;
@@ -683,7 +832,14 @@ export default function FormulateApp() {
             excipients: excipientPercents,
             fillerType: fFillerType,
           }
-        : { lots: regrindLots, rgPwd, rgTmg, rgTwt };
+        : {
+            lots: regrindSolveMode ? resolvedRegrindLots : regrindLots,
+            rgPwd: regrindSolveMode ? String(solvedTotalRegroundPowderG) : rgPwd,
+            rgTmg,
+            rgTwt,
+            regrindSolveMode,
+            rgTargetTablets,
+          };
 
     const verificationAcknowledgment =
       verifyStatus === 'acknowledged' && verifyDiscrepancy && verifyAcknowledgedAt
@@ -735,6 +891,8 @@ export default function FormulateApp() {
     setRgPwd('');
     setRgTmg('');
     setRgTwt('');
+    setRegrindSolveMode(false);
+    setRgTargetTablets('');
   }
 
   return (
@@ -777,6 +935,11 @@ export default function FormulateApp() {
               setRgTmg={setRgTmg}
               rgTwt={rgTwt}
               setRgTwt={setRgTwt}
+              regrindSolveMode={regrindSolveMode}
+              onRegrindSolveModeChange={setRegrindSolveMode}
+              rgTargetTablets={rgTargetTablets}
+              setRgTargetTablets={setRgTargetTablets}
+              solvedWeightG={solvedLotDisplay?.weightG ?? null}
             />
           </div>
 
@@ -800,6 +963,7 @@ export default function FormulateApp() {
               lotBreakdown={lotBreakdown}
               varianceRows={varianceRows}
               sopSteps={sopSteps}
+              emptyMessage={mode === 'regrind' ? regrindSolveError : null}
             />
           </div>
 

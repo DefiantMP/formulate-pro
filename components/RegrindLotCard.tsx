@@ -6,6 +6,10 @@ interface RegrindLotCardProps {
   lot: RegrindLotState;
   canRemove: boolean;
   presets: RegrindLotPresetRecord[];
+  /** True when the whole regrind run is in "solve for target tablet count" mode. */
+  solveMode: boolean;
+  /** This lot's computed weight, once solved — only meaningful when lot.isSolving is true. */
+  solvedWeightG: number | null;
   onChange: (id: string, patch: Partial<RegrindLotState>) => void;
   onRemove: (id: string) => void;
   onLoadPreset: (id: string, presetId: string) => void;
@@ -17,6 +21,8 @@ export default function RegrindLotCard({
   lot,
   canRemove,
   presets,
+  solveMode,
+  solvedWeightG,
   onChange,
   onRemove,
   onLoadPreset,
@@ -156,19 +162,40 @@ export default function RegrindLotCard({
         </div>
       </div>
 
-      <div className="field" style={{ marginTop: 8 }}>
-        <label>This lot&apos;s powder weight</label>
-        <div className="row">
+      {solveMode && (
+        <label className="lot-check-row" style={{ marginTop: 8 }}>
           <input
-            type="number"
-            placeholder="0.00"
-            step="1"
-            value={lot.weightG}
-            onChange={(e) => onChange(lot.id, { weightG: e.target.value })}
+            type="checkbox"
+            checked={lot.isSolving}
+            onChange={(e) => onChange(lot.id, { isSolving: e.target.checked })}
           />
-          <div className="unit">g</div>
+          Solve for amount needed
+        </label>
+      )}
+
+      {lot.isSolving ? (
+        <div className="field" style={{ marginTop: 8 }}>
+          <label>Solved weight (calculated)</label>
+          <div className="row">
+            <input type="number" readOnly value={solvedWeightG != null ? solvedWeightG.toFixed(1) : ''} placeholder="—" />
+            <div className="unit">g</div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="field" style={{ marginTop: 8 }}>
+          <label>This lot&apos;s powder weight</label>
+          <div className="row">
+            <input
+              type="number"
+              placeholder="0.00"
+              step="1"
+              value={lot.weightG}
+              onChange={(e) => onChange(lot.id, { weightG: e.target.value })}
+            />
+            <div className="unit">g</div>
+          </div>
+        </div>
+      )}
 
       <div className="field" style={{ marginTop: 8 }}>
         <label>Filler type</label>
@@ -206,6 +233,20 @@ export default function RegrindLotCard({
             value={lot.lubricantPercent}
             onChange={(e) => onChange(lot.id, { lubricantPercent: e.target.value })}
           />
+        </div>
+      </div>
+
+      <div className="field" style={{ marginTop: 8 }}>
+        <label>Available stock (optional)</label>
+        <div className="row">
+          <input
+            type="number"
+            placeholder="0.00"
+            step="1"
+            value={lot.availableStockG}
+            onChange={(e) => onChange(lot.id, { availableStockG: e.target.value })}
+          />
+          <div className="unit">g</div>
         </div>
       </div>
 

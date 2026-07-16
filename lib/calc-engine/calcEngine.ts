@@ -8,6 +8,8 @@ import type {
   RegrindResult,
   RegrindLot,
   RegrindLotResult,
+  RegrindSolveInput,
+  RegrindSolveResult,
   PotencyInput,
   VarianceRow,
   IngredientLine,
@@ -184,6 +186,7 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
       activeContentG,
       isStart: lot.isStart,
       fillerType: lot.fillerType,
+      availableStockG: lot.availableStockG,
     };
   });
 
@@ -239,6 +242,65 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     fillerIngredientName,
     alreadyPresentIngredientNames,
   };
+}
+
+/**
+ * Solves for the weight of one unknown regrind lot, given a target tablet
+ * count, rather than requiring every lot's weight to be known upfront. This
+ * is a standalone calculation deliberately kept separate from
+ * calculateRegrind — it does not touch that function or its output shape at
+ * all, so the ordinary (non-solve) regrind flow is completely unaffected.
+ * The caller feeds the resulting solvedWeightG back into an ordinary
+ * RegrindLot and calls calculateRegrind as usual (with regroundPowderG set
+ * to the sum of every lot's weight, solved lot included) to get the full
+ * per-lot breakdown, filler amount, and totals — reusing that already-tested
+ * math rather than duplicating it here.
+ */
+export function solveRegrindLotWeight(input: RegrindSolveInput): RegrindSolveResult {
+  const { fixedLots, solvingLotPotency, targetTabletCount, targetActiveMgPerTablet, targetWeightG } =
+    input;
+
+  if (targetTabletCount <= 0 || targetActiveMgPerTablet <= 0 || targetWeightG <= 0) {
+    return {
+      ok: false,
+      reason: 'Target tablet count, target mg/tablet, and target tablet weight must all be entered before solving.',
+    };
+  }
+
+  const solvingPotencyFraction = lotEffectivePotency(solvingLotPotency);
+  if (solvingPotencyFraction <= 0) {
+    return { ok: false, reason: "The lot being solved for needs a valid potency before it can be solved." };
+  }
+
+  const totalBlendG = targetTabletCount * targetWeightG;
+  const totalActiveNeededG = (targetTabletCount * targetActiveMgPerTablet) / 1000;
+
+  let fixedLotWeightSumG = 0;
+  let fixedActiveG = 0;
+  for (const lot of fixedLots) {
+    fixedLotWeightSumG += lot.weightG;
+    fixedActiveG += lot.weightG * lotEffectivePotency(lot.potency);
+  }
+
+  const activeStillNeededG = totalActiveNeededG - fixedActiveG;
+  if (activeStillNeededG <= 0) {
+    return {
+      ok: false,
+      reason: `The fixed lots already provide ${fixedActiveG.toFixed(2)} g of active ingredient, which meets or exceeds the ${totalActiveNeededG.toFixed(2)} g needed for ${targetTabletCount.toLocaleString()} tablets — there's nothing left for the solved lot to contribute. Lower a fixed lot's weight or raise the target.`,
+    };
+  }
+
+  const solvedWeightG = activeStillNeededG / solvingPotencyFraction;
+  const fillerAddG = totalBlendG - fixedLotWeightSumG - solvedWeightG;
+
+  if (fillerAddG < 0) {
+    return {
+      ok: false,
+      reason: `Solving for the target requires ${(fixedLotWeightSumG + solvedWeightG).toFixed(2)} g of lots, which exceeds the ${totalBlendG.toFixed(2)} g total blend needed for ${targetTabletCount.toLocaleString()} tablets — the target isn't achievable with these inputs.`,
+    };
+  }
+
+  return { ok: true, solvedWeightG, fixedLotWeightSumG, totalBlendG, fillerAddG };
 }
 
 /**
