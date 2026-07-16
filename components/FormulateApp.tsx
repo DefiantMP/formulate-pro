@@ -9,7 +9,14 @@ import {
   generateRegrindSOP,
   defaultIngredients,
 } from '@/lib/calc-engine';
-import type { IngredientLine, PotencyInput, RegrindLot } from '@/lib/calc-engine/types';
+import type {
+  IngredientLine,
+  PotencyInput,
+  RegrindLot,
+  FreshApiEntry,
+  FreshApiPotency,
+  FreshFillerType,
+} from '@/lib/calc-engine/types';
 import { fmt, fmtK, numOrZero } from '@/lib/format';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -76,6 +83,43 @@ function lotStateToPotency(lot: RegrindLotState): PotencyInput {
     : { method: 'mgPerTablet', mgPerOldTablet: numOrZero(lot.bMg), oldTabletWeightG: numOrZero(lot.bWt) };
 }
 
+/** Bulk % vs mg-per-unit — a single choice shared across every API in a fresh-batch run, not per-API. */
+export type FreshPotencyMethod = 'bulkPercent' | 'mgPerUnit';
+
+/** One fresh-batch API's UI state — string inputs, mirroring the app's existing input-state convention. */
+export interface FreshApiState {
+  id: string;
+  label: string;
+  targetMg: string;
+  potPercent: string;
+  potMgPerUnit: string;
+  potUnitWeightG: string;
+}
+
+let apiIdCounter = 0;
+function makeApiId(): string {
+  apiIdCounter += 1;
+  return `api-${Date.now()}-${apiIdCounter}`;
+}
+
+/** id 'active' matches the default formulation's single active ingredient id, so a single-API run keeps writing to the same ingredientGrams key it always has. */
+function blankApi(label: string, id: string = makeApiId()): FreshApiState {
+  return {
+    id,
+    label,
+    targetMg: '',
+    potPercent: '',
+    potMgPerUnit: '',
+    potUnitWeightG: '',
+  };
+}
+
+function apiStateToPotency(method: FreshPotencyMethod, api: FreshApiState): FreshApiPotency {
+  return method === 'bulkPercent'
+    ? { method: 'bulkPercent', percent: numOrZero(api.potPercent) }
+    : { method: 'mgPerUnit', mgPerUnit: numOrZero(api.potMgPerUnit), unitWeightG: numOrZero(api.potUnitWeightG) };
+}
+
 export default function FormulateApp() {
   const [mode, setMode] = useState<Mode>('fresh');
   const [activeTab, setActiveTab] = useState<TabKey>('output');
@@ -94,15 +138,27 @@ export default function FormulateApp() {
     return () => clearTimeout(timer);
   }, [saveToastToken]);
 
-  const [fName, setFName] = useState('');
-  const [fPot, setFPot] = useState('');
-  const [fTmg, setFTmg] = useState('');
+  const [apis, setApis] = useState<FreshApiState[]>(() => [blankApi('', 'active')]);
+  const [fPotMethod, setFPotMethod] = useState<FreshPotencyMethod>('bulkPercent');
   const [fTwt, setFTwt] = useState('');
   const [fTabs, setFTabs] = useState('');
+  const [fFillerType, setFFillerType] = useState<FreshFillerType>('Emdex');
   const [excipientPercents, setExcipientPercents] = useState<Record<string, string>>({});
 
   function setExcipientPercent(id: string, value: string) {
     setExcipientPercents((prev) => ({ ...prev, [id]: value }));
+  }
+
+  function updateApi(id: string, patch: Partial<FreshApiState>) {
+    setApis((prev) => prev.map((api) => (api.id === id ? { ...api, ...patch } : api)));
+  }
+
+  function addApi() {
+    setApis((prev) => [...prev, blankApi('')]);
+  }
+
+  function removeApi(id: string) {
+    setApis((prev) => (prev.length <= 1 ? prev : prev.filter((api) => api.id !== id)));
   }
 
   const [lots, setLots] = useState<RegrindLotState[]>(() => [blankLot('Lot 1')]);
@@ -203,49 +259,70 @@ export default function FormulateApp() {
     .filter((i) => i.role === 'disintegrant' || i.role === 'lubricant')
     .map((i) => i.name);
 
+  // `ingredients` passed to calculateFreshBatch must not include the
+  // active-role entry — active ingredients now come entirely from `apis`.
   const freshIngredients = useMemo<IngredientLine[]>(
     () =>
-      baseIngredients.map((i) => {
-        // The active ingredient's percentOfBlend is derived internally by
-        // calculateFreshBatch from potencyPercent — never set directly here.
-        if (i.role === 'active') {
-          return { ...i, name: fName.trim() || i.name };
-        }
-        if (i.calculatedByDifference) return i;
-        return { ...i, percentOfBlend: numOrZero(excipientPercents[i.id] ?? '') };
-      }),
-    [baseIngredients, fName, excipientPercents]
+      baseIngredients
+        .filter((i) => i.role !== 'active')
+        .map((i) => {
+          if (i.calculatedByDifference) return i;
+          return { ...i, percentOfBlend: numOrZero(excipientPercents[i.id] ?? '') };
+        }),
+    [baseIngredients, excipientPercents]
+  );
+
+  const freshApiEntries = useMemo<FreshApiEntry[]>(
+    () =>
+      apis.map((api, index) => ({
+        id: api.id,
+        label: api.label.trim() || (index === 0 ? 'API' : `API ${index + 1}`),
+        targetActiveMgPerTablet: numOrZero(api.targetMg),
+        potency: apiStateToPotency(fPotMethod, api),
+      })),
+    [apis, fPotMethod]
   );
 
   // Live preview of the auto-filler %, mirroring the same derivation
   // calculateFreshBatch performs internally (potency is raw-material purity,
-  // not the active ingredient's direct % of blend).
-  const potencyNum = numOrZero(fPot);
-  const targetMgNum = numOrZero(fTmg);
+  // not the active ingredient's direct % of blend) — summed across every API.
   const targetWtNum = numOrZero(fTwt);
-  const derivedActivePercent =
-    potencyNum > 0 && targetMgNum > 0 && targetWtNum > 0
-      ? (targetMgNum / (potencyNum / 100) / (targetWtNum * 1000)) * 100
-      : 0;
+  const derivedActivePercent = useMemo(() => {
+    if (targetWtNum <= 0) return 0;
+    return apis.reduce((sum, api) => {
+      const potencyFraction =
+        fPotMethod === 'bulkPercent'
+          ? numOrZero(api.potPercent) / 100
+          : (() => {
+              const mgPerUnit = numOrZero(api.potMgPerUnit);
+              const unitWeightG = numOrZero(api.potUnitWeightG);
+              return mgPerUnit > 0 && unitWeightG > 0 ? mgPerUnit / (unitWeightG * 1000) : 0;
+            })();
+      const targetMgNum = numOrZero(api.targetMg);
+      if (potencyFraction <= 0 || targetMgNum <= 0) return sum;
+      const rawMaterialMgPerTablet = targetMgNum / potencyFraction;
+      return sum + (rawMaterialMgPerTablet / (targetWtNum * 1000)) * 100;
+    }, 0);
+  }, [apis, fPotMethod, targetWtNum]);
   const excipientPercentSum = excipients.reduce(
     (sum, i) => sum + numOrZero(excipientPercents[i.id] ?? ''),
     0
   );
-  const emdexDisplay = Math.max(0, 100 - derivedActivePercent - excipientPercentSum).toFixed(2);
+  const fillerDisplay = Math.max(0, 100 - derivedActivePercent - excipientPercentSum).toFixed(2);
 
   const freshResult = useMemo(() => {
     try {
       return calculateFreshBatch({
         tabletCount: numOrZero(fTabs),
         targetWeightG: numOrZero(fTwt),
-        targetActiveMgPerTablet: numOrZero(fTmg),
-        potencyPercent: numOrZero(fPot),
+        apis: freshApiEntries,
         ingredients: freshIngredients,
+        fillerType: fFillerType,
       });
     } catch {
       return null;
     }
-  }, [fTabs, fTwt, fTmg, fPot, freshIngredients]);
+  }, [fTabs, fTwt, freshApiEntries, freshIngredients, fFillerType]);
 
   const regrindLots = useMemo<RegrindLot[]>(
     () =>
@@ -308,21 +385,27 @@ export default function FormulateApp() {
   const addRows: AddRowData[] = useMemo(() => {
     if (!result) return [];
     if (result.mode === 'fresh') {
-      // Always one row per ingredient with a defined role, even at 0g — an
-      // untouched or zero excipient should be visibly 0, never silently
-      // absent, so it can't be mistaken for "not part of this formulation."
-      return freshIngredients.map((ing) => {
+      // One row per API (always, even at 0g — see below), then one row per
+      // non-API ingredient with a defined role. An untouched or zero
+      // excipient should be visibly 0, never silently absent, so it can't
+      // be mistaken for "not part of this formulation."
+      const apiRows: AddRowData[] = result.apis.map((api) => ({
+        label: `${api.label} active`,
+        value: `${fmt(result.ingredientGrams[api.id] ?? 0, 2)} g`,
+        icon: 'plus',
+        key: true,
+      }));
+      const otherRows: AddRowData[] = freshIngredients.map((ing) => {
         const grams = result.ingredientGrams[ing.id] ?? 0;
-        const isActive = ing.role === 'active';
         const isFiller = ing.calculatedByDifference;
-        const row: AddRowData = {
-          label: isActive ? `${ing.name} active` : ing.name,
+        return {
+          label: isFiller ? result.fillerType : ing.name,
           value: `${fmt(grams, 2)} g`,
-          icon: isActive ? 'plus' : isFiller ? 'cube' : 'circle-plus',
-          key: isActive || isFiller,
+          icon: isFiller ? 'cube' : 'circle-plus',
+          key: isFiller,
         };
-        return row;
       });
+      return [...apiRows, ...otherRows];
     }
     return [
       { label: 'Reground powder', value: `${fmt(result.regroundPowderG, 0)} g`, icon: 'reload', key: false },
@@ -374,9 +457,16 @@ export default function FormulateApp() {
   const verifyInputsSnapshot = useMemo(
     () =>
       mode === 'fresh'
-        ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
+        ? {
+            apis: freshApiEntries,
+            potencyMethod: fPotMethod,
+            fTwt,
+            fTabs,
+            excipients: excipientPercents,
+            fillerType: fFillerType,
+          }
         : { lots: regrindLots, rgPwd, rgTmg, rgTwt },
-    [mode, fName, fPot, fTmg, fTwt, fTabs, excipientPercents, regrindLots, rgPwd, rgTmg, rgTwt]
+    [mode, freshApiEntries, fPotMethod, fTwt, fTabs, excipientPercents, fFillerType, regrindLots, rgPwd, rgTmg, rgTwt]
   );
 
   // Identifies the exact inputs+result a verification result was computed
@@ -510,11 +600,42 @@ export default function FormulateApp() {
       setRgTwt(str('rgTwt'));
     } else {
       setMode('fresh');
-      setFName(str('fName'));
-      setFPot(str('fPot'));
-      setFTmg(str('fTmg'));
+      const savedApis = inputs.apis;
+      if (Array.isArray(savedApis) && savedApis.length > 0) {
+        const method = (inputs.potencyMethod as FreshPotencyMethod) || 'bulkPercent';
+        setFPotMethod(method);
+        setApis(
+          savedApis.map((raw, index) => {
+            const a = raw as Partial<FreshApiEntry> & { id?: string; label?: string };
+            const potency = a.potency as FreshApiPotency | undefined;
+            return {
+              id: a.id || makeApiId(),
+              label: a.label || (index === 0 ? 'API' : `API ${index + 1}`),
+              targetMg: a.targetActiveMgPerTablet != null ? String(a.targetActiveMgPerTablet) : '',
+              potPercent: potency?.method === 'bulkPercent' ? String(potency.percent) : '',
+              potMgPerUnit: potency?.method === 'mgPerUnit' ? String(potency.mgPerUnit) : '',
+              potUnitWeightG: potency?.method === 'mgPerUnit' ? String(potency.unitWeightG) : '',
+            };
+          })
+        );
+      } else {
+        // Backward compat: runs saved before multi-API support used flat
+        // fName/fPot/fTmg fields for a single implicit API.
+        setFPotMethod('bulkPercent');
+        setApis([
+          {
+            id: 'active',
+            label: str('fName') || 'API',
+            targetMg: str('fTmg'),
+            potPercent: str('fPot'),
+            potMgPerUnit: '',
+            potUnitWeightG: '',
+          },
+        ]);
+      }
       setFTwt(str('fTwt'));
       setFTabs(str('fTabs'));
+      setFFillerType((inputs.fillerType as FreshFillerType) || 'Emdex');
       // Backward compat: runs saved before excipients became generic stored
       // fixed fMags/fPvpp fields instead of a per-ingredient map.
       const legacy: Record<string, string> = {};
@@ -554,7 +675,14 @@ export default function FormulateApp() {
 
     const inputs =
       mode === 'fresh'
-        ? { fName, fPot, fTmg, fTwt, fTabs, excipients: excipientPercents }
+        ? {
+            apis: freshApiEntries,
+            potencyMethod: fPotMethod,
+            fTwt,
+            fTabs,
+            excipients: excipientPercents,
+            fillerType: fFillerType,
+          }
         : { lots: regrindLots, rgPwd, rgTmg, rgTwt };
 
     const verificationAcknowledgment =
@@ -597,11 +725,11 @@ export default function FormulateApp() {
 
   function resetForm() {
     setLoadedRun(null);
-    setFName('');
-    setFPot('');
-    setFTmg('');
+    setApis([blankApi('', 'active')]);
+    setFPotMethod('bulkPercent');
     setFTwt('');
     setFTabs('');
+    setFFillerType('Emdex');
     setExcipientPercents({});
     setLots([blankLot('Lot 1')]);
     setRgPwd('');
@@ -619,12 +747,12 @@ export default function FormulateApp() {
             <InputsPanel
               mode={mode}
               onModeChange={setMode}
-              fName={fName}
-              setFName={setFName}
-              fPot={fPot}
-              setFPot={setFPot}
-              fTmg={fTmg}
-              setFTmg={setFTmg}
+              apis={apis}
+              onUpdateApi={updateApi}
+              onAddApi={addApi}
+              onRemoveApi={removeApi}
+              potencyMethod={fPotMethod}
+              onPotencyMethodChange={setFPotMethod}
               fTwt={fTwt}
               setFTwt={setFTwt}
               fTabs={fTabs}
@@ -632,8 +760,9 @@ export default function FormulateApp() {
               excipients={excipients}
               excipientPercents={excipientPercents}
               setExcipientPercent={setExcipientPercent}
-              fillerName={fillerIngredient.name}
-              emdexDisplay={emdexDisplay}
+              fillerType={fFillerType}
+              onFillerTypeChange={setFFillerType}
+              fillerDisplay={fillerDisplay}
               lots={lots}
               onUpdateLot={updateLot}
               onAddLot={addLot}

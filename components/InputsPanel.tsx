@@ -2,8 +2,16 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { IngredientLine } from '@/lib/calc-engine/types';
-import type { Mode, RegrindLotState, RegrindLotPresetRecord } from './FormulateApp';
+import { FRESH_FILLER_TYPES, type FreshFillerType } from '@/lib/calc-engine/types';
+import type {
+  Mode,
+  RegrindLotState,
+  RegrindLotPresetRecord,
+  FreshApiState,
+  FreshPotencyMethod,
+} from './FormulateApp';
 import RegrindLotCard from './RegrindLotCard';
+import FreshApiCard from './FreshApiCard';
 
 type StrSetter = Dispatch<SetStateAction<string>>;
 
@@ -11,12 +19,12 @@ interface InputsPanelProps {
   mode: Mode;
   onModeChange: (mode: Mode) => void;
 
-  fName: string;
-  setFName: StrSetter;
-  fPot: string;
-  setFPot: StrSetter;
-  fTmg: string;
-  setFTmg: StrSetter;
+  apis: FreshApiState[];
+  onUpdateApi: (id: string, patch: Partial<FreshApiState>) => void;
+  onAddApi: () => void;
+  onRemoveApi: (id: string) => void;
+  potencyMethod: FreshPotencyMethod;
+  onPotencyMethodChange: (method: FreshPotencyMethod) => void;
   fTwt: string;
   setFTwt: StrSetter;
   fTabs: string;
@@ -25,8 +33,9 @@ interface InputsPanelProps {
   excipients: IngredientLine[];
   excipientPercents: Record<string, string>;
   setExcipientPercent: (id: string, value: string) => void;
-  fillerName: string;
-  emdexDisplay: string;
+  fillerType: FreshFillerType;
+  onFillerTypeChange: (type: FreshFillerType) => void;
+  fillerDisplay: string;
 
   lots: RegrindLotState[];
   onUpdateLot: (id: string, patch: Partial<RegrindLotState>) => void;
@@ -72,42 +81,51 @@ export default function InputsPanel(props: InputsPanelProps) {
 
         {mode === 'fresh' ? (
           <div>
-            <div className="field">
-              <label>Active ingredient</label>
-              <input
-                type="text"
-                placeholder="e.g. API"
-                value={props.fName}
-                onChange={(e) => props.setFName(e.target.value)}
+            <div className="sub-lbl">Potency source (applies to all APIs)</div>
+            <div
+              className={`opt-box${props.potencyMethod === 'bulkPercent' ? ' active' : ''}`}
+              onClick={() => props.onPotencyMethodChange('bulkPercent')}
+            >
+              <div className="opt-header">
+                <div className={`opt-radio${props.potencyMethod === 'bulkPercent' ? ' active' : ''}`} />
+                <div>
+                  <div className="opt-title">Bulk potency %</div>
+                  <div className="opt-desc">Raw material COA gives a % purity value</div>
+                </div>
+              </div>
+            </div>
+            <div
+              className={`opt-box${props.potencyMethod === 'mgPerUnit' ? ' active' : ''}`}
+              onClick={() => props.onPotencyMethodChange('mgPerUnit')}
+            >
+              <div className="opt-header">
+                <div className={`opt-radio${props.potencyMethod === 'mgPerUnit' ? ' active' : ''}`} />
+                <div>
+                  <div className="opt-title">mg per unit</div>
+                  <div className="opt-desc">COA gives mg active per gram of raw material</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="sub-lbl" style={{ marginTop: 12 }}>
+              APIs
+            </div>
+            {props.apis.map((api, index) => (
+              <FreshApiCard
+                key={api.id}
+                api={api}
+                index={index}
+                canRemove={props.apis.length > 1}
+                potencyMethod={props.potencyMethod}
+                onChange={props.onUpdateApi}
+                onRemove={props.onRemoveApi}
               />
-            </div>
-            <div className="field">
-              <label>Raw material potency</label>
-              <div className="row">
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  step="0.001"
-                  value={props.fPot}
-                  onChange={(e) => props.setFPot(e.target.value)}
-                />
-                <div className="unit">%</div>
-              </div>
-            </div>
+            ))}
+            <button type="button" className="add-lot-btn" onClick={props.onAddApi}>
+              <i className="ti ti-plus" /> Add another API
+            </button>
+
             <div className="hr" />
-            <div className="field">
-              <label>Target mg / tablet</label>
-              <div className="row">
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  step="0.1"
-                  value={props.fTmg}
-                  onChange={(e) => props.setFTmg(e.target.value)}
-                />
-                <div className="unit">mg</div>
-              </div>
-            </div>
             <div className="field">
               <label>Target tablet weight</label>
               <div className="row">
@@ -135,6 +153,19 @@ export default function InputsPanel(props: InputsPanelProps) {
               </div>
             </div>
             <div className="hr" />
+            <div className="field">
+              <label>Filler type</label>
+              <select
+                value={props.fillerType}
+                onChange={(e) => props.onFillerTypeChange(e.target.value as FreshFillerType)}
+              >
+                {FRESH_FILLER_TYPES.map((ft) => (
+                  <option key={ft} value={ft}>
+                    {ft}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="sub-lbl">Excipients</div>
             {props.excipients.map((ing) => (
               <div className="field" key={ing.id}>
@@ -152,9 +183,9 @@ export default function InputsPanel(props: InputsPanelProps) {
               </div>
             ))}
             <div className="field">
-              <label>% {props.fillerName} (auto)</label>
+              <label>% {props.fillerType} (auto)</label>
               <div className="row">
-                <input type="number" readOnly value={props.emdexDisplay} />
+                <input type="number" readOnly value={props.fillerDisplay} />
                 <div className="unit">%</div>
               </div>
             </div>

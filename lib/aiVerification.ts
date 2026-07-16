@@ -4,7 +4,8 @@ import { evaluateExpression } from '@/lib/arithmetic';
 
 export interface VerifyRequestBody {
   mode: 'fresh' | 'regrind';
-  inputs: Record<string, string>;
+  /** Raw operator input snapshot, JSON-stringified for the model — shape varies by mode (see SYSTEM_PROMPT field meanings), not a flat string map. */
+  inputs: Record<string, unknown>;
   result: CalcResult;
 }
 
@@ -28,7 +29,8 @@ You will be given the raw operator inputs and the calculator's computed outputs 
 - Independently recompute the arithmetic from the raw inputs and compare it against the provided outputs.
 - Flag negative or implausible fill/filler weights.
 - Flag an active-ingredient mass per tablet that exceeds the physical target tablet weight.
-- Flag potency math that doesn't reconcile with the blend totals — for fresh batches, inputs.fPot is the RAW MATERIAL's purity as a percent (e.g. an assay result), NOT the active ingredient's direct % of the finished blend. The correct derivation is: raw material mg needed per tablet = targetActiveMgPerTablet / (fPot / 100); active % of blend = that mg amount / (targetWeightG × 1000) × 100. Recompute this independently and confirm it matches the reported activePercentOfBlend and active-ingredient grams.
+- Flag potency math that doesn't reconcile with the blend totals — for fresh batches, each API's potency (inputs.apis[].potency / result.apis[].effectivePotency) is that API's RAW MATERIAL's purity, NOT its direct % of the finished blend. Potency may be expressed as a bulk percent (percent / 100) or as mg per unit weight (mgPerUnit ÷ (unitWeightG × 1000)) — either way it resolves to a 0-1 fraction. The correct derivation per API: raw material mg needed per tablet = that API's targetActiveMgPerTablet ÷ its own potency fraction; that API's % of blend = that mg amount ÷ (targetWeightG × 1000) × 100.
+- Fresh batches may carry more than one API — a combo product dosing multiple actives independently in the same tablet (inputs.apis / result.apis). The reported activePercentOfBlend must equal the SUM, across all APIs, of each API's own % of blend computed as above — recompute each API's contribution independently via calculate, then sum them, and confirm the total matches. Do not assume a single potency applies across every API when more than one is present. Likewise result.targetActiveMgPerTablet for a fresh batch is the SUM of every API's own targetActiveMgPerTablet, not a single dose.
 - Flag tablet-count inconsistencies (e.g. a tablet count that doesn't follow from the reground powder weight, potency, and target mg per tablet, for regrind runs).
 - Regrind runs may blend multiple lots of ground-up old tablets, each with its own potency and weight (inputs.lots / result.lots). The reported activeInOldPowderG must equal the SUM, across all lots, of (that lot's weightG × that lot's own effectivePotency) — recompute each lot's contribution independently via calculate, then sum them, and confirm the total matches. Do not assume a single potency applies to the whole reground powder weight when more than one lot is present. A lot flagged isStart is still included in this sum — it is not excluded, only lower-confidence.
 
@@ -45,10 +47,12 @@ Do not comment on formulation choices, ingredient selection, manufacturing pract
 Field meanings:
 - tabletCount: number of tablets this run should produce
 - targetWeightG: target weight per tablet, in grams
-- targetActiveMgPerTablet: target active-ingredient content per tablet, in mg
+- targetActiveMgPerTablet: target active-ingredient content per tablet, in mg — for fresh batches this is the SUM across all APIs (see below)
 - totalBlendG: total weight of the full powder blend across all tablets, in grams
-- ingredientGrams / ingredientPercents (fresh only): grams and % of total blend for each ingredient, keyed by ingredient id
-- activePercentOfBlend (fresh only): the active ingredient's derived % of the blend by weight (NOT the same number as inputs.fPot — see above)
+- apis (fresh only): array of { id, label, targetActiveMgPerTablet, effectivePotency (0-1 fraction), percentOfBlend, gramsPerRun }. percentOfBlend for each API = (targetActiveMgPerTablet ÷ effectivePotency) ÷ (targetWeightG × 1000) × 100. gramsPerRun = totalBlendG × (percentOfBlend ÷ 100).
+- ingredientGrams / ingredientPercents (fresh only): grams and % of total blend for every API (keyed by that API's id, same values as apis[].gramsPerRun/percentOfBlend) plus every non-API ingredient (filler + fixed excipients), keyed by ingredient id
+- activePercentOfBlend (fresh only): the SUM of every API's percentOfBlend (see apis above) — NOT the same number as any single API's raw potency input
+- fillerType (fresh only): which filler was used (e.g. "Emdex" or "Dipac") — informational record-keeping only, never part of any calculation, ignore it for verification purposes
 - regroundPowderG (regrind only): the operator-entered total grams of ground-up old tablets being reused — this is the authoritative mass used everywhere below, even if it doesn't exactly equal the sum of lot weights
 - lots (regrind only): array of { id, label, effectivePotency (0-1 fraction), weightG, activeContentG, isStart, fillerType }. activeContentG for each lot = weightG × effectivePotency. fillerType is a free-text label (e.g. "EasyTab") — informational record-keeping only, never part of any calculation, ignore it for verification purposes.
 - lotWeightSum (regrind only): sum of lots[].weightG — a cross-check figure, not the mass used in the math (that's regroundPowderG)

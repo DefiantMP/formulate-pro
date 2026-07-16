@@ -28,35 +28,76 @@ export interface IngredientLine {
   calculatedByDifference: boolean;
 }
 
+/**
+ * Purity of a fresh-batch active ingredient's raw material, expressed either
+ * as a bulk percent (e.g. an assay result of 76.4%) or as mg of active per
+ * gram of raw material (mirrors regrind's mg-per-old-tablet method). Either
+ * way this resolves to a 0-1 fraction — see freshApiEffectivePotency.
+ */
+export type FreshApiPotency =
+  | { method: 'bulkPercent'; percent: number }
+  | { method: 'mgPerUnit'; mgPerUnit: number; unitWeightG: number };
+
+/**
+ * One active ingredient within a fresh-batch run. Combo products dose
+ * multiple actives independently in the same tablet — each gets its own
+ * label, target mg/tablet, and potency value, though the potency *method*
+ * (bulk % vs mg/unit) is a single choice shared across every API in a run
+ * (enforced by the UI, not by this type).
+ */
+export interface FreshApiEntry {
+  id: string;
+  label: string;
+  targetActiveMgPerTablet: number;
+  potency: FreshApiPotency;
+}
+
+export interface FreshApiResult {
+  id: string;
+  label: string;
+  targetActiveMgPerTablet: number;
+  /** Fraction (0-1) of this API's raw material that is active ingredient. */
+  effectivePotency: number;
+  /** % of total blend taken up by this API's raw material. */
+  percentOfBlend: number;
+  /** Grams of this API's raw material to weigh per run. */
+  gramsPerRun: number;
+}
+
+/** Extensible list rather than a hardcoded boolean — more filler options are expected later. */
+export const FRESH_FILLER_TYPES = ['Emdex', 'Dipac'] as const;
+export type FreshFillerType = (typeof FRESH_FILLER_TYPES)[number];
+
 export interface FreshBatchInput {
   tabletCount: number;
   targetWeightG: number;
-  targetActiveMgPerTablet: number;
+  /** At least one API — a single-API run reduces exactly to today's single-active math. */
+  apis: FreshApiEntry[];
   /**
-   * Purity of the raw active-ingredient material, as a percent (0-100) —
-   * e.g. a raw material assayed at 76.4% active. This is NOT the active
-   * ingredient's % of the finished blend. The active ingredient's blend
-   * percentage is derived from this plus targetActiveMgPerTablet and
-   * targetWeightG (raw material mg needed per tablet = targetActiveMgPerTablet
-   * / (potencyPercent / 100)), matching how regrind mode already works.
-   * Any percentOfBlend set on the active ingredient in `ingredients` is
-   * ignored — it is always computed internally.
+   * Filler + fixed-% excipients only — must NOT include any role:'active'
+   * entries; active ingredients are supplied via `apis` above instead.
+   * Exactly one entry must have calculatedByDifference = true.
    */
-  potencyPercent: number;
   ingredients: IngredientLine[];
+  /** Informational only — which filler was used (e.g. Emdex vs Dipac). Filler mass math is identical either way. */
+  fillerType: FreshFillerType;
 }
 
 export interface FreshBatchResult {
   mode: 'fresh';
   tabletCount: number;
   targetWeightG: number;
+  /** Combined target active mass per tablet, summed across all APIs. */
   targetActiveMgPerTablet: number;
   totalBlendG: number;
-  /** Grams to weigh out per ingredient, keyed by ingredient id. */
+  apis: FreshApiResult[];
+  /** Grams to weigh out, keyed by id — includes every API (by its id, same values as apis[].gramsPerRun) plus every non-API ingredient. */
   ingredientGrams: Record<string, number>;
-  /** Resolved % of blend per ingredient, including the computed-by-difference one. */
+  /** Resolved % of blend, keyed by id — same coverage as ingredientGrams, including the computed-by-difference one. */
   ingredientPercents: Record<string, number>;
+  /** Combined % of blend taken up by every API's raw material together. */
   activePercentOfBlend: number;
+  fillerType: FreshFillerType;
 }
 
 export type PotencyInput =

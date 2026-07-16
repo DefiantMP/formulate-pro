@@ -1,6 +1,10 @@
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { defaultIngredients, calculateFreshBatch, calculateRegrind } from '../lib/calc-engine';
-import type { IngredientLine, PotencyInput, RegrindLot } from '../lib/calc-engine/types';
+import type { IngredientLine, PotencyInput, RegrindLot, FreshApiEntry, FreshApiPotency } from '../lib/calc-engine/types';
+
+function singleApi(potency: FreshApiPotency, targetActiveMgPerTablet: number): FreshApiEntry[] {
+  return [{ id: 'active', label: 'API', targetActiveMgPerTablet, potency }];
+}
 
 function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
   return [
@@ -35,17 +39,20 @@ async function main() {
     return;
   }
 
-  const freshIngredients: IngredientLine[] = ingredients.map((i) => {
-    if (i.id === 'magstearate') return { ...i, percentOfBlend: 2 };
-    if (i.id === 'pvpp') return { ...i, percentOfBlend: 5 };
-    return i; // any other excipient (e.g. EZTAB) keeps its formulation default
-  });
+  const freshIngredients: IngredientLine[] = ingredients
+    .filter((i) => i.role !== 'active')
+    .map((i) => {
+      if (i.id === 'magstearate') return { ...i, percentOfBlend: 2 };
+      if (i.id === 'pvpp') return { ...i, percentOfBlend: 5 };
+      return i; // any other excipient (e.g. EZTAB) keeps its formulation default
+    });
+  const freshApis = singleApi({ method: 'bulkPercent', percent: 55.5 }, 35);
   const freshResult = calculateFreshBatch({
     tabletCount: 133623,
     targetWeightG: 0.69,
-    targetActiveMgPerTablet: 35,
-    potencyPercent: 55.5,
+    apis: freshApis,
     ingredients: freshIngredients,
+    fillerType: 'Emdex',
   });
 
   // Built generically (not hardcoded to pvpp/magstearate) so this stays in
@@ -54,7 +61,7 @@ async function main() {
   // ingredient not captured here back to 0%.
   const freshExcipients: Record<string, string> = {};
   for (const i of freshIngredients) {
-    if (i.role !== 'active' && !i.calculatedByDifference) {
+    if (!i.calculatedByDifference) {
       freshExcipients[i.id] = String(i.percentOfBlend ?? '');
     }
   }
@@ -103,7 +110,14 @@ async function main() {
         label: 'RR35 PB3',
         mode: 'fresh',
         formulationId: formulation.id,
-        inputs: asJson({ fName: '', fPot: '55.5', fTmg: '35', fTwt: '0.69', fTabs: '133623', excipients: freshExcipients }),
+        inputs: asJson({
+          apis: freshApis,
+          potencyMethod: 'bulkPercent',
+          fTwt: '0.69',
+          fTabs: '133623',
+          excipients: freshExcipients,
+          fillerType: 'Emdex',
+        }),
         result: asJson(freshResult),
         createdAt: new Date(now - 60_000),
       },

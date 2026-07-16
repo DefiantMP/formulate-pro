@@ -19,6 +19,12 @@ function joinNatural(items: string[]): string {
  * last (and mixed briefly after), since over-mixing lubricant is a real
  * capping/hardness risk — everything else (active, filler, disintegrant, or
  * any other role) goes into the initial V-mix together.
+ *
+ * `ingredients` no longer includes any active — combo products can carry
+ * more than one, so each gets its own weigh step from result.apis instead.
+ * The filler's displayed name follows result.fillerType (e.g. "Dipac"),
+ * not the underlying ingredient's static name — purely a label swap, no
+ * effect on the grams already computed.
  */
 export function generateFreshBatchSOP(
   result: FreshBatchResult,
@@ -28,22 +34,23 @@ export function generateFreshBatchSOP(
   // ingredient here would silently hide it from the SOP instead of making
   // the zero visible.
   const lubricants = ingredients.filter((i) => i.role === 'lubricant');
-  const primary = ingredients.filter((i) => i.role !== 'lubricant');
-  const active = primary.find((i) => i.role === 'active');
-  const otherPrimary = primary.filter((i) => i.role !== 'active');
+  const primary = ingredients
+    .filter((i) => i.role !== 'lubricant')
+    .map((i) => ({ id: i.id, name: i.calculatedByDifference ? result.fillerType : i.name }));
 
   const steps: string[] = [];
 
-  if (active) {
-    steps.push(`Weigh ${fmt(result.ingredientGrams[active.id])} g of ${active.name}`);
-  }
-  if (otherPrimary.length > 0) {
-    steps.push(
-      `Weigh ${joinNatural(otherPrimary.map((i) => `${fmt(result.ingredientGrams[i.id])} g ${i.name}`))}`
-    );
+  for (const api of result.apis) {
+    steps.push(`Weigh ${fmt(result.ingredientGrams[api.id])} g of ${api.label}`);
   }
   if (primary.length > 0) {
-    steps.push(`Add ${primary.map((i) => i.name).join(' + ')} to V-mix`);
+    steps.push(
+      `Weigh ${joinNatural(primary.map((i) => `${fmt(result.ingredientGrams[i.id])} g ${i.name}`))}`
+    );
+  }
+  const vmixNames = [...result.apis.map((a) => a.label), ...primary.map((i) => i.name)];
+  if (vmixNames.length > 0) {
+    steps.push(`Add ${vmixNames.join(' + ')} to V-mix`);
     steps.push('Mix for 15 minutes');
   }
 

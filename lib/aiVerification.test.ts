@@ -10,14 +10,20 @@ import { defaultIngredients } from './calc-engine/defaultFormulation';
 const rr77pb9Result = calculateFreshBatch({
   tabletCount: 10887,
   targetWeightG: 0.69,
-  targetActiveMgPerTablet: 60,
-  potencyPercent: 76.4,
-  ingredients: defaultIngredients(),
+  apis: [{ id: 'active', label: 'API', targetActiveMgPerTablet: 60, potency: { method: 'bulkPercent', percent: 76.4 } }],
+  ingredients: defaultIngredients().filter((i) => i.role !== 'active'),
+  fillerType: 'Emdex',
 })!;
 
 const rr77pb9Body = {
   mode: 'fresh' as const,
-  inputs: { fName: 'API', fPot: '76.4', fTmg: '60', fTwt: '0.69', fTabs: '10887' },
+  inputs: {
+    apis: [{ id: 'active', label: 'API', targetActiveMgPerTablet: 60, potency: { method: 'bulkPercent', percent: 76.4 } }],
+    potencyMethod: 'bulkPercent',
+    fTwt: '0.69',
+    fTabs: '10887',
+    fillerType: 'Emdex',
+  },
   result: rr77pb9Result,
 };
 

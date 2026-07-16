@@ -1,6 +1,9 @@
 import type {
   FreshBatchInput,
   FreshBatchResult,
+  FreshApiEntry,
+  FreshApiPotency,
+  FreshApiResult,
   RegrindInput,
   RegrindResult,
   RegrindLot,
@@ -11,14 +14,17 @@ import type {
 } from './types';
 
 /**
- * Validates the ingredient-shape rules the calc engine depends on.
- * Throws with a clear message rather than silently producing wrong grams.
+ * Validates the ingredient-shape rules the calc engine depends on for the
+ * non-API side of a fresh batch (filler + fixed-% excipients). Active
+ * ingredients no longer belong in this list at all — they're supplied via
+ * FreshBatchInput.apis instead — so a role:'active' entry here is now a
+ * caller error rather than the required shape it used to be.
  */
 function validateIngredients(ingredients: IngredientLine[]): void {
   const actives = ingredients.filter((i) => i.role === 'active');
-  if (actives.length !== 1) {
+  if (actives.length > 0) {
     throw new Error(
-      `Expected exactly one ingredient with role 'active', found ${actives.length}.`
+      `calculateFreshBatch ingredients must not include role 'active' entries — active ingredients are supplied via apis[] instead, found ${actives.length}.`
     );
   }
   const byDifference = ingredients.filter((i) => i.calculatedByDifference);
@@ -28,9 +34,7 @@ function validateIngredients(ingredients: IngredientLine[]): void {
     );
   }
   for (const ing of ingredients) {
-    // The active ingredient's percentOfBlend is always derived internally
-    // (see calculateFreshBatch) rather than required as a direct input.
-    if (ing.role === 'active' || ing.calculatedByDifference) continue;
+    if (ing.calculatedByDifference) continue;
     if (ing.percentOfBlend == null) {
       throw new Error(
         `Ingredient "${ing.name}" has no percentOfBlend and is not the calculated-by-difference ingredient.`
@@ -39,38 +43,58 @@ function validateIngredients(ingredients: IngredientLine[]): void {
   }
 }
 
+/** Resolves an API's potency input (bulk % or mg-per-unit) to a 0-1 active fraction. */
+function freshApiEffectivePotency(potency: FreshApiPotency): number {
+  if (potency.method === 'bulkPercent') {
+    return potency.percent / 100;
+  }
+  if (potency.mgPerUnit > 0 && potency.unitWeightG > 0) {
+    return potency.mgPerUnit / (potency.unitWeightG * 1000);
+  }
+  return 0;
+}
+
 /**
  * Fresh batch calculation. Generalized port of the prototype's calc() for
- * mode === 'fresh', with one correction from the original: the active
- * ingredient's % of blend is derived from raw-material potency, not taken
- * as a direct input — see FreshBatchInput.potencyPercent and
- * tests/calcEngine.test.ts.
+ * mode === 'fresh', with two corrections from the original: (1) each API's
+ * % of blend is derived from its own raw-material potency, not taken as a
+ * direct input — see tests/calcEngine.test.ts; (2) combo products can carry
+ * more than one API, each dosed independently — the combined active % of
+ * blend is the SUM of each API's own raw-material % of blend, computed with
+ * exactly the same per-API formula as the original single-active case. With
+ * exactly one API, this reduces to byte-identical output to the pre-combo
+ * formula (proven by the RR77-PB9 regression tests).
  */
 export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | null {
-  const { tabletCount, targetWeightG, targetActiveMgPerTablet, potencyPercent, ingredients } = input;
+  const { tabletCount, targetWeightG, apis, ingredients, fillerType } = input;
   validateIngredients(ingredients);
 
-  const filler = ingredients.find((i) => i.calculatedByDifference)!;
-
-  if (
-    potencyPercent <= 0 ||
-    targetActiveMgPerTablet <= 0 ||
-    targetWeightG <= 0 ||
-    tabletCount <= 0
-  ) {
+  if (apis.length === 0 || targetWeightG <= 0 || tabletCount <= 0) {
     return null;
   }
 
-  // How much of the (impure) raw material is needed per tablet to deliver
-  // targetActiveMgPerTablet of actual active ingredient, then expressed as
-  // that raw material's % of the finished tablet's total weight.
-  const rawMaterialMgPerTablet = targetActiveMgPerTablet / (potencyPercent / 100);
-  const activePercent = (rawMaterialMgPerTablet / (targetWeightG * 1000)) * 100;
+  type ApiCalc = { api: FreshApiEntry; potencyFraction: number; percentOfBlend: number };
+  const apiCalcs: ApiCalc[] = [];
+  for (const api of apis) {
+    const potencyFraction = freshApiEffectivePotency(api.potency);
+    if (potencyFraction <= 0 || api.targetActiveMgPerTablet <= 0) {
+      return null;
+    }
+    // How much of the (impure) raw material is needed per tablet to deliver
+    // this API's targetActiveMgPerTablet of actual active ingredient, then
+    // expressed as that raw material's % of the finished tablet's weight.
+    const rawMaterialMgPerTablet = api.targetActiveMgPerTablet / potencyFraction;
+    const percentOfBlend = (rawMaterialMgPerTablet / (targetWeightG * 1000)) * 100;
+    apiCalcs.push({ api, potencyFraction, percentOfBlend });
+  }
+
+  const combinedActivePercent = apiCalcs.reduce((sum, a) => sum + a.percentOfBlend, 0);
+  const combinedTargetActiveMgPerTablet = apis.reduce((sum, a) => sum + a.targetActiveMgPerTablet, 0);
 
   const fixedPercentSum =
-    activePercent +
+    combinedActivePercent +
     ingredients
-      .filter((i) => !i.calculatedByDifference && i.role !== 'active')
+      .filter((i) => !i.calculatedByDifference)
       .reduce((sum, i) => sum + (i.percentOfBlend ?? 0), 0);
   const fillerPercent = Math.max(0, 100 - fixedPercentSum);
 
@@ -78,11 +102,23 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
 
   const ingredientPercents: Record<string, number> = {};
   const ingredientGrams: Record<string, number> = {};
+
+  const apiResults: FreshApiResult[] = apiCalcs.map(({ api, potencyFraction, percentOfBlend }) => {
+    const grams = totalBlendG * (percentOfBlend / 100);
+    ingredientPercents[api.id] = percentOfBlend;
+    ingredientGrams[api.id] = grams;
+    return {
+      id: api.id,
+      label: api.label,
+      targetActiveMgPerTablet: api.targetActiveMgPerTablet,
+      effectivePotency: potencyFraction,
+      percentOfBlend,
+      gramsPerRun: grams,
+    };
+  });
+
   for (const ing of ingredients) {
-    let pct: number;
-    if (ing.calculatedByDifference) pct = fillerPercent;
-    else if (ing.role === 'active') pct = activePercent;
-    else pct = ing.percentOfBlend ?? 0;
+    const pct = ing.calculatedByDifference ? fillerPercent : ing.percentOfBlend ?? 0;
     ingredientPercents[ing.id] = pct;
     ingredientGrams[ing.id] = totalBlendG * (pct / 100);
   }
@@ -91,11 +127,13 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
     mode: 'fresh',
     tabletCount,
     targetWeightG,
-    targetActiveMgPerTablet,
+    targetActiveMgPerTablet: combinedTargetActiveMgPerTablet,
     totalBlendG,
+    apis: apiResults,
     ingredientGrams,
     ingredientPercents,
-    activePercentOfBlend: activePercent,
+    activePercentOfBlend: combinedActivePercent,
+    fillerType,
   };
 }
 

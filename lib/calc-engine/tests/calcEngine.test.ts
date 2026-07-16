@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateFreshBatch, calculateRegrind, generateVarianceTable } from '../calcEngine';
 import { defaultIngredients } from '../defaultFormulation';
-import type { IngredientLine, PotencyInput, RegrindLot } from '../types';
+import type { IngredientLine, PotencyInput, RegrindLot, FreshApiEntry, FreshApiPotency } from '../types';
 
 /** A single-lot array whose weight matches regroundPowderG — reduces exactly to the pre-multi-lot formula. */
 function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
@@ -31,17 +31,23 @@ function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
 // been removed; regrind and variance-table tests, which were never affected
 // by this bug, are unchanged below.
 
-function ingredientsWithActivePercent(percent: number): IngredientLine[] {
-  return defaultIngredients().map((i) => (i.role === 'active' ? { ...i, percentOfBlend: percent } : i));
+/** ingredients no longer carry the active-role entry — actives are supplied via apis[] instead. */
+function nonActiveIngredients(): IngredientLine[] {
+  return defaultIngredients().filter((i) => i.role !== 'active');
 }
 
-describe('calculateFreshBatch — RR77-PB9 (real production data)', () => {
+/** A single-API array — reduces exactly to the pre-combo-product single-active formula. */
+function singleApi(potency: FreshApiPotency, targetActiveMgPerTablet: number): FreshApiEntry[] {
+  return [{ id: 'active', label: 'API', targetActiveMgPerTablet, potency }];
+}
+
+describe('calculateFreshBatch — RR77-PB9 (real production data, single API)', () => {
   const result = calculateFreshBatch({
     tabletCount: 10887,
     targetWeightG: 0.69,
-    targetActiveMgPerTablet: 60,
-    potencyPercent: 76.4,
-    ingredients: defaultIngredients(),
+    apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
+    ingredients: nonActiveIngredients(),
+    fillerType: 'Emdex',
   });
 
   it('matches verified totalBlendG (7,512.03 g)', () => {
@@ -71,16 +77,23 @@ describe('calculateFreshBatch — RR77-PB9 (real production data)', () => {
     const sum = Object.values(result!.ingredientGrams).reduce((a, b) => a + b, 0);
     expect(sum).toBeCloseTo(result!.totalBlendG, 6);
   });
+
+  it('exposes the single API in result.apis with matching grams/percent', () => {
+    expect(result!.apis).toHaveLength(1);
+    expect(result!.apis[0].id).toBe('active');
+    expect(result!.apis[0].gramsPerRun).toBeCloseTo(855.0, 2);
+    expect(result!.apis[0].percentOfBlend).toBeCloseTo(11.3817, 4);
+  });
 });
 
-describe('calculateFreshBatch — potencyPercent guards', () => {
-  it('returns null when potencyPercent is 0', () => {
+describe('calculateFreshBatch — potency guards', () => {
+  it('returns null when the API potency is 0', () => {
     const result = calculateFreshBatch({
       tabletCount: 10887,
       targetWeightG: 0.69,
-      targetActiveMgPerTablet: 60,
-      potencyPercent: 0,
-      ingredients: defaultIngredients(),
+      apis: singleApi({ method: 'bulkPercent', percent: 0 }, 60),
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
     });
     expect(result).toBeNull();
   });
@@ -89,12 +102,23 @@ describe('calculateFreshBatch — potencyPercent guards', () => {
     const result = calculateFreshBatch({
       tabletCount: 1000,
       targetWeightG: 1.0,
-      targetActiveMgPerTablet: 50,
-      potencyPercent: 100,
-      ingredients: defaultIngredients(),
+      apis: singleApi({ method: 'bulkPercent', percent: 100 }, 50),
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
     });
     // 50mg of a 100%-pure material in a 1000mg (1.0g) tablet = 5% of blend.
     expect(result!.activePercentOfBlend).toBeCloseTo(5, 6);
+  });
+
+  it('returns null when apis is empty', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 1.0,
+      apis: [],
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
+    });
+    expect(result).toBeNull();
   });
 });
 
@@ -106,9 +130,9 @@ describe('calculateFreshBatch — generic ingredient count', () => {
     const result = calculateFreshBatch({
       tabletCount: 10887,
       targetWeightG: 0.69,
-      targetActiveMgPerTablet: 60,
-      potencyPercent: 76.4,
-      ingredients: defaultIngredients(),
+      apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
     });
     expect(result).not.toBeNull();
     expect(result!.ingredientPercents['eztab']).toBeCloseTo(10, 6);
@@ -119,21 +143,96 @@ describe('calculateFreshBatch — generic ingredient count', () => {
 
   it('supports an arbitrary 6th ingredient beyond the shipped defaults, with no engine changes', () => {
     const ingredients: IngredientLine[] = [
-      ...defaultIngredients(),
+      ...nonActiveIngredients(),
       { id: 'flowaid', name: 'FlowAid', role: 'other', percentOfBlend: 3, calculatedByDifference: false },
     ];
     const result = calculateFreshBatch({
       tabletCount: 10887,
       targetWeightG: 0.69,
-      targetActiveMgPerTablet: 60,
-      potencyPercent: 76.4,
+      apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
       ingredients,
+      fillerType: 'Emdex',
     });
     expect(result).not.toBeNull();
     expect(result!.ingredientPercents['flowaid']).toBeCloseTo(3, 6);
     expect(result!.ingredientGrams['flowaid']).toBeCloseTo(7512.03 * 0.03, 2);
     const sum = Object.values(result!.ingredientPercents).reduce((a, b) => a + b, 0);
     expect(sum).toBeCloseTo(100, 6);
+  });
+});
+
+describe('calculateFreshBatch — multiple APIs (combo product)', () => {
+  // Clean round numbers: 1000 tablets @ 1.0g each = 1000g total blend.
+  // API 1: 50mg target @ 100% potency -> 50mg raw material/tablet -> 5% of blend.
+  // API 2: 30mg target @ 60% potency (expressed as mg-per-unit) -> 50mg raw material/tablet -> 5% of blend.
+  const apis: FreshApiEntry[] = [
+    { id: 'api1', label: 'Ingredient A', targetActiveMgPerTablet: 50, potency: { method: 'bulkPercent', percent: 100 } },
+    {
+      id: 'api2',
+      label: 'Ingredient B',
+      targetActiveMgPerTablet: 30,
+      potency: { method: 'mgPerUnit', mgPerUnit: 600, unitWeightG: 1 }, // 600mg/g = 60% fraction
+    },
+  ];
+  const ingredients: IngredientLine[] = [
+    { id: 'filler', name: 'Emdex', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
+  ];
+
+  it('combined active mass per tablet is the sum of each API target mg/tablet', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 1.0,
+      apis,
+      ingredients,
+      fillerType: 'Emdex',
+    });
+    expect(result!.targetActiveMgPerTablet).toBeCloseTo(80, 6);
+  });
+
+  it("each API's own raw-material % of blend is computed independently, then summed for activePercentOfBlend", () => {
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 1.0,
+      apis,
+      ingredients,
+      fillerType: 'Emdex',
+    });
+    expect(result!.apis).toHaveLength(2);
+    expect(result!.apis[0].percentOfBlend).toBeCloseTo(5, 6);
+    expect(result!.apis[1].percentOfBlend).toBeCloseTo(5, 6);
+    expect(result!.activePercentOfBlend).toBeCloseTo(10, 6);
+  });
+
+  it('filler math subtracts the combined active total (and any other excipients) from target tablet weight', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 1.0,
+      apis,
+      ingredients,
+      fillerType: 'Emdex',
+    });
+    // totalBlendG = 1000 * 1.0 = 1000g; APIs take 5% + 5% = 10%, filler gets the remaining 90%.
+    expect(result!.totalBlendG).toBeCloseTo(1000, 6);
+    expect(result!.ingredientGrams['api1']).toBeCloseTo(50, 6);
+    expect(result!.ingredientGrams['api2']).toBeCloseTo(50, 6);
+    expect(result!.ingredientGrams['filler']).toBeCloseTo(900, 6);
+    const sum = Object.values(result!.ingredientGrams).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(result!.totalBlendG, 6);
+  });
+
+  it('returns null if any single API is missing potency or target dose, even if others are valid', () => {
+    const incomplete: FreshApiEntry[] = [
+      apis[0],
+      { id: 'api2', label: 'Ingredient B', targetActiveMgPerTablet: 30, potency: { method: 'bulkPercent', percent: 0 } },
+    ];
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 1.0,
+      apis: incomplete,
+      ingredients,
+      fillerType: 'Emdex',
+    });
+    expect(result).toBeNull();
   });
 });
 
@@ -356,30 +455,27 @@ describe('generateVarianceTable', () => {
 });
 
 describe('validation guards', () => {
-  it('throws if no active ingredient', () => {
-    const bad = defaultIngredients().map((i) => (i.role === 'active' ? { ...i, role: 'other' as const } : i));
+  it("throws if ingredients still includes a role:'active' entry — actives now belong in apis[]", () => {
     expect(() =>
       calculateFreshBatch({
         tabletCount: 100,
         targetWeightG: 0.5,
-        targetActiveMgPerTablet: 10,
-        potencyPercent: 50,
-        ingredients: bad,
+        apis: singleApi({ method: 'bulkPercent', percent: 50 }, 10),
+        ingredients: defaultIngredients(), // still contains the active-role entry
+        fillerType: 'Emdex',
       })
-    ).toThrow(/exactly one ingredient with role 'active'/);
+    ).toThrow(/must not include role 'active'/);
   });
 
   it('throws if two ingredients are calculatedByDifference', () => {
-    const bad = ingredientsWithActivePercent(50).map((i) =>
-      i.id === 'pvpp' ? { ...i, calculatedByDifference: true } : i
-    );
+    const bad = nonActiveIngredients().map((i) => (i.id === 'pvpp' ? { ...i, calculatedByDifference: true } : i));
     expect(() =>
       calculateFreshBatch({
         tabletCount: 100,
         targetWeightG: 0.5,
-        targetActiveMgPerTablet: 10,
-        potencyPercent: 50,
+        apis: singleApi({ method: 'bulkPercent', percent: 50 }, 10),
         ingredients: bad,
+        fillerType: 'Emdex',
       })
     ).toThrow(/exactly one ingredient with calculatedByDifference/);
   });
@@ -388,9 +484,9 @@ describe('validation guards', () => {
     const result = calculateFreshBatch({
       tabletCount: 0,
       targetWeightG: 0.5,
-      targetActiveMgPerTablet: 10,
-      potencyPercent: 50,
-      ingredients: defaultIngredients(),
+      apis: singleApi({ method: 'bulkPercent', percent: 50 }, 10),
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
     });
     expect(result).toBeNull();
   });
