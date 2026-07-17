@@ -157,6 +157,9 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .verify-stale-lbl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); opacity: 0.7; }
 .verify-stale-lbl i { font-size: 13px; }
 
+.suggest-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.suggest-text { font-size: 11px; color: var(--text-3); }
+
 .verify-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); }
 .verify-banner i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
 .verify-banner-title { font-size: 13px; font-weight: 700; }

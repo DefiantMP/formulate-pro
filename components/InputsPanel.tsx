@@ -3,6 +3,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { IngredientLine } from '@/lib/calc-engine/types';
 import { FRESH_FILLER_TYPES, type FreshFillerType } from '@/lib/calc-engine/types';
+import { numOrZero } from '@/lib/format';
 import type {
   Mode,
   RegrindLotState,
@@ -61,6 +62,7 @@ interface InputsPanelProps {
 
 export default function InputsPanel(props: InputsPanelProps) {
   const { mode, onModeChange } = props;
+  const lotWeightSum = props.lots.reduce((sum, lot) => sum + numOrZero(lot.weightG), 0);
 
   return (
     <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -257,6 +259,20 @@ export default function InputsPanel(props: InputsPanelProps) {
                   />
                   <div className="unit">g</div>
                 </div>
+                {lotWeightSum > 0 && (
+                  <div className="suggest-row">
+                    <span className="suggest-text">
+                      Suggested: {lotWeightSum.toLocaleString('en-US', { maximumFractionDigits: 0 })} g
+                    </span>
+                    <button
+                      type="button"
+                      className="verify-run-btn"
+                      onClick={() => props.setRgPwd(String(lotWeightSum))}
+                    >
+                      Use this
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             <div className="hr" />
