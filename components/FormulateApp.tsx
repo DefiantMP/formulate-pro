@@ -145,6 +145,24 @@ export default function FormulateApp() {
     return () => clearTimeout(timer);
   }, [saveToastToken]);
 
+  // Chrome/Firefox both let mouse-wheel/trackpad scroll over a *focused*
+  // number input silently bump its value by `step` — no scrollbar cue, no
+  // visible spinner interaction. A user scrolling the page while the cursor
+  // happens to cross a still-focused field (e.g. right after typing a value)
+  // gets their number decremented/incremented without knowing it. Blurring
+  // the input on wheel restores normal page-scroll behavior for every
+  // number field in the app, current and future, from one place.
+  useEffect(() => {
+    function blurNumberInputOnWheel(e: WheelEvent) {
+      const target = e.target;
+      if (target instanceof HTMLInputElement && target.type === 'number') {
+        target.blur();
+      }
+    }
+    document.addEventListener('wheel', blurNumberInputOnWheel, { passive: true });
+    return () => document.removeEventListener('wheel', blurNumberInputOnWheel);
+  }, []);
+
   const [apis, setApis] = useState<FreshApiState[]>(() => [blankApi('', 'active')]);
   const [fPotMethod, setFPotMethod] = useState<FreshPotencyMethod>('bulkPercent');
   const [fTwt, setFTwt] = useState('');
