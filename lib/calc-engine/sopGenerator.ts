@@ -97,7 +97,9 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
     result.freshActiveG > 0
       ? `Add ${fmt(result.freshActiveG)} g fresh active`
       : 'No fresh active needed — regrind active covers the full batch',
-    `Add ${fmt(result.fillerAddG)} g ${result.fillerIngredientName}`,
+    // Bulk calculated filler + the fixed 0.15% EasyTab processing aid are the
+    // same material, merged into one weigh/add step rather than two.
+    `Add ${fmt(result.fillerAddG + result.easyTabG)} g ${result.fillerIngredientName}`,
     'Mix for 15 minutes'
   );
   // Only relevant when at least one lot is marked reground-tablets — a batch
@@ -110,7 +112,6 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
     );
   }
   steps.push(
-    `Add ${fmt(result.easyTabG, 2)} g ${result.easyTabIngredientName}`,
     `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
     'Mix for 5 minutes'
   );

@@ -281,7 +281,6 @@ export default function FormulateApp() {
 
   const baseIngredients = useMemo(() => defaultIngredients(), []);
   const activeIngredient = baseIngredients.find((i) => i.role === 'active')!;
-  const fillerIngredient = baseIngredients.find((i) => i.calculatedByDifference)!;
   const lubricantIngredient = baseIngredients.find((i) => i.role === 'lubricant')!;
   const excipients = useMemo(
     () => baseIngredients.filter((i) => i.role !== 'active' && !i.calculatedByDifference),
@@ -448,7 +447,10 @@ export default function FormulateApp() {
         regroundPowderG: solvedTotalRegroundPowderG,
         targetActiveMgPerTablet: numOrZero(rgTmg),
         targetWeightG: numOrZero(rgTwt),
-        fillerIngredientName: fillerIngredient.name,
+        // EasyTab, not the shared fresh-batch Emdex/Dipac filler — regrind's
+        // calculated bulk filler and the fixed 0.15% EasyTab processing aid
+        // are the same material, merged into one output/SOP line below.
+        fillerIngredientName: 'EasyTab',
         alreadyPresentIngredientNames: alreadyPresentNames,
         lubricantTopUpIngredientName: lubricantIngredient.name,
       });
@@ -458,7 +460,10 @@ export default function FormulateApp() {
       regroundPowderG: numOrZero(rgPwd),
       targetActiveMgPerTablet: numOrZero(rgTmg),
       targetWeightG: numOrZero(rgTwt),
-      fillerIngredientName: fillerIngredient.name,
+      // EasyTab, not the shared fresh-batch Emdex/Dipac filler — regrind's
+      // calculated bulk filler and the fixed 0.15% EasyTab processing aid
+      // are the same material, merged into one output/SOP line below.
+      fillerIngredientName: 'EasyTab',
       alreadyPresentIngredientNames: alreadyPresentNames,
       lubricantTopUpIngredientName: lubricantIngredient.name,
     });
@@ -472,7 +477,6 @@ export default function FormulateApp() {
     rgPwd,
     rgTmg,
     rgTwt,
-    fillerIngredient,
     alreadyPresentNames,
     lubricantIngredient,
   ]);
@@ -565,8 +569,10 @@ export default function FormulateApp() {
         key: result.freshActiveG > 0,
       },
       {
+        // Bulk calculated filler + the fixed 0.15% EasyTab processing aid are
+        // the same material, merged into one line rather than two.
         label: `${result.fillerIngredientName} to add`,
-        value: `${fmt(result.fillerAddG)} g`,
+        value: `${fmt(result.fillerAddG + result.easyTabG)} g`,
         icon: 'cube',
         key: true,
       },
@@ -582,15 +588,10 @@ export default function FormulateApp() {
             },
           ]
         : []),
-      // Standard processing aids added to every regrind batch regardless of
+      // Standard processing aid added to every regrind batch regardless of
       // lot sourceType — no "already present" concern like the lubricant
-      // top-up or PVPP, so these are always shown, not conditional.
-      {
-        label: result.easyTabIngredientName,
-        value: `${fmt(result.easyTabG, 2)} g`,
-        icon: 'circle-plus',
-        key: false,
-      },
+      // top-up or PVPP, so always shown, not conditional. EasyTab itself is
+      // not a separate row here — its 0.15% is merged into the filler row above.
       {
         label: result.siliconDioxideIngredientName,
         value: `${fmt(result.siliconDioxideG, 2)} g`,
