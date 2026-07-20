@@ -13,8 +13,9 @@ export default function TipsCard() {
           blend % is calculated for you from potency, target mg/tablet, and target tablet weight.
         </div>
         <div className="tip">
-          <strong>Regrind batches:</strong> MagSter and PVPP are already in the powder. Adding more
-          risks soft, capping tablets.
+          <strong>Regrind batches:</strong> PVPP is already in the powder — don&apos;t add fresh.
+          MagSter is mostly already present too; the app automatically adds a small 1% fresh
+          top-up on top of that, shown in the output — don&apos;t add more than that.
         </div>
         <div className="tip">
           <strong>Option B:</strong> Use the tablet&apos;s pressed weight — not any later adjusted

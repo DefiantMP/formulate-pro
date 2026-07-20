@@ -14,6 +14,7 @@ import type {
   IngredientLine,
   PotencyInput,
   RegrindLot,
+  RegrindLotSourceType,
   FreshApiEntry,
   FreshApiPotency,
   FreshFillerType,
@@ -44,6 +45,8 @@ export interface RegrindLotState {
   fillerType: string;
   /** Optional, informational only — used for a stock-shortage warning, never affects calculation. */
   availableStockG: string;
+  /** Determines this lot's share of the 1% lubricant top-up. Defaults to 'regroundTablets' for legacy lots/saved runs. */
+  sourceType: RegrindLotSourceType;
   /** Solve-mode only: exactly one lot must have this true when regrindSolveMode is on. */
   isSolving: boolean;
   isStart: boolean;
@@ -78,6 +81,7 @@ function blankLot(label: string): RegrindLotState {
     lubricantPercent: '',
     fillerType: '',
     availableStockG: '',
+    sourceType: 'regroundTablets',
     isSolving: false,
     isStart: false,
     note: '',
@@ -278,13 +282,15 @@ export default function FormulateApp() {
   const baseIngredients = useMemo(() => defaultIngredients(), []);
   const activeIngredient = baseIngredients.find((i) => i.role === 'active')!;
   const fillerIngredient = baseIngredients.find((i) => i.calculatedByDifference)!;
+  const lubricantIngredient = baseIngredients.find((i) => i.role === 'lubricant')!;
   const excipients = useMemo(
     () => baseIngredients.filter((i) => i.role !== 'active' && !i.calculatedByDifference),
     [baseIngredients]
   );
-  const alreadyPresentNames = baseIngredients
-    .filter((i) => i.role === 'disintegrant' || i.role === 'lubricant')
-    .map((i) => i.name);
+  // Lubricant is excluded here — it always gets a small fresh top-up in
+  // regrind mode (see lubricantTopUpG), so it no longer belongs in the
+  // blanket "don't add fresh" list alongside disintegrant.
+  const alreadyPresentNames = baseIngredients.filter((i) => i.role === 'disintegrant').map((i) => i.name);
 
   // `ingredients` passed to calculateFreshBatch must not include the
   // active-role entry — active ingredients now come entirely from `apis`.
@@ -362,6 +368,7 @@ export default function FormulateApp() {
         lubricantPercent: lot.lubricantPercent === '' ? null : numOrZero(lot.lubricantPercent),
         fillerType: lot.fillerType,
         availableStockG: lot.availableStockG === '' ? null : numOrZero(lot.availableStockG),
+        sourceType: lot.sourceType,
         isStart: lot.isStart,
         note: lot.note,
       })),
@@ -384,11 +391,12 @@ export default function FormulateApp() {
     const solvingLotId = lots.find((l) => l.isSolving)!.id;
     const fixedLots = regrindLots
       .filter((l) => l.id !== solvingLotId)
-      .map((l) => ({ weightG: l.weightG, potency: l.potency }));
-    const solvingLotPotency = regrindLots.find((l) => l.id === solvingLotId)!.potency;
+      .map((l) => ({ weightG: l.weightG, potency: l.potency, sourceType: l.sourceType }));
+    const solvingLot = regrindLots.find((l) => l.id === solvingLotId)!;
     return solveRegrindLotWeight({
       fixedLots,
-      solvingLotPotency,
+      solvingLotPotency: solvingLot.potency,
+      solvingLotSourceType: solvingLot.sourceType,
       targetTabletCount: numOrZero(rgTargetTablets),
       targetActiveMgPerTablet: numOrZero(rgTmg),
       targetWeightG: numOrZero(rgTwt),
@@ -442,6 +450,7 @@ export default function FormulateApp() {
         targetWeightG: numOrZero(rgTwt),
         fillerIngredientName: fillerIngredient.name,
         alreadyPresentIngredientNames: alreadyPresentNames,
+        lubricantTopUpIngredientName: lubricantIngredient.name,
       });
     }
     return calculateRegrind({
@@ -451,6 +460,7 @@ export default function FormulateApp() {
       targetWeightG: numOrZero(rgTwt),
       fillerIngredientName: fillerIngredient.name,
       alreadyPresentIngredientNames: alreadyPresentNames,
+      lubricantTopUpIngredientName: lubricantIngredient.name,
     });
   }, [
     regrindSolveMode,
@@ -464,6 +474,7 @@ export default function FormulateApp() {
     rgTwt,
     fillerIngredient,
     alreadyPresentNames,
+    lubricantIngredient,
   ]);
 
   const result = mode === 'fresh' ? freshResult : regrindResult;
@@ -547,6 +558,18 @@ export default function FormulateApp() {
         icon: 'cube',
         key: true,
       },
+      // Only shown when at least one lot is marked reground-tablets — a
+      // batch made entirely of raw/bulk powder gets no top-up at all.
+      ...(result.lubricantTopUpG > 0
+        ? [
+            {
+              label: `${result.lubricantTopUpIngredientName} (1% fresh top-up)`,
+              value: `${fmt(result.lubricantTopUpG, 2)} g`,
+              icon: 'droplet',
+              key: false,
+            },
+          ]
+        : []),
     ];
   }, [result, activeIngredient, freshIngredients, solvedLotDisplay]);
 
@@ -555,6 +578,12 @@ export default function FormulateApp() {
     const rows: string[] = [];
     if (result.alreadyPresentIngredientNames.length > 0) {
       rows.push(`Do not add fresh ${result.alreadyPresentIngredientNames.join(' or ')} — already present in regrind`);
+    }
+    // Only relevant when there's actually a top-up to add — see addRows above.
+    if (result.lubricantTopUpG > 0) {
+      rows.push(
+        `${result.lubricantTopUpIngredientName} is already present in regrind — add only the 1% fresh top-up (${fmt(result.lubricantTopUpG, 2)} g) shown above, not a full fresh addition`
+      );
     }
     if (result.regroundPowderMismatch) {
       rows.push(
@@ -579,6 +608,7 @@ export default function FormulateApp() {
       potencyPercent: lot.effectivePotency * 100,
       isStart: lot.isStart,
       fillerType: lot.fillerType,
+      isRawPowder: lot.sourceType === 'rawPowder',
     }));
   }, [result]);
 
@@ -727,6 +757,10 @@ export default function FormulateApp() {
               lubricantPercent: l.lubricantPercent != null ? String(l.lubricantPercent) : '',
               fillerType: l.fillerType ?? '',
               availableStockG: l.availableStockG != null ? String(l.availableStockG) : '',
+              // Runs saved before this field existed default to
+              // 'regroundTablets', matching their original (pre-source-type)
+              // math exactly.
+              sourceType: l.sourceType ?? 'regroundTablets',
               // Solve mode is never re-entered on load — a saved run always
               // stores the final, resolved lot weights (see saveRun), so
               // every lot restores as an ordinary fixed-weight lot.
@@ -752,6 +786,7 @@ export default function FormulateApp() {
             lubricantPercent: '',
             fillerType: '',
             availableStockG: '',
+            sourceType: 'regroundTablets',
             isSolving: false,
             isStart: false,
             note: '',

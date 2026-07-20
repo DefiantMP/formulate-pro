@@ -105,6 +105,16 @@ export type PotencyInput =
   | { method: 'mgPerTablet'; mgPerOldTablet: number; oldTabletWeightG: number };
 
 /**
+ * Whether a lot is previously-pressed tablets ground back down (gets a
+ * share of the 1% lubricant top-up, since some lubricant was already used
+ * pressing it once) or raw/bulk powder that was never pressed (excluded
+ * from the top-up basis entirely — see REGRIND_LUBRICANT_TOPUP_PERCENT in
+ * calcEngine.ts). Defaults to 'regroundTablets' for legacy lots/saved runs
+ * that predate this field, preserving their existing math exactly.
+ */
+export type RegrindLotSourceType = 'regroundTablets' | 'rawPowder';
+
+/**
  * One lot of ground-up old tablets within a regrind run. A regrind batch is
  * often a blend of multiple lots with different potencies, pressed weights,
  * and excipient makeups — see calculateRegrind for how these are blended.
@@ -122,6 +132,8 @@ export interface RegrindLot {
   fillerType: string;
   /** Informational only — how much of this lot's material is on hand, for a stock-shortage warning. Never affects calculation. */
   availableStockG: number | null;
+  /** Determines this lot's share of the 1% lubricant top-up — see RegrindLotSourceType. */
+  sourceType: RegrindLotSourceType;
   /**
    * "Press starts" lots (inconsistent fill/compression before a press
    * stabilizes) have structurally unreliable potency figures — estimates,
@@ -142,6 +154,17 @@ export interface RegrindInput {
   fillerIngredientName: string;
   /** Names of ingredients NOT to add fresh, since they're already in the regrind powder. */
   alreadyPresentIngredientNames: string[];
+  /**
+   * Name of the lubricant ingredient (e.g. Magnesium stearate) that gets a
+   * small fresh top-up in regrind mode — see REGRIND_LUBRICANT_TOPUP_PERCENT
+   * in calcEngine.ts. This is deliberately separate from
+   * alreadyPresentIngredientNames: most of this ingredient is still assumed
+   * already present in the reground powder, but a fixed 1% of the blend
+   * attributable to reground-tablet lots (RegrindLotSourceType) is added
+   * fresh on top regardless. Raw/bulk-powder lots contribute nothing to this
+   * top-up, and if every lot is raw powder the top-up is zero.
+   */
+  lubricantTopUpIngredientName: string;
 }
 
 export interface RegrindLotResult {
@@ -157,6 +180,8 @@ export interface RegrindLotResult {
   fillerType: string;
   /** Informational only — carried through from RegrindLot, for a stock-shortage warning in the UI. */
   availableStockG: number | null;
+  /** Determines this lot's share of the 1% lubricant top-up — see RegrindLotSourceType. */
+  sourceType: RegrindLotSourceType;
 }
 
 export interface RegrindResult {
@@ -174,12 +199,22 @@ export interface RegrindResult {
   tabletCount: number;
   totalBlendG: number;
   freshActiveG: number;
+  /** Grams of filler added — already net of lubricantTopUpG, i.e. the two are redistributed from the same leftover %, not additive on top of each other. */
   fillerAddG: number;
   /** Grams of active ingredient already present across all lots (sum of lots[].activeContentG). */
   activeInOldPowderG: number;
   actualMgPerTablet: number;
   fillerIngredientName: string;
   alreadyPresentIngredientNames: string[];
+  /**
+   * Grams of fresh lubricant top-up — tabletCount * targetWeightG *
+   * REGRIND_LUBRICANT_TOPUP_PERCENT * (reground-tablet lot weight ÷ total
+   * lot weight). Zero when no lot is marked 'regroundTablets'. Equals the
+   * pre-source-type formula (ignoring lot mix entirely) exactly when every
+   * lot is 'regroundTablets', since the fraction is then 1.
+   */
+  lubricantTopUpG: number;
+  lubricantTopUpIngredientName: string;
 }
 
 /**
@@ -193,9 +228,11 @@ export interface RegrindResult {
  */
 export interface RegrindSolveInput {
   /** Every lot except the one being solved for — must have a known weightG. */
-  fixedLots: { weightG: number; potency: PotencyInput }[];
+  fixedLots: { weightG: number; potency: PotencyInput; sourceType: RegrindLotSourceType }[];
   /** Potency of the lot whose weight is unknown. */
   solvingLotPotency: PotencyInput;
+  /** Source type of the lot whose weight is unknown — affects its share of the lubricant top-up like any other lot. */
+  solvingLotSourceType: RegrindLotSourceType;
   targetTabletCount: number;
   targetActiveMgPerTablet: number;
   targetWeightG: number;

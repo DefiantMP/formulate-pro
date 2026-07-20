@@ -15,6 +15,7 @@ function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
       lubricantPercent: null,
       fillerType: '',
       availableStockG: null,
+      sourceType: 'regroundTablets',
       isStart: false,
       note: '',
     },
@@ -241,6 +242,11 @@ describe('calculateFreshBatch — multiple APIs (combo product)', () => {
 // exactly the pre-multi-lot formula — these are the same golden fixtures
 // used before lots existed, now expressed as a one-element lots array, per
 // the "single-lot regrind behavior stays identical to today" constraint.
+// Golden fillerAddG figures below were updated for the always-on 1%
+// lubricant top-up (see REGRIND_LUBRICANT_TOPUP_PERCENT): each is the
+// pre-top-up golden figure minus tabletCount * targetWeightG * 0.01.
+// totalBlendG is deliberately unaffected — the top-up is redistributed out
+// of filler, not added on top, so mass is conserved.
 describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', () => {
   const result = calculateRegrind({
     lots: singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000),
@@ -248,19 +254,20 @@ describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', (
     targetActiveMgPerTablet: 60,
     targetWeightG: 1.15,
     fillerIngredientName: 'Emdex',
-    alreadyPresentIngredientNames: ['Magnesium stearate', 'PVPP XL'],
+    alreadyPresentIngredientNames: ['PVPP XL'],
+    lubricantTopUpIngredientName: 'Magnesium stearate',
   });
 
   it('matches golden tabletCount (74000)', () => {
     expect(result!.tabletCount).toBe(74000);
   });
 
-  it('matches golden totalBlendG (85100)', () => {
+  it('matches golden totalBlendG (85100) — unaffected by the top-up, since it is redistributed out of filler', () => {
     expect(result!.totalBlendG).toBeCloseTo(85100, 6);
   });
 
-  it('matches golden fillerAddG (77100)', () => {
-    expect(result!.fillerAddG).toBeCloseTo(77100, 6);
+  it('matches fillerAddG net of the 1% lubricant top-up (77100 - 851 = 76249)', () => {
+    expect(result!.fillerAddG).toBeCloseTo(76249, 6);
   });
 
   it('matches golden activeInOldPowderG (4440)', () => {
@@ -280,6 +287,18 @@ describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', (
     expect(result!.hasStartsLot).toBe(false);
     expect(result!.lotWeightSum).toBeCloseTo(8000, 6);
   });
+
+  it('lubricant top-up is 1% of final blend weight (74000 tablets * 1.15g * 0.01 = 851g)', () => {
+    expect(result!.lubricantTopUpG).toBeCloseTo(851, 6);
+    expect(result!.lubricantTopUpIngredientName).toBe('Magnesium stearate');
+  });
+
+  it('fillerAddG + lubricantTopUpG + regroundPowderG + freshActiveG sum to totalBlendG', () => {
+    expect(result!.fillerAddG + result!.lubricantTopUpG + result!.regroundPowderG + result!.freshActiveG).toBeCloseTo(
+      result!.totalBlendG,
+      6
+    );
+  });
 });
 
 describe('calculateRegrind (mgPerTablet, single lot) — preset0_regrindOptB', () => {
@@ -289,7 +308,8 @@ describe('calculateRegrind (mgPerTablet, single lot) — preset0_regrindOptB', (
     targetActiveMgPerTablet: 35,
     targetWeightG: 0.8,
     fillerIngredientName: 'Emdex',
-    alreadyPresentIngredientNames: ['Magnesium stearate', 'PVPP XL'],
+    alreadyPresentIngredientNames: ['PVPP XL'],
+    lubricantTopUpIngredientName: 'Magnesium stearate',
   });
 
   it('matches golden effectivePotency', () => {
@@ -300,12 +320,12 @@ describe('calculateRegrind (mgPerTablet, single lot) — preset0_regrindOptB', (
     expect(result!.tabletCount).toBe(30841);
   });
 
-  it('matches golden totalBlendG', () => {
+  it('matches golden totalBlendG — unaffected by the top-up, since it is redistributed out of filler', () => {
     expect(result!.totalBlendG).toBeCloseTo(24672.926865671645, 6);
   });
 
-  it('matches golden fillerAddG', () => {
-    expect(result!.fillerAddG).toBeCloseTo(10172.926865671645, 6);
+  it('matches fillerAddG net of the 1% lubricant top-up', () => {
+    expect(result!.fillerAddG).toBeCloseTo(9926.198865671646, 6);
   });
 
   it('matches golden activeInOldPowderG', () => {
@@ -314,6 +334,10 @@ describe('calculateRegrind (mgPerTablet, single lot) — preset0_regrindOptB', (
 
   it('matches golden actualMgPerTablet', () => {
     expect(result!.actualMgPerTablet).toBeCloseTo(35.00030623016259, 6);
+  });
+
+  it('lubricant top-up is 1% of final blend weight (30841 tablets * 0.8g * 0.01)', () => {
+    expect(result!.lubricantTopUpG).toBeCloseTo(246.728, 3);
   });
 });
 
@@ -328,6 +352,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       lubricantPercent: 1.8,
       fillerType: 'EasyTab',
       availableStockG: null,
+      sourceType: 'regroundTablets',
       isStart: true,
       note: 'press starts, weight estimated',
     },
@@ -340,6 +365,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       lubricantPercent: null,
       fillerType: '',
       availableStockG: null,
+      sourceType: 'regroundTablets',
       isStart: false,
       note: '',
     },
@@ -352,7 +378,8 @@ describe('calculateRegrind — multi-lot blending', () => {
       targetActiveMgPerTablet: 40,
       targetWeightG: 0.9,
       fillerIngredientName: 'Emdex',
-      alreadyPresentIngredientNames: ['Magnesium stearate', 'PVPP XL'],
+      alreadyPresentIngredientNames: ['PVPP XL'],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     const lot1Active = 8000 * 0.555;
     const lot2Active = 6500 * (20.1 / (0.27 * 1000));
@@ -370,6 +397,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       targetWeightG: 0.9,
       fillerIngredientName: 'Emdex',
       alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     expect(result!.lots[0].fillerType).toBe('EasyTab');
     expect(result!.lots[1].fillerType).toBe('');
@@ -383,6 +411,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       targetWeightG: 0.9,
       fillerIngredientName: 'Emdex',
       alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     expect(result!.hasStartsLot).toBe(true);
     expect(result!.lots[0].isStart).toBe(true);
@@ -398,6 +427,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       targetWeightG: 0.9,
       fillerIngredientName: 'Emdex',
       alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     expect(mismatched!.lotWeightSum).toBeCloseTo(14500, 6);
     expect(mismatched!.regroundPowderMismatch).toBe(true);
@@ -409,6 +439,7 @@ describe('calculateRegrind — multi-lot blending', () => {
       targetWeightG: 0.9,
       fillerIngredientName: 'Emdex',
       alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     expect(matched!.regroundPowderMismatch).toBe(false);
   });
@@ -423,9 +454,193 @@ describe('calculateRegrind — multi-lot blending', () => {
       targetWeightG: 0.9,
       fillerIngredientName: 'Emdex',
       alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     const activeInOldPowderG = 8000 * 0.555 + 6500 * (20.1 / (0.27 * 1000));
     expect(result!.effectivePotency).toBeCloseTo(activeInOldPowderG / 14000, 10);
+  });
+});
+
+// Clean, hand-verifiable example for the always-on 1% lubricant top-up:
+// 1000g reground powder @ 50% potency, target 25mg/tablet @ 0.5g/tablet.
+//   tabletCount = floor(1000 * 0.5 * 1000 / 25) = 20000
+//   regrindPerTabletG = 25 / (0.5 * 1000) = 0.05g
+//   lubricantTopUpPerTabletG = 0.5 * 0.01 * 1.0 (100% reground-tablet lots) = 0.005g -> lubricantTopUpG = 20000 * 0.005 = 100g
+//   fillerPerTabletG = 0.5 - 0.05 - 0.005 = 0.445g -> fillerAddG = 20000 * 0.445 = 8900g
+//   activeInOldPowderG = 1000 * 0.5 = 500g = 20000 * 25mg/1000, so freshActiveG = 0
+//   totalBlendG = 1000 + 0 + 8900 + 100 = 10000g (unchanged by the top-up — redistributed, not added)
+// This lot uses the default sourceType 'regroundTablets' (via singleLot), so
+// this is also the regression proof that a 100%-reground-tablets batch is
+// byte-identical to the top-up math as shipped before source-type restriction.
+describe('calculateRegrind — 1% lubricant top-up (100% reground-tablet lots)', () => {
+  const result = calculateRegrind({
+    lots: singleLot({ method: 'bulkPercent', percent: 50 }, 1000),
+    regroundPowderG: 1000,
+    targetActiveMgPerTablet: 25,
+    targetWeightG: 0.5,
+    fillerIngredientName: 'Emdex',
+    alreadyPresentIngredientNames: ['PVPP XL'],
+    lubricantTopUpIngredientName: 'Magnesium stearate',
+  });
+
+  it('adds a lubricant top-up equal to exactly 1% of the final blend weight', () => {
+    expect(result!.lubricantTopUpG).toBeCloseTo(100, 6);
+    expect(result!.lubricantTopUpIngredientName).toBe('Magnesium stearate');
+  });
+
+  it('carves the top-up out of filler rather than adding it on top', () => {
+    expect(result!.fillerAddG).toBeCloseTo(8900, 6);
+    expect(result!.totalBlendG).toBeCloseTo(10000, 6);
+  });
+
+  it('does not include the lubricant in alreadyPresentIngredientNames — it now gets its own always-on top-up instead', () => {
+    expect(result!.alreadyPresentIngredientNames).not.toContain('Magnesium stearate');
+  });
+
+  it('applies the top-up even when the regrind powder alone already covers the full active dose', () => {
+    expect(result!.freshActiveG).toBe(0);
+    expect(result!.lubricantTopUpG).toBeGreaterThan(0);
+  });
+
+  it('every lot defaults to sourceType regroundTablets', () => {
+    expect(result!.lots[0].sourceType).toBe('regroundTablets');
+  });
+});
+
+// Same scenario as above, but half the reground weight is raw/bulk powder
+// (never pressed) rather than reground tablets. Numbers below all follow
+// from scaling the top-up by the reground-tablet share of lot weight:
+//   lot1 (regroundTablets) = 600g @ 50%, lot2 (rawPowder) = 400g @ 50%
+//   activeInOldPowderG = 1000 * 0.5 = 500g (potency blending is unaffected by sourceType)
+//   regroundTabletFraction = 600 / 1000 = 0.6
+//   lubricantTopUpPerTabletG = 0.5 * 0.01 * 0.6 = 0.003g -> lubricantTopUpG = 20000 * 0.003 = 60g
+//   fillerPerTabletG = 0.5 - 0.05 - 0.003 = 0.447g -> fillerAddG = 20000 * 0.447 = 8940g
+//   totalBlendG unchanged at 10000g (still redistributed, not added)
+describe('calculateRegrind — 1% lubricant top-up (mixed reground/raw-powder lots)', () => {
+  const lots: RegrindLot[] = [
+    {
+      id: 'lot1',
+      label: 'Reground lot',
+      potency: { method: 'bulkPercent', percent: 50 },
+      weightG: 600,
+      disintegrantPercent: null,
+      lubricantPercent: null,
+      fillerType: '',
+      availableStockG: null,
+      sourceType: 'regroundTablets',
+      isStart: false,
+      note: '',
+    },
+    {
+      id: 'lot2',
+      label: 'Raw powder lot',
+      potency: { method: 'bulkPercent', percent: 50 },
+      weightG: 400,
+      disintegrantPercent: null,
+      lubricantPercent: null,
+      fillerType: '',
+      availableStockG: null,
+      sourceType: 'rawPowder',
+      isStart: false,
+      note: '',
+    },
+  ];
+  const result = calculateRegrind({
+    lots,
+    regroundPowderG: 1000,
+    targetActiveMgPerTablet: 25,
+    targetWeightG: 0.5,
+    fillerIngredientName: 'Emdex',
+    alreadyPresentIngredientNames: ['PVPP XL'],
+    lubricantTopUpIngredientName: 'Magnesium stearate',
+  });
+
+  it('scales the top-up down to the reground-tablet share of lot weight (60% -> 60g instead of 100g)', () => {
+    expect(result!.lubricantTopUpG).toBeCloseTo(60, 6);
+  });
+
+  it('the excluded raw-powder lot weight goes to filler instead, keeping totalBlendG unchanged', () => {
+    expect(result!.fillerAddG).toBeCloseTo(8940, 6);
+    expect(result!.totalBlendG).toBeCloseTo(10000, 6);
+  });
+
+  it("raw-powder lot's own potency/activeContentG is unaffected — only the top-up basis changes", () => {
+    expect(result!.activeInOldPowderG).toBeCloseTo(500, 6);
+    expect(result!.lots[1].activeContentG).toBeCloseTo(200, 6); // 400g * 50%
+  });
+
+  it('carries each lot\'s sourceType through to the result', () => {
+    expect(result!.lots[0].sourceType).toBe('regroundTablets');
+    expect(result!.lots[1].sourceType).toBe('rawPowder');
+  });
+});
+
+describe('calculateRegrind — 1% lubricant top-up (100% raw-powder lots)', () => {
+  it('produces zero top-up when no lot is marked regroundTablets — everything goes to filler', () => {
+    const result = calculateRegrind({
+      lots: [
+        {
+          id: 'lot1',
+          label: 'All raw powder',
+          potency: { method: 'bulkPercent', percent: 50 },
+          weightG: 1000,
+          disintegrantPercent: null,
+          lubricantPercent: null,
+          fillerType: '',
+          availableStockG: null,
+          sourceType: 'rawPowder',
+          isStart: false,
+          note: '',
+        },
+      ],
+      regroundPowderG: 1000,
+      targetActiveMgPerTablet: 25,
+      targetWeightG: 0.5,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: ['PVPP XL'],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    });
+    expect(result!.lubricantTopUpG).toBe(0);
+    // fillerAddG absorbs the full 100g that would otherwise have gone to the top-up.
+    expect(result!.fillerAddG).toBeCloseTo(9000, 6);
+    expect(result!.totalBlendG).toBeCloseTo(10000, 6);
+  });
+});
+
+describe('solveRegrindLotWeight — lubricant top-up feasibility', () => {
+  it('rejects a target that only calculateRegrind\'s post-top-up filler would have caught, proving the two stay consistent', () => {
+    // Rigged so fillerAddG would be tiny and positive WITHOUT the top-up,
+    // but negative once the 1% lubricant top-up is accounted for.
+    const result = solveRegrindLotWeight({
+      fixedLots: [],
+      solvingLotPotency: { method: 'bulkPercent', percent: 100 },
+      solvingLotSourceType: 'regroundTablets',
+      targetTabletCount: 1000,
+      targetActiveMgPerTablet: 995,
+      targetWeightG: 1.0,
+    });
+    // totalBlendG=1000, solvedWeightG=995 (100% potency), pre-top-up filler = 5g,
+    // but the 1% top-up needs 10g -> infeasible.
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/isn't achievable/i);
+      expect(result.reason).toMatch(/lubricant top-up/i);
+    }
+  });
+
+  it('a raw-powder solving lot with no fixed lots gets zero top-up, so the same target that was infeasible above becomes feasible', () => {
+    const result = solveRegrindLotWeight({
+      fixedLots: [],
+      solvingLotPotency: { method: 'bulkPercent', percent: 100 },
+      solvingLotSourceType: 'rawPowder',
+      targetTabletCount: 1000,
+      targetActiveMgPerTablet: 995,
+      targetWeightG: 1.0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.fillerAddG).toBeCloseTo(5, 6);
+    }
   });
 });
 
@@ -438,14 +653,22 @@ describe('calculateRegrind — multi-lot blending', () => {
 // the same precise total-blend/lot-1-weight inputs; filler matches exactly,
 // the lot figure is off by 0.05g, consistent with a rounding artifact in
 // how that number was manually derived rather than a formula error).
+// solvedWeightG is unaffected by the later-added 1% lubricant top-up (it
+// only depends on active mass, not filler), so it's still checked against
+// the original reference value. The filler figure below is that same
+// original reference (48,257.4g) minus the top-up (800g = 1% of the 80,000g
+// total blend), since the top-up is now carved out of filler.
 describe('solveRegrindLotWeight — known-correct example', () => {
-  const fixedLots = [{ weightG: 11346.14, potency: { method: 'bulkPercent' as const, percent: (14 / 730) * 100 } }];
+  const fixedLots: { weightG: number; potency: PotencyInput; sourceType: 'regroundTablets' }[] = [
+    { weightG: 11346.14, potency: { method: 'bulkPercent', percent: (14 / 730) * 100 }, sourceType: 'regroundTablets' },
+  ];
   const solvingLotPotency = { method: 'bulkPercent' as const, percent: (40 / 690) * 100 };
 
   it('solves Lot 2 weight to match the precise value derived from the given formulas', () => {
     const result = solveRegrindLotWeight({
       fixedLots,
       solvingLotPotency,
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 100000,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
@@ -457,17 +680,18 @@ describe('solveRegrindLotWeight — known-correct example', () => {
     }
   });
 
-  it('matches the provided filler figure (48,257.4 g) exactly', () => {
+  it('matches the provided filler figure net of the 1% lubricant top-up (48,257.4 - 800 = 47,457.4 g)', () => {
     const result = solveRegrindLotWeight({
       fixedLots,
       solvingLotPotency,
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 100000,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.fillerAddG).toBeCloseTo(48257.4, 1);
+      expect(result.fillerAddG).toBeCloseTo(47457.4, 1);
     }
   });
 
@@ -475,6 +699,7 @@ describe('solveRegrindLotWeight — known-correct example', () => {
     const solve = solveRegrindLotWeight({
       fixedLots,
       solvingLotPotency,
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 100000,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
@@ -492,6 +717,7 @@ describe('solveRegrindLotWeight — known-correct example', () => {
         lubricantPercent: null,
         fillerType: '',
         availableStockG: null,
+        sourceType: 'regroundTablets',
         isStart: false,
         note: '',
       },
@@ -504,6 +730,7 @@ describe('solveRegrindLotWeight — known-correct example', () => {
         lubricantPercent: null,
         fillerType: '',
         availableStockG: null,
+        sourceType: 'regroundTablets',
         isStart: false,
         note: '',
       },
@@ -516,6 +743,7 @@ describe('solveRegrindLotWeight — known-correct example', () => {
       targetWeightG: 0.8,
       fillerIngredientName: 'Emdex',
       alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     expect(result).not.toBeNull();
     expect(result!.tabletCount).toBe(100000);
@@ -528,8 +756,9 @@ describe('solveRegrindLotWeight — known-correct example', () => {
 describe('solveRegrindLotWeight — infeasibility guards', () => {
   it('returns ok:false when fixed lots alone already meet or exceed the target active mass', () => {
     const result = solveRegrindLotWeight({
-      fixedLots: [{ weightG: 100000, potency: { method: 'bulkPercent', percent: 100 } }],
+      fixedLots: [{ weightG: 100000, potency: { method: 'bulkPercent', percent: 100 }, sourceType: 'regroundTablets' }],
       solvingLotPotency: { method: 'bulkPercent', percent: 50 },
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 100000,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
@@ -542,8 +771,9 @@ describe('solveRegrindLotWeight — infeasibility guards', () => {
 
   it('returns ok:false when the solved lot plus fixed lots would exceed the total blend mass', () => {
     const result = solveRegrindLotWeight({
-      fixedLots: [{ weightG: 79999, potency: { method: 'bulkPercent', percent: 0.001 } }],
+      fixedLots: [{ weightG: 79999, potency: { method: 'bulkPercent', percent: 0.001 }, sourceType: 'regroundTablets' }],
       solvingLotPotency: { method: 'bulkPercent', percent: 0.001 },
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 100000,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
@@ -558,6 +788,7 @@ describe('solveRegrindLotWeight — infeasibility guards', () => {
     const result = solveRegrindLotWeight({
       fixedLots: [],
       solvingLotPotency: { method: 'bulkPercent', percent: 50 },
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 0,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
@@ -569,6 +800,7 @@ describe('solveRegrindLotWeight — infeasibility guards', () => {
     const result = solveRegrindLotWeight({
       fixedLots: [],
       solvingLotPotency: { method: 'bulkPercent', percent: 0 },
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 1000,
       targetActiveMgPerTablet: 14,
       targetWeightG: 0.8,
@@ -580,6 +812,7 @@ describe('solveRegrindLotWeight — infeasibility guards', () => {
     const result = solveRegrindLotWeight({
       fixedLots: [],
       solvingLotPotency: { method: 'bulkPercent', percent: 50 },
+      solvingLotSourceType: 'regroundTablets',
       targetTabletCount: 1000,
       targetActiveMgPerTablet: 10,
       targetWeightG: 1.0,
@@ -587,9 +820,10 @@ describe('solveRegrindLotWeight — infeasibility guards', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       // 1000 tablets * 10mg / 1000 = 10g active needed, at 50% potency -> 20g.
+      // fillerAddG = 1000 - 20 - (1000 * 0.01 lubricant top-up) = 970.
       expect(result.solvedWeightG).toBeCloseTo(20, 6);
       expect(result.totalBlendG).toBeCloseTo(1000, 6);
-      expect(result.fillerAddG).toBeCloseTo(980, 6);
+      expect(result.fillerAddG).toBeCloseTo(970, 6);
     }
   });
 });

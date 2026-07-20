@@ -100,8 +100,17 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
     `Add ${fmt(result.fillerAddG)} g ${result.fillerIngredientName}`,
     'Mix for 15 minutes'
   );
+  // Only relevant when at least one lot is marked reground-tablets — a batch
+  // made entirely of raw/bulk powder gets no top-up at all, so there's
+  // nothing to weigh, add, or mix here.
+  if (result.lubricantTopUpG > 0) {
+    steps.push(
+      `Add ${fmt(result.lubricantTopUpG, 2)} g ${result.lubricantTopUpIngredientName} (1% fresh top-up — most is already present in regrind)`,
+      'Mix for 5 minutes'
+    );
+  }
   if (alreadyPresent) {
-    steps.push(`Do not add fresh ${alreadyPresent} — already present in regrind`);
+    steps.push(`Do not add any other fresh ${alreadyPresent} — already present in regrind`);
   }
   steps.push(
     `Compress — target weight ${result.targetWeightG.toFixed(3)} g, check against variance table`

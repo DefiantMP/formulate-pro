@@ -17,6 +17,7 @@ function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
       lubricantPercent: null,
       fillerType: '',
       availableStockG: null,
+      sourceType: 'regroundTablets',
       isStart: false,
       note: '',
     },
@@ -78,7 +79,8 @@ async function main() {
     targetActiveMgPerTablet: 35,
     targetWeightG: 0.8,
     fillerIngredientName: 'Emdex',
-    alreadyPresentIngredientNames: ['PVPP XL', 'Magnesium stearate'],
+    alreadyPresentIngredientNames: ['PVPP XL'],
+    lubricantTopUpIngredientName: 'Magnesium stearate',
   });
 
   const regrindAPotency: PotencyInput = { method: 'bulkPercent', percent: 55.5 };
@@ -88,7 +90,8 @@ async function main() {
     targetActiveMgPerTablet: 60,
     targetWeightG: 1.15,
     fillerIngredientName: 'Emdex',
-    alreadyPresentIngredientNames: ['PVPP XL', 'Magnesium stearate'],
+    alreadyPresentIngredientNames: ['PVPP XL'],
+    lubricantTopUpIngredientName: 'Magnesium stearate',
   });
 
   if (!freshResult || !regrindBResult || !regrindAResult) {

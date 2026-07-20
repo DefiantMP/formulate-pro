@@ -8,6 +8,7 @@ import type {
   RegrindResult,
   RegrindLot,
   RegrindLotResult,
+  RegrindLotSourceType,
   RegrindSolveInput,
   RegrindSolveResult,
   PotencyInput,
@@ -159,11 +160,33 @@ function lotEffectivePotency(potency: PotencyInput): number {
 const POWDER_WEIGHT_MISMATCH_TOLERANCE_G = 0.01;
 
 /**
+ * Regrind batches get a small fresh lubricant top-up (e.g. Magnesium
+ * stearate), even though most of that ingredient is otherwise assumed
+ * already present in the reground powder — real punches still benefit from
+ * a fresh top-up rather than relying entirely on residual lubricant from the
+ * original press run. Only lots marked 'regroundTablets' contribute to this
+ * — raw/bulk powder was never pressed, so it never had lubricant added in
+ * the first place. Expressed as 1% of the final blend, scaled down by the
+ * fraction of total lot weight that is reground-tablet lots (1.0 when every
+ * lot is reground tablets, 0 when every lot is raw powder), and
+ * redistributed out of the filler amount rather than added on top, so
+ * totalBlendG is unaffected — see calculateRegrind and
+ * solveRegrindLotWeight, both of which use this.
+ */
+const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.01;
+
+/** Sum of weightG for lots whose sourceType is 'regroundTablets' — the basis for their share of the lubricant top-up. */
+function regroundTabletWeightSum(lots: { weightG: number; sourceType: RegrindLotSourceType }[]): number {
+  return lots.filter((l) => l.sourceType === 'regroundTablets').reduce((sum, l) => sum + l.weightG, 0);
+}
+
+/**
  * Regrind calculation. Generalized port of the prototype's calc() for
  * mode === 'regrind', covering both potency-input methods (bulk % / mg-per-tablet),
  * now blended across one or more lots. With a single lot whose weightG equals
  * regroundPowderG, effectivePotency reduces to exactly that lot's own potency
- * fraction — identical output to the original single-potency formula.
+ * fraction — identical output to the original single-potency formula, aside
+ * from the always-on lubricant top-up described above.
  */
 export function calculateRegrind(input: RegrindInput): RegrindResult | null {
   const {
@@ -173,6 +196,7 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     targetWeightG,
     fillerIngredientName,
     alreadyPresentIngredientNames,
+    lubricantTopUpIngredientName,
   } = input;
 
   const lotResults: RegrindLotResult[] = lots.map((lot: RegrindLot) => {
@@ -187,6 +211,7 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
       isStart: lot.isStart,
       fillerType: lot.fillerType,
       availableStockG: lot.availableStockG,
+      sourceType: lot.sourceType,
     };
   });
 
@@ -197,6 +222,10 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     lotWeightSum > 0 &&
     Math.abs(regroundPowderG - lotWeightSum) > POWDER_WEIGHT_MISMATCH_TOLERANCE_G;
   const hasStartsLot = lotResults.some((l) => l.isStart);
+  // 1.0 when every lot is reground tablets (today's shipped behavior),
+  // shrinking toward 0 as raw/bulk-powder lots take up more of the blend.
+  const regroundTabletFraction =
+    lotWeightSum > 0 ? regroundTabletWeightSum(lotResults) / lotWeightSum : 0;
 
   const effectivePotency = regroundPowderG > 0 ? activeInOldPowderG / regroundPowderG : 0;
 
@@ -213,13 +242,15 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     (regroundPowderG * effectivePotency * 1000) / targetActiveMgPerTablet
   );
   const regrindPerTabletG = targetActiveMgPerTablet / (effectivePotency * 1000);
-  const fillerPerTabletG = targetWeightG - regrindPerTabletG;
+  const lubricantTopUpPerTabletG = targetWeightG * REGRIND_LUBRICANT_TOPUP_PERCENT * regroundTabletFraction;
+  const fillerPerTabletG = targetWeightG - regrindPerTabletG - lubricantTopUpPerTabletG;
   const fillerAddG = Math.max(0, tabletCount * fillerPerTabletG);
+  const lubricantTopUpG = tabletCount * lubricantTopUpPerTabletG;
   const freshActiveG = Math.max(
     0,
     (tabletCount * targetActiveMgPerTablet) / 1000 - activeInOldPowderG
   );
-  const totalBlendG = regroundPowderG + freshActiveG + fillerAddG;
+  const totalBlendG = regroundPowderG + freshActiveG + fillerAddG + lubricantTopUpG;
   const actualMgPerTablet =
     tabletCount > 0 ? ((activeInOldPowderG + freshActiveG) * 1000) / tabletCount : 0;
 
@@ -241,6 +272,8 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     actualMgPerTablet,
     fillerIngredientName,
     alreadyPresentIngredientNames,
+    lubricantTopUpG,
+    lubricantTopUpIngredientName,
   };
 }
 
@@ -248,17 +281,28 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
  * Solves for the weight of one unknown regrind lot, given a target tablet
  * count, rather than requiring every lot's weight to be known upfront. This
  * is a standalone calculation deliberately kept separate from
- * calculateRegrind — it does not touch that function or its output shape at
- * all, so the ordinary (non-solve) regrind flow is completely unaffected.
- * The caller feeds the resulting solvedWeightG back into an ordinary
- * RegrindLot and calls calculateRegrind as usual (with regroundPowderG set
- * to the sum of every lot's weight, solved lot included) to get the full
- * per-lot breakdown, filler amount, and totals — reusing that already-tested
- * math rather than duplicating it here.
+ * calculateRegrind — it does not call or modify that function, so the
+ * ordinary (non-solve) regrind flow is completely unaffected. The caller
+ * feeds the resulting solvedWeightG back into an ordinary RegrindLot and
+ * calls calculateRegrind as usual (with regroundPowderG set to the sum of
+ * every lot's weight, solved lot included) to get the full per-lot
+ * breakdown, filler amount, and totals — reusing that already-tested math
+ * rather than duplicating it here. Its own fillerAddG figure below still
+ * has to account for REGRIND_LUBRICANT_TOPUP_PERCENT (and each lot's
+ * sourceType) independently, purely so its infeasibility guard stays
+ * accurate against what calculateRegrind will actually compute once fed
+ * the solved weight — proven by a test that feeds the solved lot back into
+ * calculateRegrind and checks the two fillerAddG figures match exactly.
  */
 export function solveRegrindLotWeight(input: RegrindSolveInput): RegrindSolveResult {
-  const { fixedLots, solvingLotPotency, targetTabletCount, targetActiveMgPerTablet, targetWeightG } =
-    input;
+  const {
+    fixedLots,
+    solvingLotPotency,
+    solvingLotSourceType,
+    targetTabletCount,
+    targetActiveMgPerTablet,
+    targetWeightG,
+  } = input;
 
   if (targetTabletCount <= 0 || targetActiveMgPerTablet <= 0 || targetWeightG <= 0) {
     return {
@@ -277,9 +321,11 @@ export function solveRegrindLotWeight(input: RegrindSolveInput): RegrindSolveRes
 
   let fixedLotWeightSumG = 0;
   let fixedActiveG = 0;
+  let fixedRegroundTabletWeightSumG = 0;
   for (const lot of fixedLots) {
     fixedLotWeightSumG += lot.weightG;
     fixedActiveG += lot.weightG * lotEffectivePotency(lot.potency);
+    if (lot.sourceType === 'regroundTablets') fixedRegroundTabletWeightSumG += lot.weightG;
   }
 
   const activeStillNeededG = totalActiveNeededG - fixedActiveG;
@@ -291,12 +337,17 @@ export function solveRegrindLotWeight(input: RegrindSolveInput): RegrindSolveRes
   }
 
   const solvedWeightG = activeStillNeededG / solvingPotencyFraction;
-  const fillerAddG = totalBlendG - fixedLotWeightSumG - solvedWeightG;
+  const totalLotWeightSumG = fixedLotWeightSumG + solvedWeightG;
+  const regroundTabletWeightSumG =
+    fixedRegroundTabletWeightSumG + (solvingLotSourceType === 'regroundTablets' ? solvedWeightG : 0);
+  const regroundTabletFraction = totalLotWeightSumG > 0 ? regroundTabletWeightSumG / totalLotWeightSumG : 0;
+  const lubricantTopUpG = totalBlendG * REGRIND_LUBRICANT_TOPUP_PERCENT * regroundTabletFraction;
+  const fillerAddG = totalBlendG - fixedLotWeightSumG - solvedWeightG - lubricantTopUpG;
 
   if (fillerAddG < 0) {
     return {
       ok: false,
-      reason: `Solving for the target requires ${(fixedLotWeightSumG + solvedWeightG).toFixed(2)} g of lots, which exceeds the ${totalBlendG.toFixed(2)} g total blend needed for ${targetTabletCount.toLocaleString()} tablets — the target isn't achievable with these inputs.`,
+      reason: `Solving for the target requires ${(fixedLotWeightSumG + solvedWeightG).toFixed(2)} g of lots plus the ${lubricantTopUpG.toFixed(2)} g fresh lubricant top-up, which exceeds the ${totalBlendG.toFixed(2)} g total blend needed for ${targetTabletCount.toLocaleString()} tablets — the target isn't achievable with these inputs.`,
     };
   }
 
