@@ -12,7 +12,23 @@ export interface AddRowData {
 export interface StatsData {
   tablets: string;
   blend: string;
+  /** "Active potency" for fresh batch, "Reground powder potency" for regrind (see potency below). */
+  potencyLabel: string;
+  /**
+   * Fresh: activePercentOfBlend, already the finished-tablet potency.
+   * Regrind: activeInOldPowderG / regroundPowderG — the reground powder's
+   * own potency, BEFORE Emdex, lubricant top-up, EasyTab, and Silicon
+   * Dioxide are added — not the actual final tablet blend potency (see
+   * finalBlendPotency).
+   */
   potency: string;
+  /**
+   * Regrind only: activeInOldPowderG / totalBlendG — the actual final
+   * tablet blend potency once every addition is included. Reconciles with
+   * "Verified mg/tab" (finalBlendPotency × target tablet weight ≈ that
+   * figure). Undefined for fresh batch, where potency above already is this.
+   */
+  finalBlendPotency?: string;
   mgPerTab: string;
 }
 
@@ -95,10 +111,17 @@ export default function OutputPanel({
                   <div className="stat-unit">grams</div>
                 </div>
                 <div className="stat">
-                  <div className="stat-lbl">Active potency</div>
+                  <div className="stat-lbl">{stats.potencyLabel}</div>
                   <div className="stat-val">{stats.potency}</div>
-                  <div className="stat-unit">of blend</div>
+                  <div className="stat-unit">{stats.finalBlendPotency ? 'of powder' : 'of blend'}</div>
                 </div>
+                {stats.finalBlendPotency && (
+                  <div className="stat">
+                    <div className="stat-lbl">Final blend potency</div>
+                    <div className="stat-val">{stats.finalBlendPotency}</div>
+                    <div className="stat-unit">of blend</div>
+                  </div>
+                )}
                 <div className="stat">
                   <div className="stat-lbl">Verified mg / tab</div>
                   <div className="stat-val">{stats.mgPerTab}</div>

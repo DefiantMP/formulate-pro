@@ -493,6 +493,11 @@ export default function FormulateApp() {
 
   const stats: StatsData | null = useMemo(() => {
     if (!result) return null;
+    // Fresh batch is built directly to the target blend, so
+    // activePercentOfBlend already is the finished-tablet potency. Regrind's
+    // effectivePotency is the reground powder's OWN potency, before Emdex,
+    // lubricant top-up, EasyTab, and Silicon Dioxide are added — not the
+    // final tablet blend's potency (see finalBlendPotency below).
     const potencyPercent =
       result.mode === 'fresh' ? result.activePercentOfBlend : result.effectivePotency * 100;
     const mgPerTab = result.mode === 'regrind' ? result.actualMgPerTablet : result.targetActiveMgPerTablet;
@@ -503,7 +508,14 @@ export default function FormulateApp() {
     return {
       tablets: fmtK(result.tabletCount),
       blend,
+      potencyLabel: result.mode === 'fresh' ? 'Active potency' : 'Reground powder potency',
       potency: potencyPercent.toFixed(3) + '%',
+      // Actual final blend potency once every addition is included —
+      // reconciles with Verified mg/tab (this × target tablet weight ≈ that).
+      finalBlendPotency:
+        result.mode === 'regrind' && result.totalBlendG > 0
+          ? ((result.activeInOldPowderG / result.totalBlendG) * 100).toFixed(3) + '%'
+          : undefined,
       mgPerTab: mgPerTab.toFixed(result.mode === 'regrind' ? 3 : 1) + ' mg',
     };
   }, [result]);
