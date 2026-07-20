@@ -175,6 +175,19 @@ const POWDER_WEIGHT_MISMATCH_TOLERANCE_G = 0.01;
  */
 const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.01;
 
+/**
+ * Two fixed processing aids added to every regrind batch to help with
+ * pressing, each 0.15% of totalBlendG, carved out of filler the same way as
+ * the lubricant top-up. Unlike the lubricant top-up, these are NOT scaled by
+ * regroundTabletFraction — they apply uniformly regardless of lot
+ * sourceType, since they're standard processing aids being freshly added
+ * every batch, not something assumed already present from a prior press.
+ */
+const REGRIND_EASYTAB_PERCENT = 0.0015;
+const REGRIND_SILICON_DIOXIDE_PERCENT = 0.0015;
+const REGRIND_EASYTAB_INGREDIENT_NAME = 'EasyTab';
+const REGRIND_SILICON_DIOXIDE_INGREDIENT_NAME = 'Silicon Dioxide';
+
 /** Sum of weightG for lots whose sourceType is 'regroundTablets' — the basis for their share of the lubricant top-up. */
 function regroundTabletWeightSum(lots: { weightG: number; sourceType: RegrindLotSourceType }[]): number {
   return lots.filter((l) => l.sourceType === 'regroundTablets').reduce((sum, l) => sum + l.weightG, 0);
@@ -243,14 +256,19 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
   );
   const regrindPerTabletG = targetActiveMgPerTablet / (effectivePotency * 1000);
   const lubricantTopUpPerTabletG = targetWeightG * REGRIND_LUBRICANT_TOPUP_PERCENT * regroundTabletFraction;
-  const fillerPerTabletG = targetWeightG - regrindPerTabletG - lubricantTopUpPerTabletG;
+  const easyTabPerTabletG = targetWeightG * REGRIND_EASYTAB_PERCENT;
+  const siliconDioxidePerTabletG = targetWeightG * REGRIND_SILICON_DIOXIDE_PERCENT;
+  const fillerPerTabletG =
+    targetWeightG - regrindPerTabletG - lubricantTopUpPerTabletG - easyTabPerTabletG - siliconDioxidePerTabletG;
   const fillerAddG = Math.max(0, tabletCount * fillerPerTabletG);
   const lubricantTopUpG = tabletCount * lubricantTopUpPerTabletG;
+  const easyTabG = tabletCount * easyTabPerTabletG;
+  const siliconDioxideG = tabletCount * siliconDioxidePerTabletG;
   const freshActiveG = Math.max(
     0,
     (tabletCount * targetActiveMgPerTablet) / 1000 - activeInOldPowderG
   );
-  const totalBlendG = regroundPowderG + freshActiveG + fillerAddG + lubricantTopUpG;
+  const totalBlendG = regroundPowderG + freshActiveG + fillerAddG + lubricantTopUpG + easyTabG + siliconDioxideG;
   const actualMgPerTablet =
     tabletCount > 0 ? ((activeInOldPowderG + freshActiveG) * 1000) / tabletCount : 0;
 
@@ -274,6 +292,10 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
     alreadyPresentIngredientNames,
     lubricantTopUpG,
     lubricantTopUpIngredientName,
+    easyTabG,
+    easyTabIngredientName: REGRIND_EASYTAB_INGREDIENT_NAME,
+    siliconDioxideG,
+    siliconDioxideIngredientName: REGRIND_SILICON_DIOXIDE_INGREDIENT_NAME,
   };
 }
 
@@ -289,7 +311,9 @@ export function calculateRegrind(input: RegrindInput): RegrindResult | null {
  * breakdown, filler amount, and totals — reusing that already-tested math
  * rather than duplicating it here. Its own fillerAddG figure below still
  * has to account for REGRIND_LUBRICANT_TOPUP_PERCENT (and each lot's
- * sourceType) independently, purely so its infeasibility guard stays
+ * sourceType), plus the fixed REGRIND_EASYTAB_PERCENT and
+ * REGRIND_SILICON_DIOXIDE_PERCENT carve-outs (uniform regardless of
+ * sourceType), independently, purely so its infeasibility guard stays
  * accurate against what calculateRegrind will actually compute once fed
  * the solved weight — proven by a test that feeds the solved lot back into
  * calculateRegrind and checks the two fillerAddG figures match exactly.
@@ -342,12 +366,14 @@ export function solveRegrindLotWeight(input: RegrindSolveInput): RegrindSolveRes
     fixedRegroundTabletWeightSumG + (solvingLotSourceType === 'regroundTablets' ? solvedWeightG : 0);
   const regroundTabletFraction = totalLotWeightSumG > 0 ? regroundTabletWeightSumG / totalLotWeightSumG : 0;
   const lubricantTopUpG = totalBlendG * REGRIND_LUBRICANT_TOPUP_PERCENT * regroundTabletFraction;
-  const fillerAddG = totalBlendG - fixedLotWeightSumG - solvedWeightG - lubricantTopUpG;
+  const easyTabG = totalBlendG * REGRIND_EASYTAB_PERCENT;
+  const siliconDioxideG = totalBlendG * REGRIND_SILICON_DIOXIDE_PERCENT;
+  const fillerAddG = totalBlendG - fixedLotWeightSumG - solvedWeightG - lubricantTopUpG - easyTabG - siliconDioxideG;
 
   if (fillerAddG < 0) {
     return {
       ok: false,
-      reason: `Solving for the target requires ${(fixedLotWeightSumG + solvedWeightG).toFixed(2)} g of lots plus the ${lubricantTopUpG.toFixed(2)} g fresh lubricant top-up, which exceeds the ${totalBlendG.toFixed(2)} g total blend needed for ${targetTabletCount.toLocaleString()} tablets — the target isn't achievable with these inputs.`,
+      reason: `Solving for the target requires ${(fixedLotWeightSumG + solvedWeightG).toFixed(2)} g of lots plus the ${lubricantTopUpG.toFixed(2)} g fresh lubricant top-up and ${(easyTabG + siliconDioxideG).toFixed(2)} g of EasyTab/Silicon Dioxide processing aids, which exceeds the ${totalBlendG.toFixed(2)} g total blend needed for ${targetTabletCount.toLocaleString()} tablets — the target isn't achievable with these inputs.`,
     };
   }
 

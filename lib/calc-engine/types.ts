@@ -215,6 +215,19 @@ export interface RegrindResult {
    */
   lubricantTopUpG: number;
   lubricantTopUpIngredientName: string;
+  /**
+   * Grams of fresh EasyTab processing aid — REGRIND_EASYTAB_PERCENT (0.15%)
+   * of totalBlendG, carved out of filler exactly like the lubricant top-up.
+   * Unlike the lubricant top-up, this is NOT scoped to reground-tablets
+   * lots — every regrind batch gets this addition regardless of lot
+   * sourceType, since it's a standard processing aid rather than something
+   * assumed already present from a prior press.
+   */
+  easyTabG: number;
+  easyTabIngredientName: string;
+  /** Grams of fresh Silicon Dioxide processing aid — same basis as easyTabG. */
+  siliconDioxideG: number;
+  siliconDioxideIngredientName: string;
 }
 
 /**

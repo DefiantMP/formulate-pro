@@ -570,6 +570,21 @@ export default function FormulateApp() {
             },
           ]
         : []),
+      // Standard processing aids added to every regrind batch regardless of
+      // lot sourceType — no "already present" concern like the lubricant
+      // top-up or PVPP, so these are always shown, not conditional.
+      {
+        label: result.easyTabIngredientName,
+        value: `${fmt(result.easyTabG, 2)} g`,
+        icon: 'circle-plus',
+        key: false,
+      },
+      {
+        label: result.siliconDioxideIngredientName,
+        value: `${fmt(result.siliconDioxideG, 2)} g`,
+        icon: 'circle-plus',
+        key: false,
+      },
     ];
   }, [result, activeIngredient, freshIngredients, solvedLotDisplay]);
 

@@ -109,6 +109,11 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
       'Mix for 5 minutes'
     );
   }
+  steps.push(
+    `Add ${fmt(result.easyTabG, 2)} g ${result.easyTabIngredientName}`,
+    `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
+    'Mix for 5 minutes'
+  );
   if (alreadyPresent) {
     steps.push(`Do not add any other fresh ${alreadyPresent} — already present in regrind`);
   }

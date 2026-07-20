@@ -244,9 +244,12 @@ describe('calculateFreshBatch — multiple APIs (combo product)', () => {
 // the "single-lot regrind behavior stays identical to today" constraint.
 // Golden fillerAddG figures below were updated for the always-on 1%
 // lubricant top-up (see REGRIND_LUBRICANT_TOPUP_PERCENT): each is the
-// pre-top-up golden figure minus tabletCount * targetWeightG * 0.01.
-// totalBlendG is deliberately unaffected — the top-up is redistributed out
-// of filler, not added on top, so mass is conserved.
+// pre-top-up golden figure minus tabletCount * targetWeightG * 0.01, and
+// further updated for the always-on 0.15%-each EasyTab + Silicon Dioxide
+// processing aids (see REGRIND_EASYTAB_PERCENT / REGRIND_SILICON_DIOXIDE_PERCENT):
+// each is additionally reduced by totalBlendG * 0.003 (0.15% + 0.15%).
+// totalBlendG is deliberately unaffected — all three carve-outs are
+// redistributed out of filler, not added on top, so mass is conserved.
 describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', () => {
   const result = calculateRegrind({
     lots: singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000),
@@ -266,8 +269,8 @@ describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', (
     expect(result!.totalBlendG).toBeCloseTo(85100, 6);
   });
 
-  it('matches fillerAddG net of the 1% lubricant top-up (77100 - 851 = 76249)', () => {
-    expect(result!.fillerAddG).toBeCloseTo(76249, 6);
+  it('matches fillerAddG net of the 1% lubricant top-up and 0.3% EasyTab/Silicon Dioxide (77100 - 851 - 255.3 = 75993.7)', () => {
+    expect(result!.fillerAddG).toBeCloseTo(75993.7, 6);
   });
 
   it('matches golden activeInOldPowderG (4440)', () => {
@@ -293,11 +296,22 @@ describe('calculateRegrind (bulkPercent, single lot) — preset2_regrindOptA', (
     expect(result!.lubricantTopUpIngredientName).toBe('Magnesium stearate');
   });
 
-  it('fillerAddG + lubricantTopUpG + regroundPowderG + freshActiveG sum to totalBlendG', () => {
-    expect(result!.fillerAddG + result!.lubricantTopUpG + result!.regroundPowderG + result!.freshActiveG).toBeCloseTo(
-      result!.totalBlendG,
-      6
-    );
+  it('fillerAddG + lubricantTopUpG + easyTabG + siliconDioxideG + regroundPowderG + freshActiveG sum to totalBlendG', () => {
+    expect(
+      result!.fillerAddG +
+        result!.lubricantTopUpG +
+        result!.easyTabG +
+        result!.siliconDioxideG +
+        result!.regroundPowderG +
+        result!.freshActiveG
+    ).toBeCloseTo(result!.totalBlendG, 6);
+  });
+
+  it('EasyTab and Silicon Dioxide are each 0.15% of totalBlendG (85100 * 0.0015 = 127.65)', () => {
+    expect(result!.easyTabG).toBeCloseTo(127.65, 6);
+    expect(result!.easyTabIngredientName).toBe('EasyTab');
+    expect(result!.siliconDioxideG).toBeCloseTo(127.65, 6);
+    expect(result!.siliconDioxideIngredientName).toBe('Silicon Dioxide');
   });
 });
 
@@ -324,8 +338,8 @@ describe('calculateRegrind (mgPerTablet, single lot) — preset0_regrindOptB', (
     expect(result!.totalBlendG).toBeCloseTo(24672.926865671645, 6);
   });
 
-  it('matches fillerAddG net of the 1% lubricant top-up', () => {
-    expect(result!.fillerAddG).toBeCloseTo(9926.198865671646, 6);
+  it('matches fillerAddG net of the 1% lubricant top-up and 0.3% EasyTab/Silicon Dioxide', () => {
+    expect(result!.fillerAddG).toBeCloseTo(9852.180465671647, 6);
   });
 
   it('matches golden activeInOldPowderG', () => {
@@ -461,14 +475,16 @@ describe('calculateRegrind — multi-lot blending', () => {
   });
 });
 
-// Clean, hand-verifiable example for the always-on 1% lubricant top-up:
+// Clean, hand-verifiable example for the always-on 1% lubricant top-up plus
+// the always-on 0.15%-each EasyTab + Silicon Dioxide processing aids:
 // 1000g reground powder @ 50% potency, target 25mg/tablet @ 0.5g/tablet.
 //   tabletCount = floor(1000 * 0.5 * 1000 / 25) = 20000
 //   regrindPerTabletG = 25 / (0.5 * 1000) = 0.05g
 //   lubricantTopUpPerTabletG = 0.5 * 0.01 * 1.0 (100% reground-tablet lots) = 0.005g -> lubricantTopUpG = 20000 * 0.005 = 100g
-//   fillerPerTabletG = 0.5 - 0.05 - 0.005 = 0.445g -> fillerAddG = 20000 * 0.445 = 8900g
+//   easyTabPerTabletG = siliconDioxidePerTabletG = 0.5 * 0.0015 = 0.00075g -> each = 20000 * 0.00075 = 15g
+//   fillerPerTabletG = 0.5 - 0.05 - 0.005 - 0.00075 - 0.00075 = 0.4435g -> fillerAddG = 20000 * 0.4435 = 8870g
 //   activeInOldPowderG = 1000 * 0.5 = 500g = 20000 * 25mg/1000, so freshActiveG = 0
-//   totalBlendG = 1000 + 0 + 8900 + 100 = 10000g (unchanged by the top-up — redistributed, not added)
+//   totalBlendG = 1000 + 0 + 8870 + 100 + 15 + 15 = 10000g (unchanged by the carve-outs — redistributed, not added)
 // This lot uses the default sourceType 'regroundTablets' (via singleLot), so
 // this is also the regression proof that a 100%-reground-tablets batch is
 // byte-identical to the top-up math as shipped before source-type restriction.
@@ -488,8 +504,15 @@ describe('calculateRegrind — 1% lubricant top-up (100% reground-tablet lots)',
     expect(result!.lubricantTopUpIngredientName).toBe('Magnesium stearate');
   });
 
-  it('carves the top-up out of filler rather than adding it on top', () => {
-    expect(result!.fillerAddG).toBeCloseTo(8900, 6);
+  it('adds EasyTab and Silicon Dioxide, each exactly 0.15% of the final blend weight, regardless of lot sourceType', () => {
+    expect(result!.easyTabG).toBeCloseTo(15, 6);
+    expect(result!.easyTabIngredientName).toBe('EasyTab');
+    expect(result!.siliconDioxideG).toBeCloseTo(15, 6);
+    expect(result!.siliconDioxideIngredientName).toBe('Silicon Dioxide');
+  });
+
+  it('carves the top-up and processing aids out of filler rather than adding them on top', () => {
+    expect(result!.fillerAddG).toBeCloseTo(8870, 6);
     expect(result!.totalBlendG).toBeCloseTo(10000, 6);
   });
 
@@ -514,7 +537,9 @@ describe('calculateRegrind — 1% lubricant top-up (100% reground-tablet lots)',
 //   activeInOldPowderG = 1000 * 0.5 = 500g (potency blending is unaffected by sourceType)
 //   regroundTabletFraction = 600 / 1000 = 0.6
 //   lubricantTopUpPerTabletG = 0.5 * 0.01 * 0.6 = 0.003g -> lubricantTopUpG = 20000 * 0.003 = 60g
-//   fillerPerTabletG = 0.5 - 0.05 - 0.003 = 0.447g -> fillerAddG = 20000 * 0.447 = 8940g
+//   EasyTab/Silicon Dioxide are NOT scaled by sourceType — same 15g each as
+//   the 100%-reground-tablets case above, regardless of lot mix.
+//   fillerPerTabletG = 0.5 - 0.05 - 0.003 - 0.00075 - 0.00075 = 0.4455g -> fillerAddG = 20000 * 0.4455 = 8910g
 //   totalBlendG unchanged at 10000g (still redistributed, not added)
 describe('calculateRegrind — 1% lubricant top-up (mixed reground/raw-powder lots)', () => {
   const lots: RegrindLot[] = [
@@ -560,8 +585,13 @@ describe('calculateRegrind — 1% lubricant top-up (mixed reground/raw-powder lo
   });
 
   it('the excluded raw-powder lot weight goes to filler instead, keeping totalBlendG unchanged', () => {
-    expect(result!.fillerAddG).toBeCloseTo(8940, 6);
+    expect(result!.fillerAddG).toBeCloseTo(8910, 6);
     expect(result!.totalBlendG).toBeCloseTo(10000, 6);
+  });
+
+  it('EasyTab and Silicon Dioxide are unaffected by the raw-powder lot — still 15g each, unlike the scaled-down lubricant top-up', () => {
+    expect(result!.easyTabG).toBeCloseTo(15, 6);
+    expect(result!.siliconDioxideG).toBeCloseTo(15, 6);
   });
 
   it("raw-powder lot's own potency/activeContentG is unaffected — only the top-up basis changes", () => {
@@ -601,9 +631,169 @@ describe('calculateRegrind — 1% lubricant top-up (100% raw-powder lots)', () =
       lubricantTopUpIngredientName: 'Magnesium stearate',
     });
     expect(result!.lubricantTopUpG).toBe(0);
-    // fillerAddG absorbs the full 100g that would otherwise have gone to the top-up.
-    expect(result!.fillerAddG).toBeCloseTo(9000, 6);
+    // EasyTab/Silicon Dioxide still apply in full (15g each) even though every
+    // lot is raw powder — unlike the lubricant top-up, they aren't scoped to
+    // sourceType at all.
+    expect(result!.easyTabG).toBeCloseTo(15, 6);
+    expect(result!.siliconDioxideG).toBeCloseTo(15, 6);
+    // fillerAddG absorbs the full 100g that would otherwise have gone to the
+    // top-up, net of the 30g EasyTab/Silicon Dioxide carve-out (9000 - 30).
+    expect(result!.fillerAddG).toBeCloseTo(8970, 6);
     expect(result!.totalBlendG).toBeCloseTo(10000, 6);
+  });
+});
+
+// Consolidated regression checks for the EasyTab + Silicon Dioxide
+// processing-aid carve-out, covering the three properties this feature must
+// hold: (1) totalBlendG is unaffected by the new additions, (2) fillerAddG
+// correctly nets out all three carve-outs together (lubricant top-up +
+// EasyTab + Silicon Dioxide), and (3) solveRegrindLotWeight's own filler
+// figure stays consistent with calculateRegrind's once fed the same lots.
+// These restate (with fresh numbers) assertions already made inline above —
+// grouped here so the three specific properties are each independently
+// traceable to one test.
+describe('EasyTab + Silicon Dioxide processing aids — regression checks', () => {
+  it('(1) totalBlendG is unchanged by the new 0.30% carve-out, for a fresh set of inputs', () => {
+    const result = calculateRegrind({
+      lots: singleLot({ method: 'bulkPercent', percent: 60 }, 5000),
+      regroundPowderG: 5000,
+      targetActiveMgPerTablet: 20,
+      targetWeightG: 0.6,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    });
+    // totalBlendG only ever depends on regroundPowderG + freshActiveG +
+    // tabletCount * targetWeightG (the carve-outs are redistributed out of
+    // filler, not added on top) — so it must equal tabletCount * targetWeightG
+    // whenever the old powder alone supplies the full active dose.
+    expect(result!.freshActiveG).toBe(0);
+    expect(result!.totalBlendG).toBeCloseTo(result!.tabletCount * 0.6, 6);
+  });
+
+  it('(2) fillerAddG reflects all three carve-outs together (lubricant top-up + EasyTab + Silicon Dioxide)', () => {
+    const lots: RegrindLot[] = [
+      {
+        id: 'lot1',
+        label: 'Reground lot',
+        potency: { method: 'bulkPercent', percent: 45 },
+        weightG: 3000,
+        disintegrantPercent: null,
+        lubricantPercent: null,
+        fillerType: '',
+        availableStockG: null,
+        sourceType: 'regroundTablets',
+        isStart: false,
+        note: '',
+      },
+      {
+        id: 'lot2',
+        label: 'Raw powder lot',
+        potency: { method: 'bulkPercent', percent: 45 },
+        weightG: 2000,
+        disintegrantPercent: null,
+        lubricantPercent: null,
+        fillerType: '',
+        availableStockG: null,
+        sourceType: 'rawPowder',
+        isStart: false,
+        note: '',
+      },
+    ];
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG: 5000,
+      targetActiveMgPerTablet: 20,
+      targetWeightG: 0.6,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    });
+    // fillerPerTablet = targetWeightG - regrindPerTablet - lubricantTopUpPerTablet
+    //   - easyTabPerTablet - siliconDioxidePerTablet, so the three carve-outs
+    // plus fillerAddG plus regrind/fresh-active must reconstruct totalBlendG exactly.
+    expect(
+      result!.fillerAddG +
+        result!.lubricantTopUpG +
+        result!.easyTabG +
+        result!.siliconDioxideG +
+        result!.regroundPowderG +
+        result!.freshActiveG
+    ).toBeCloseTo(result!.totalBlendG, 6);
+    // The lubricant top-up is scaled down by the 60% reground-tablet share,
+    // but EasyTab/Silicon Dioxide are not — proving the three carve-outs are
+    // independent, not all scaled together.
+    expect(result!.lubricantTopUpG).toBeCloseTo(result!.tabletCount * 0.6 * 0.01 * 0.6, 6);
+    expect(result!.easyTabG).toBeCloseTo(result!.tabletCount * 0.6 * 0.0015, 6);
+    expect(result!.siliconDioxideG).toBeCloseTo(result!.tabletCount * 0.6 * 0.0015, 6);
+  });
+
+  it('(3) solveRegrindLotWeight stays consistent with calculateRegrind given the same carve-outs', () => {
+    // 50000 tablets * 18mg / 1000 = 900g active needed. Fixed lot supplies
+    // 1000g * 30% = 300g, leaving 600g for the solving lot to cover at 55%
+    // potency (600 / 0.55 ≈ 1090.9g) — comfortably feasible against the
+    // 37,500g total blend.
+    const fixedLots: { weightG: number; potency: PotencyInput; sourceType: 'regroundTablets' }[] = [
+      { weightG: 1000, potency: { method: 'bulkPercent', percent: 30 }, sourceType: 'regroundTablets' },
+    ];
+    const solvingLotPotency = { method: 'bulkPercent' as const, percent: 55 };
+
+    const solve = solveRegrindLotWeight({
+      fixedLots,
+      solvingLotPotency,
+      solvingLotSourceType: 'regroundTablets',
+      targetTabletCount: 50000,
+      targetActiveMgPerTablet: 18,
+      targetWeightG: 0.75,
+    });
+    expect(solve.ok).toBe(true);
+    if (!solve.ok) return;
+
+    const lots: RegrindLot[] = [
+      {
+        id: 'lot1',
+        label: 'Lot 1',
+        potency: fixedLots[0].potency,
+        weightG: fixedLots[0].weightG,
+        disintegrantPercent: null,
+        lubricantPercent: null,
+        fillerType: '',
+        availableStockG: null,
+        sourceType: 'regroundTablets',
+        isStart: false,
+        note: '',
+      },
+      {
+        id: 'lot2',
+        label: 'Lot 2 (solved)',
+        potency: solvingLotPotency,
+        weightG: solve.solvedWeightG,
+        disintegrantPercent: null,
+        lubricantPercent: null,
+        fillerType: '',
+        availableStockG: null,
+        sourceType: 'regroundTablets',
+        isStart: false,
+        note: '',
+      },
+    ];
+    const regroundPowderG = lots.reduce((sum, l) => sum + l.weightG, 0);
+    const result = calculateRegrind({
+      lots,
+      regroundPowderG,
+      targetActiveMgPerTablet: 18,
+      targetWeightG: 0.75,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: [],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    });
+    expect(result).not.toBeNull();
+    expect(result!.tabletCount).toBe(50000);
+    expect(result!.fillerAddG).toBeCloseTo(solve.fillerAddG, 6);
+    expect(result!.totalBlendG).toBeCloseTo(solve.totalBlendG, 6);
+    // The EasyTab/Silicon Dioxide carve-out calculateRegrind actually applies
+    // must match what solveRegrindLotWeight's feasibility check assumed.
+    expect(result!.easyTabG + result!.siliconDioxideG).toBeCloseTo(result!.totalBlendG * 0.003, 6);
   });
 });
 
@@ -639,7 +829,9 @@ describe('solveRegrindLotWeight — lubricant top-up feasibility', () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.fillerAddG).toBeCloseTo(5, 6);
+      // Pre-top-up filler = 5g, minus the always-on 0.3% EasyTab/Silicon
+      // Dioxide carve-out (1000 * 0.003 = 3g, unaffected by sourceType) = 2g.
+      expect(result.fillerAddG).toBeCloseTo(2, 6);
     }
   });
 });
@@ -653,11 +845,13 @@ describe('solveRegrindLotWeight — lubricant top-up feasibility', () => {
 // the same precise total-blend/lot-1-weight inputs; filler matches exactly,
 // the lot figure is off by 0.05g, consistent with a rounding artifact in
 // how that number was manually derived rather than a formula error).
-// solvedWeightG is unaffected by the later-added 1% lubricant top-up (it
-// only depends on active mass, not filler), so it's still checked against
-// the original reference value. The filler figure below is that same
-// original reference (48,257.4g) minus the top-up (800g = 1% of the 80,000g
-// total blend), since the top-up is now carved out of filler.
+// solvedWeightG is unaffected by the later-added 1% lubricant top-up or the
+// 0.3% EasyTab/Silicon Dioxide carve-out (it only depends on active mass,
+// not filler), so it's still checked against the original reference value.
+// The filler figure below is that same original reference (48,257.4g) minus
+// the lubricant top-up (800g = 1% of the 80,000g total blend) minus the
+// EasyTab/Silicon Dioxide carve-out (240g = 0.3% of 80,000g), since all
+// three are now carved out of filler: 48,257.4 - 800 - 240 = 47,217.4g.
 describe('solveRegrindLotWeight — known-correct example', () => {
   const fixedLots: { weightG: number; potency: PotencyInput; sourceType: 'regroundTablets' }[] = [
     { weightG: 11346.14, potency: { method: 'bulkPercent', percent: (14 / 730) * 100 }, sourceType: 'regroundTablets' },
@@ -680,7 +874,7 @@ describe('solveRegrindLotWeight — known-correct example', () => {
     }
   });
 
-  it('matches the provided filler figure net of the 1% lubricant top-up (48,257.4 - 800 = 47,457.4 g)', () => {
+  it('matches the provided filler figure net of the 1% lubricant top-up and 0.3% EasyTab/Silicon Dioxide (48,257.4 - 800 - 240 = 47,217.4 g)', () => {
     const result = solveRegrindLotWeight({
       fixedLots,
       solvingLotPotency,
@@ -691,7 +885,7 @@ describe('solveRegrindLotWeight — known-correct example', () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.fillerAddG).toBeCloseTo(47457.4, 1);
+      expect(result.fillerAddG).toBeCloseTo(47217.4, 1);
     }
   });
 
@@ -820,10 +1014,10 @@ describe('solveRegrindLotWeight — infeasibility guards', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       // 1000 tablets * 10mg / 1000 = 10g active needed, at 50% potency -> 20g.
-      // fillerAddG = 1000 - 20 - (1000 * 0.01 lubricant top-up) = 970.
+      // fillerAddG = 1000 - 20 - (1000 * 0.01 lubricant top-up) - (1000 * 0.003 EasyTab/Silicon Dioxide) = 967.
       expect(result.solvedWeightG).toBeCloseTo(20, 6);
       expect(result.totalBlendG).toBeCloseTo(1000, 6);
-      expect(result.fillerAddG).toBeCloseTo(970, 6);
+      expect(result.fillerAddG).toBeCloseTo(967, 6);
     }
   });
 });
