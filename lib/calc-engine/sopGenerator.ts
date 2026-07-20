@@ -105,7 +105,7 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
   // nothing to weigh, add, or mix here.
   if (result.lubricantTopUpG > 0) {
     steps.push(
-      `Add ${fmt(result.lubricantTopUpG, 2)} g ${result.lubricantTopUpIngredientName} (1% fresh top-up — most is already present in regrind)`,
+      `Add ${fmt(result.lubricantTopUpG, 2)} g ${result.lubricantTopUpIngredientName} (0.15% fresh top-up — most is already present in regrind)`,
       'Mix for 5 minutes'
     );
   }

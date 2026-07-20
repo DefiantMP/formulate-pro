@@ -166,14 +166,14 @@ const POWDER_WEIGHT_MISMATCH_TOLERANCE_G = 0.01;
  * a fresh top-up rather than relying entirely on residual lubricant from the
  * original press run. Only lots marked 'regroundTablets' contribute to this
  * — raw/bulk powder was never pressed, so it never had lubricant added in
- * the first place. Expressed as 1% of the final blend, scaled down by the
+ * the first place. Expressed as 0.15% of the final blend, scaled down by the
  * fraction of total lot weight that is reground-tablet lots (1.0 when every
  * lot is reground tablets, 0 when every lot is raw powder), and
  * redistributed out of the filler amount rather than added on top, so
  * totalBlendG is unaffected — see calculateRegrind and
  * solveRegrindLotWeight, both of which use this.
  */
-const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.01;
+const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.0015;
 
 /**
  * Two fixed processing aids added to every regrind batch to help with

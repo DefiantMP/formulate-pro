@@ -106,7 +106,7 @@ export type PotencyInput =
 
 /**
  * Whether a lot is previously-pressed tablets ground back down (gets a
- * share of the 1% lubricant top-up, since some lubricant was already used
+ * share of the 0.15% lubricant top-up, since some lubricant was already used
  * pressing it once) or raw/bulk powder that was never pressed (excluded
  * from the top-up basis entirely — see REGRIND_LUBRICANT_TOPUP_PERCENT in
  * calcEngine.ts). Defaults to 'regroundTablets' for legacy lots/saved runs
@@ -132,7 +132,7 @@ export interface RegrindLot {
   fillerType: string;
   /** Informational only — how much of this lot's material is on hand, for a stock-shortage warning. Never affects calculation. */
   availableStockG: number | null;
-  /** Determines this lot's share of the 1% lubricant top-up — see RegrindLotSourceType. */
+  /** Determines this lot's share of the 0.15% lubricant top-up — see RegrindLotSourceType. */
   sourceType: RegrindLotSourceType;
   /**
    * "Press starts" lots (inconsistent fill/compression before a press
@@ -159,7 +159,7 @@ export interface RegrindInput {
    * small fresh top-up in regrind mode — see REGRIND_LUBRICANT_TOPUP_PERCENT
    * in calcEngine.ts. This is deliberately separate from
    * alreadyPresentIngredientNames: most of this ingredient is still assumed
-   * already present in the reground powder, but a fixed 1% of the blend
+   * already present in the reground powder, but a fixed 0.15% of the blend
    * attributable to reground-tablet lots (RegrindLotSourceType) is added
    * fresh on top regardless. Raw/bulk-powder lots contribute nothing to this
    * top-up, and if every lot is raw powder the top-up is zero.
@@ -180,7 +180,7 @@ export interface RegrindLotResult {
   fillerType: string;
   /** Informational only — carried through from RegrindLot, for a stock-shortage warning in the UI. */
   availableStockG: number | null;
-  /** Determines this lot's share of the 1% lubricant top-up — see RegrindLotSourceType. */
+  /** Determines this lot's share of the 0.15% lubricant top-up — see RegrindLotSourceType. */
   sourceType: RegrindLotSourceType;
 }
 

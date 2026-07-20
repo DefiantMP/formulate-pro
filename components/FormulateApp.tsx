@@ -45,7 +45,7 @@ export interface RegrindLotState {
   fillerType: string;
   /** Optional, informational only — used for a stock-shortage warning, never affects calculation. */
   availableStockG: string;
-  /** Determines this lot's share of the 1% lubricant top-up. Defaults to 'regroundTablets' for legacy lots/saved runs. */
+  /** Determines this lot's share of the 0.15% lubricant top-up. Defaults to 'regroundTablets' for legacy lots/saved runs. */
   sourceType: RegrindLotSourceType;
   /** Solve-mode only: exactly one lot must have this true when regrindSolveMode is on. */
   isSolving: boolean;
@@ -575,7 +575,7 @@ export default function FormulateApp() {
       ...(result.lubricantTopUpG > 0
         ? [
             {
-              label: `${result.lubricantTopUpIngredientName} (1% fresh top-up)`,
+              label: `${result.lubricantTopUpIngredientName} (0.15% fresh top-up)`,
               value: `${fmt(result.lubricantTopUpG, 2)} g`,
               icon: 'droplet',
               key: false,
@@ -609,7 +609,7 @@ export default function FormulateApp() {
     // Only relevant when there's actually a top-up to add — see addRows above.
     if (result.lubricantTopUpG > 0) {
       rows.push(
-        `${result.lubricantTopUpIngredientName} is already present in regrind — add only the 1% fresh top-up (${fmt(result.lubricantTopUpG, 2)} g) shown above, not a full fresh addition`
+        `${result.lubricantTopUpIngredientName} is already present in regrind — add only the 0.15% fresh top-up (${fmt(result.lubricantTopUpG, 2)} g) shown above, not a full fresh addition`
       );
     }
     if (result.regroundPowderMismatch) {
