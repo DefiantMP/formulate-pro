@@ -236,8 +236,15 @@ export default function RegrindLotCard({
         </div>
       </div>
 
-      <div className="field" style={{ marginTop: 8 }}>
+      <div className="field" style={{ marginTop: 8, opacity: solveMode ? 1 : 0.55 }}>
         <label>Available stock (optional)</label>
+        <div
+          className="field-hint"
+          title="Optional — only relevant when using Solve for target tablet count. Warns if the calculated amount needed exceeds what you have on hand."
+        >
+          Optional — only relevant when using Solve for target tablet count. Warns if the calculated amount needed
+          exceeds what you have on hand.
+        </div>
         <div className="row">
           <input
             type="number"
