@@ -95,26 +95,28 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
 
   steps.push(
     result.freshActiveG > 0
-      ? `Add ${fmt(result.freshActiveG)} g fresh active`
-      : 'No fresh active needed — regrind active covers the full batch',
+      ? `Add ${fmt(result.freshActiveG)} g fresh API`
+      : 'No fresh API needed — regrind covers the full batch',
     // Bulk calculated filler + the fixed 0.15% EasyTab processing aid are the
     // same material, merged into one weigh/add step rather than two.
     `Add ${fmt(result.fillerAddG + result.easyTabG)} g ${result.fillerIngredientName}`,
     'Mix for 15 minutes'
   );
-  // Only relevant when at least one lot is marked reground-tablets — a batch
-  // made entirely of raw/bulk powder gets no top-up at all, so there's
-  // nothing to weigh, add, or mix here.
+  steps.push(
+    `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
+    'Mix for 3 minutes'
+  );
+  // Magnesium stearate is always the LAST ingredient added, after Silicon
+  // Dioxide — lubricants risk over-mixing/capping tablets if added earlier,
+  // so it gets its own short final mix. Only relevant when at least one lot
+  // is marked reground-tablets — a batch made entirely of raw/bulk powder
+  // gets no top-up at all, so there's nothing to weigh, add, or mix here.
   if (result.lubricantTopUpG > 0) {
     steps.push(
       `Add ${fmt(result.lubricantTopUpG, 2)} g ${result.lubricantTopUpIngredientName} (0.15% fresh top-up — most is already present in regrind)`,
-      'Mix for 5 minutes'
+      'Mix for 2 minutes'
     );
   }
-  steps.push(
-    `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
-    'Mix for 5 minutes'
-  );
   if (alreadyPresent) {
     steps.push(`Do not add any other fresh ${alreadyPresent} — already present in regrind`);
   }
