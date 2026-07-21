@@ -204,4 +204,48 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 /* Save confirmation toast */
 .toast { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 8px; background: var(--brand); color: #fff; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.18); animation: toast-in 0.2s ease-out; }
 .toast i { font-size: 16px; }
+
+/* Print batch instructions — combined Output + Variances + SOP sheet.
+   Hidden on screen; @media print swaps visibility so only this sheet
+   prints, regardless of which tab/panel is currently on screen. */
+.print-sheet { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  .print-sheet, .print-sheet * { visibility: visible; }
+  .print-sheet {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #000;
+    background: #fff;
+    font-size: 12pt;
+    line-height: 1.4;
+  }
+
+  .print-hdr { margin-bottom: 18px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+  .print-hdr h1 { font-size: 18pt; margin: 0 0 6px; }
+  .print-meta { font-size: 10pt; display: flex; flex-direction: column; gap: 2px; }
+
+  .print-section { margin-bottom: 20px; break-inside: avoid; }
+  .print-section h2 { font-size: 14pt; margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid #000; }
+  .print-section h3 { font-size: 11pt; margin: 12px 0 4px; }
+
+  .print-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 16px; margin-bottom: 10px; }
+  .print-stats > div { display: flex; flex-direction: column; }
+  .print-stats span { font-size: 9pt; color: #444; }
+  .print-stats strong { font-size: 13pt; }
+
+  .print-tbl { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+  .print-tbl td, .print-tbl th { padding: 4px 6px; border-bottom: 1px solid #ccc; text-align: left; }
+  .print-tbl tr { break-inside: avoid; }
+  .print-var-tbl .print-tgt { font-weight: 700; }
+
+  .print-warn-list, .print-sop-list { margin: 0; padding-left: 20px; }
+  .print-warn-list li, .print-sop-list li { margin-bottom: 6px; break-inside: avoid; }
+
+  @page { margin: 1.5cm; }
+}
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }

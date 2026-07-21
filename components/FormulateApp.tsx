@@ -977,10 +977,18 @@ export default function FormulateApp() {
   }
 
   return (
+    <>
     <div className="app">
       <Sidebar />
       <div className="main">
-        <Topbar mode={mode} onReset={resetForm} onSaveRun={saveRun} saving={saving} />
+        <Topbar
+          mode={mode}
+          onReset={resetForm}
+          onSaveRun={saveRun}
+          saving={saving}
+          onPrint={() => window.print()}
+          canPrint={!!result}
+        />
         <div className="content">
           <div className="col-left">
             <InputsPanel
@@ -1060,5 +1068,151 @@ export default function FormulateApp() {
         </div>
       )}
     </div>
+
+    {/* Print-only combined Output + Variances + SOP sheet — hidden on
+        screen (see .print-sheet in globals.css), shown via @media print
+        while the rest of .app is hidden. Kept as one flat, always-rendered
+        block rather than a portal/print-time DOM swap so window.print()
+        just works with no extra wiring. */}
+    <div className="print-sheet">
+      <div className="print-hdr">
+        <h1>Batch Instructions</h1>
+        <div className="print-meta">
+          <div>
+            <strong>Run:</strong>{' '}
+            {runs.find((r) => r.id === loadedRun)?.label ??
+              `Unsaved ${mode === 'fresh' ? 'fresh batch' : 'regrind'} run`}
+          </div>
+          <div>
+            <strong>Mode:</strong> {mode === 'fresh' ? 'Fresh batch' : 'Regrind'}
+          </div>
+          <div>
+            <strong>Printed:</strong>{' '}
+            <span suppressHydrationWarning>{new Date().toLocaleString()}</span>
+          </div>
+          {mode === 'regrind' && lots.length > 0 && (
+            <div>
+              <strong>Lots:</strong> {lots.map((l) => l.label).join(', ')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {result && stats && (
+        <section className="print-section">
+          <h2>Output</h2>
+          <div className="print-stats">
+            <div>
+              <span>Tablets</span>
+              <strong>{stats.tablets}</strong>
+            </div>
+            <div>
+              <span>Total blend</span>
+              <strong>{stats.blend} g</strong>
+            </div>
+            <div>
+              <span>{stats.potencyLabel}</span>
+              <strong>{stats.potency}</strong>
+            </div>
+            {stats.finalBlendPotency && (
+              <div>
+                <span>Final blend potency</span>
+                <strong>{stats.finalBlendPotency}</strong>
+              </div>
+            )}
+            <div>
+              <span>Verified mg / tab</span>
+              <strong>{stats.mgPerTab}</strong>
+            </div>
+          </div>
+
+          <h3>Add to V-mix</h3>
+          <table className="print-tbl">
+            <tbody>
+              {addRows.map((row) => (
+                <tr key={row.label}>
+                  <td>{row.label}</td>
+                  <td>{row.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {warnRows.length > 0 && (
+            <>
+              <h3>Warnings</h3>
+              <ul className="print-warn-list">
+                {warnRows.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {lotBreakdown && (
+            <>
+              <h3>Lot breakdown</h3>
+              <table className="print-tbl">
+                <tbody>
+                  {lotBreakdown.map((lot) => (
+                    <tr key={lot.label}>
+                      <td>
+                        {lot.label}
+                        {lot.fillerType ? ` — ${lot.fillerType}` : ''}
+                        {lot.isRawPowder ? ' (raw powder)' : ''}
+                        {lot.isStart ? ' (starts — low confidence)' : ''}
+                      </td>
+                      <td>
+                        {lot.weightG.toLocaleString('en-US', { maximumFractionDigits: 0 })} g @{' '}
+                        {lot.potencyPercent.toFixed(2)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </section>
+      )}
+
+      {varianceRows.length > 0 && (
+        <section className="print-section">
+          <h2>Variances</h2>
+          <table className="print-tbl print-var-tbl">
+            <thead>
+              <tr>
+                <th>Weight (g)</th>
+                <th>Step</th>
+                <th>Potency (mg)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {varianceRows.map((row) => (
+                <tr key={row.step} className={row.step === 0 ? 'print-tgt' : ''}>
+                  <td>{row.weightG.toFixed(3)}</td>
+                  <td>
+                    {row.step >= 0 ? '+' : ''}
+                    {row.step}
+                  </td>
+                  <td>{row.potencyMg.toFixed(3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {sopSteps.length > 0 && (
+        <section className="print-section">
+          <h2>SOP</h2>
+          <ol className="print-sop-list">
+            {sopSteps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </div>
+    </>
   );
 }
