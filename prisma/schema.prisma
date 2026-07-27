@@ -51,6 +51,30 @@ model RegrindLotPreset {
   updatedAt           DateTime @updatedAt
 }
 
+// A drafted/reference base formulation from the Formulations library
+// builder — a sandbox/reference sheet (in the style of RR8/PB50/PB30-type
+// sheets), never tied to a live Fresh Batch or Regrind calculation. Distinct
+// from Run (an actual batch calculation) and from Formulation above (the
+// internal ingredient template real runs point to via formulationId) —
+// deliberately its own model rather than reusing either.
+model SavedFormulation {
+  id                    String   @id @default(cuid())
+  name                  String
+  tabletWeightG         Float
+  referenceBatchTablets Int
+  // Array of { label, targetMgPerTablet, potencyPercent, source } — see
+  // SavedFormulationActive in lib/savedFormulations.ts.
+  actives               Json
+  fillerName            String
+  disintegrantName      String?
+  disintegrantPercent   Float?
+  lubricantName         String?
+  lubricantPercent      Float?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 // Historical manufacturing batches, importable via CSV.
 model BatchHistory {
   id                      String   @id @default(cuid())

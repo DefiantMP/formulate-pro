@@ -1,7 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { calculateFreshBatch, calculateRegrind, solveRegrindLotWeight, generateVarianceTable } from '../calcEngine';
+import {
+  calculateFreshBatch,
+  calculateRegrind,
+  solveRegrindLotWeight,
+  activePercentOfBlendFromDose,
+  generateVarianceTable,
+} from '../calcEngine';
 import { defaultIngredients } from '../defaultFormulation';
-import type { IngredientLine, PotencyInput, RegrindLot, FreshApiEntry, FreshApiPotency } from '../types';
+import type {
+  IngredientLine,
+  PotencyInput,
+  RegrindLot,
+  FreshApiEntry,
+  FreshApiPotency,
+} from '../types';
 
 /** A single-lot array whose weight matches regroundPowderG — reduces exactly to the pre-multi-lot formula. */
 function singleLot(potency: PotencyInput, weightG: number): RegrindLot[] {
@@ -235,6 +247,22 @@ describe('calculateFreshBatch — multiple APIs (combo product)', () => {
       fillerType: 'Emdex',
     });
     expect(result).toBeNull();
+  });
+});
+
+describe('activePercentOfBlendFromDose', () => {
+  it('matches the RR77-PB9 golden fixture (60mg @ 76.4% potency in a 0.69g tablet -> ~11.3817%)', () => {
+    expect(activePercentOfBlendFromDose(60, 76.4, 0.69)).toBeCloseTo(11.3817, 4);
+  });
+
+  it('a 100%-pure raw material at 50mg in a 1.0g tablet is exactly 5% of blend', () => {
+    expect(activePercentOfBlendFromDose(50, 100, 1.0)).toBeCloseTo(5, 6);
+  });
+
+  it('returns 0 for a non-positive dose, potency, or tablet weight', () => {
+    expect(activePercentOfBlendFromDose(0, 76.4, 0.69)).toBe(0);
+    expect(activePercentOfBlendFromDose(60, 0, 0.69)).toBe(0);
+    expect(activePercentOfBlendFromDose(60, 76.4, 0)).toBe(0);
   });
 });
 

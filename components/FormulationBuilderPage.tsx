@@ -1,0 +1,439 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import Sidebar from './Sidebar';
+import { deriveSavedFormulation, type SavedFormulationActive } from '@/lib/savedFormulations';
+import { numOrZero, fmt } from '@/lib/format';
+
+interface ActiveDraft {
+  id: string;
+  label: string;
+  targetMgPerTablet: string;
+  potencyPercent: string;
+  source: string;
+}
+
+let activeIdCounter = 0;
+function makeActiveId(): string {
+  activeIdCounter += 1;
+  return `draft-active-${Date.now()}-${activeIdCounter}`;
+}
+
+function blankActive(): ActiveDraft {
+  return { id: makeActiveId(), label: '', targetMgPerTablet: '', potencyPercent: '', source: '' };
+}
+
+/**
+ * A sandbox for drafting a base formulation from scratch — not tied to a
+ * live Fresh Batch or Regrind calculation, and never fed into
+ * calculateFreshBatch/calculateRegrind. Reuses the calc engine's mg/tablet
+ * <-> %-of-blend conversion (via deriveSavedFormulation) for the live
+ * preview, but everything else here is exploratory reference-sheet math.
+ */
+export default function FormulationBuilderPage() {
+  const router = useRouter();
+
+  const [name, setName] = useState('');
+  const [tabletWeightG, setTabletWeightG] = useState('');
+  const [referenceBatchTablets, setReferenceBatchTablets] = useState('10000');
+  const [actives, setActives] = useState<ActiveDraft[]>([blankActive()]);
+  const [fillerName, setFillerName] = useState('Emdex');
+  const [disintegrantName, setDisintegrantName] = useState('PVPP XL');
+  const [disintegrantPercent, setDisintegrantPercent] = useState('5');
+  const [lubricantName, setLubricantName] = useState('Magnesium stearate');
+  const [lubricantPercent, setLubricantPercent] = useState('2');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function updateActive(id: string, patch: Partial<ActiveDraft>) {
+    setActives((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  }
+  function addActive() {
+    setActives((prev) => [...prev, blankActive()]);
+  }
+  function removeActive(id: string) {
+    setActives((prev) => (prev.length <= 1 ? prev : prev.filter((a) => a.id !== id)));
+  }
+
+  const tabletWeightNum = numOrZero(tabletWeightG);
+  const referenceBatchNum = numOrZero(referenceBatchTablets);
+
+  const derived = useMemo(() => {
+    return deriveSavedFormulation({
+      tabletWeightG: tabletWeightNum,
+      referenceBatchTablets: referenceBatchNum,
+      actives: actives.map((a, i) => ({
+        label: a.label.trim() || `Active ${i + 1}`,
+        targetMgPerTablet: numOrZero(a.targetMgPerTablet),
+        potencyPercent: numOrZero(a.potencyPercent),
+        source: a.source,
+      })),
+      disintegrantPercent: disintegrantPercent === '' ? null : numOrZero(disintegrantPercent),
+      lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
+    });
+  }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent]);
+
+  const canSave =
+    name.trim() !== '' &&
+    tabletWeightNum > 0 &&
+    referenceBatchNum > 0 &&
+    fillerName.trim() !== '' &&
+    actives.every((a) => a.label.trim() !== '' && numOrZero(a.targetMgPerTablet) > 0 && numOrZero(a.potencyPercent) > 0);
+
+  async function save() {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      const payload: {
+        name: string;
+        tabletWeightG: number;
+        referenceBatchTablets: number;
+        actives: SavedFormulationActive[];
+        fillerName: string;
+        disintegrantName: string | null;
+        disintegrantPercent: number | null;
+        lubricantName: string | null;
+        lubricantPercent: number | null;
+        notes: string | null;
+      } = {
+        name: name.trim(),
+        tabletWeightG: tabletWeightNum,
+        referenceBatchTablets: referenceBatchNum,
+        actives: actives.map((a, i) => ({
+          label: a.label.trim() || `Active ${i + 1}`,
+          targetMgPerTablet: numOrZero(a.targetMgPerTablet),
+          potencyPercent: numOrZero(a.potencyPercent),
+          source: a.source.trim(),
+        })),
+        fillerName: fillerName.trim(),
+        disintegrantName: disintegrantName.trim() || null,
+        disintegrantPercent: disintegrantPercent === '' ? null : numOrZero(disintegrantPercent),
+        lubricantName: lubricantName.trim() || null,
+        lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
+        notes: notes.trim() || null,
+      };
+      const res = await fetch('/api/saved-formulations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        alert('Failed to save formulation.');
+        return;
+      }
+      const saved: { id: string } = await res.json();
+      router.push(`/formulations/${saved.id}`);
+    } catch {
+      alert('Failed to save formulation.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="app">
+      <Sidebar />
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-left">
+            <Link href="/formulations" className="btn">
+              <i className="ti ti-arrow-left" /> Formulations
+            </Link>
+            <div className="topbar-title">New formulation</div>
+            <span className="mode-chip">Draft — not a saved run</span>
+          </div>
+          <div className="topbar-right">
+            <button className="btn btn-p" onClick={save} disabled={!canSave || saving}>
+              <i className="ti ti-device-floppy" /> {saving ? 'Saving…' : 'Save to library'}
+            </button>
+          </div>
+        </div>
+        <div className="content">
+          <div className="col-left">
+            <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div className="card-hdr">
+                <div className="card-hdr-title">
+                  <i className="ti ti-flask" /> Inputs
+                </div>
+              </div>
+              <div className="card-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                <div className="field">
+                  <label>Formulation name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. RR8"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label>Target tablet weight</label>
+                  <div className="row">
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      step="0.001"
+                      value={tabletWeightG}
+                      onChange={(e) => setTabletWeightG(e.target.value)}
+                    />
+                    <div className="unit">g</div>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Reference batch size</label>
+                  <div className="row">
+                    <input
+                      type="number"
+                      placeholder="10000"
+                      step="1"
+                      value={referenceBatchTablets}
+                      onChange={(e) => setReferenceBatchTablets(e.target.value)}
+                    />
+                    <div className="unit">tabs</div>
+                  </div>
+                </div>
+
+                <div className="hr" />
+                <div className="sub-lbl">Active ingredients</div>
+                {actives.map((a, index) => (
+                  <div className="lot-card" key={a.id}>
+                    <div className="lot-card-hdr">
+                      <input
+                        className="lot-name-input"
+                        type="text"
+                        placeholder={`Active ${index + 1}`}
+                        value={a.label}
+                        onChange={(e) => updateActive(a.id, { label: e.target.value })}
+                      />
+                      <div className="lot-card-actions">
+                        {actives.length > 1 && (
+                          <button
+                            type="button"
+                            className="lot-icon-btn danger"
+                            title="Remove this active"
+                            onClick={() => removeActive(a.id)}
+                          >
+                            <i className="ti ti-trash" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="lot-field-grid">
+                      <div className="field" style={{ margin: 0 }}>
+                        <label>Target mg / tablet</label>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          step="0.1"
+                          value={a.targetMgPerTablet}
+                          onChange={(e) => updateActive(a.id, { targetMgPerTablet: e.target.value })}
+                        />
+                      </div>
+                      <div className="field" style={{ margin: 0 }}>
+                        <label>Raw material potency</label>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          step="0.01"
+                          value={a.potencyPercent}
+                          onChange={(e) => updateActive(a.id, { potencyPercent: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="field" style={{ marginTop: 8, marginBottom: 0 }}>
+                      <label>Source (optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Vendor X, Lot #123"
+                        value={a.source}
+                        onChange={(e) => updateActive(a.id, { source: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button type="button" className="add-lot-btn" onClick={addActive}>
+                  <i className="ti ti-plus" /> Add another active
+                </button>
+
+                <div className="hr" />
+                <div className="sub-lbl">Excipients</div>
+                <div className="field">
+                  <label>Filler type</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Emdex"
+                    value={fillerName}
+                    onChange={(e) => setFillerName(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label>% filler (auto)</label>
+                  <div className="row">
+                    <input type="number" readOnly value={derived.fillerPercent.toFixed(2)} />
+                    <div className="unit">%</div>
+                  </div>
+                </div>
+                <div className="lot-field-grid">
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Disintegrant</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. PVPP XL"
+                      value={disintegrantName}
+                      onChange={(e) => setDisintegrantName(e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>%</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      step="0.1"
+                      value={disintegrantPercent}
+                      onChange={(e) => setDisintegrantPercent(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="lot-field-grid" style={{ marginTop: 8 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Lubricant</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Magnesium stearate"
+                      value={lubricantName}
+                      onChange={(e) => setLubricantName(e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>%</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      step="0.1"
+                      value={lubricantPercent}
+                      onChange={(e) => setLubricantPercent(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="hr" />
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Notes</label>
+                  <textarea
+                    className="rh-notes"
+                    placeholder="Anything else worth recording about this draft…"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-mid">
+            <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div className="card-hdr">
+                <div className="card-hdr-title">
+                  <i className="ti ti-calculator" /> Derived values
+                </div>
+              </div>
+              <div className="card-body" style={{ flex: 1, overflowY: 'auto' }}>
+                <div className="stats">
+                  <div className="stat">
+                    <div className="stat-lbl">Target potency</div>
+                    <div className="stat-val">{derived.combinedActivePercent.toFixed(2)}%</div>
+                    <div className="stat-unit">of blend</div>
+                  </div>
+                  <div className="stat">
+                    <div className="stat-lbl">Total batch weight</div>
+                    <div className="stat-val">{fmt(derived.totalBatchG, 0)}</div>
+                    <div className="stat-unit">grams</div>
+                  </div>
+                </div>
+
+                <div className="add-sub">Active ingredients</div>
+                <div>
+                  {derived.actives.map((a) => (
+                    <div className="add-row key" key={a.label}>
+                      <div className="add-lbl">
+                        <i className="ti ti-plus" />
+                        {a.label} — {fmt(a.targetMgPerTablet, 1)} mg/tab @ {a.potencyPercent.toFixed(2)}%
+                      </div>
+                      <div className="add-val green">
+                        {a.percentOfBlend.toFixed(3)}% · {fmt(a.gramsPerBatch, 1)} g
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="add-sub" style={{ marginTop: 14 }}>
+                  Excipients
+                </div>
+                <div>
+                  <div className="add-row">
+                    <div className="add-lbl">
+                      <i className="ti ti-cube" />
+                      {fillerName || 'Filler'} (auto)
+                    </div>
+                    <div className="add-val">
+                      {derived.fillerPercent.toFixed(2)}% · {fmt(derived.fillerGramsPerBatch, 1)} g
+                    </div>
+                  </div>
+                  {disintegrantName.trim() && (
+                    <div className="add-row">
+                      <div className="add-lbl">
+                        <i className="ti ti-circle-plus" />
+                        {disintegrantName}
+                      </div>
+                      <div className="add-val">
+                        {numOrZero(disintegrantPercent).toFixed(2)}% ·{' '}
+                        {fmt(derived.disintegrantGramsPerBatch ?? 0, 1)} g
+                      </div>
+                    </div>
+                  )}
+                  {lubricantName.trim() && (
+                    <div className="add-row">
+                      <div className="add-lbl">
+                        <i className="ti ti-droplet" />
+                        {lubricantName}
+                      </div>
+                      <div className="add-val">
+                        {numOrZero(lubricantPercent).toFixed(2)}% · {fmt(derived.lubricantGramsPerBatch ?? 0, 1)} g
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-right">
+            <div className="card">
+              <div className="card-hdr">
+                <div className="card-hdr-title">
+                  <i className="ti ti-flask-2" /> Continue in R&D Suite
+                </div>
+              </div>
+              <div className="card-body">
+                <div className="tip">
+                  Keep experimenting with this draft's excipients before saving it to the library.
+                </div>
+                <Link href="/iterations" className="btn" style={{ width: '100%', marginBottom: 6 }}>
+                  <i className="ti ti-chart-line" /> Iterations
+                </Link>
+                <Link href="/troubleshoot" className="btn" style={{ width: '100%', marginBottom: 6 }}>
+                  <i className="ti ti-bug" /> Troubleshoot
+                </Link>
+                <Link href="/lab-notes" className="btn" style={{ width: '100%' }}>
+                  <i className="ti ti-notes" /> Lab notes
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

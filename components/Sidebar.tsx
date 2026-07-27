@@ -1,4 +1,11 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
 export default function Sidebar() {
+  const pathname = usePathname();
+
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -7,27 +14,30 @@ export default function Sidebar() {
       </div>
       <nav className="nav">
         <div className="nav-section">Workspace</div>
-        <button className="nav-btn active">
+        <Link href="/" className={`nav-btn${pathname === '/' ? ' active' : ''}`}>
           <i className="ti ti-flask" /> New run
-        </button>
+        </Link>
         <button className="nav-btn">
           <i className="ti ti-history" /> Run history
         </button>
-        <button className="nav-btn">
+        <Link
+          href="/formulations"
+          className={`nav-btn${pathname.startsWith('/formulations') ? ' active' : ''}`}
+        >
           <i className="ti ti-library" /> Formulations
-        </button>
+        </Link>
         <div className="nav-section" style={{ marginTop: 8 }}>
           R&D Suite
         </div>
-        <button className="nav-btn">
+        <Link href="/iterations" className={`nav-btn${pathname === '/iterations' ? ' active' : ''}`}>
           <i className="ti ti-chart-line" /> Iterations
-        </button>
-        <button className="nav-btn">
+        </Link>
+        <Link href="/troubleshoot" className={`nav-btn${pathname === '/troubleshoot' ? ' active' : ''}`}>
           <i className="ti ti-bug" /> Troubleshoot
-        </button>
-        <button className="nav-btn">
+        </Link>
+        <Link href="/lab-notes" className={`nav-btn${pathname === '/lab-notes' ? ' active' : ''}`}>
           <i className="ti ti-notes" /> Lab notes
-        </button>
+        </Link>
         <div className="nav-section" style={{ marginTop: 8 }}>
           Account
         </div>

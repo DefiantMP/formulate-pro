@@ -140,6 +140,27 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
   };
 }
 
+/**
+ * Converts a target active dose (mg/tablet) at a given raw-material bulk
+ * potency (%) into that active's % of the total tablet blend by weight —
+ * the same mg/tablet -> %-of-blend derivation calculateFreshBatch performs
+ * internally (see freshApiEffectivePotency and the per-API math above),
+ * extracted as a small standalone reusable helper for callers that need just
+ * this conversion without a full fresh-batch calculation (e.g. the
+ * Formulations library builder, a sandbox that isn't tied to a live Fresh
+ * Batch or Regrind run). Does not call or modify calculateFreshBatch.
+ */
+export function activePercentOfBlendFromDose(
+  targetActiveMgPerTablet: number,
+  bulkPotencyPercent: number,
+  tabletWeightG: number
+): number {
+  if (targetActiveMgPerTablet <= 0 || bulkPotencyPercent <= 0 || tabletWeightG <= 0) return 0;
+  const potencyFraction = bulkPotencyPercent / 100;
+  const rawMaterialMgPerTablet = targetActiveMgPerTablet / potencyFraction;
+  return (rawMaterialMgPerTablet / (tabletWeightG * 1000)) * 100;
+}
+
 /** Resolves a lot's potency input (bulk % or mg-per-tablet) to a 0-1 active fraction. */
 function lotEffectivePotency(potency: PotencyInput): number {
   if (potency.method === 'bulkPercent') {
