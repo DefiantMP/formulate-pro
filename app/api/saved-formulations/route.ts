@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import type { SavedFormulationActive } from '@/lib/savedFormulations';
+import { effectiveLineageId, SAVED_FORMULATION_STATUSES, type SavedFormulationActive } from '@/lib/savedFormulations';
 
 export async function GET() {
   const formulations = await prisma.savedFormulation.findMany({
@@ -37,6 +37,9 @@ export async function POST(request: NextRequest) {
     lubricantName,
     lubricantPercent,
     notes,
+    parentId,
+    status,
+    outcomeNotes,
   } = body;
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -57,6 +60,30 @@ export async function POST(request: NextRequest) {
   if (typeof fillerName !== 'string' || !fillerName.trim()) {
     return NextResponse.json({ error: 'fillerName is required' }, { status: 400 });
   }
+  if (status !== undefined && (typeof status !== 'string' || !SAVED_FORMULATION_STATUSES.includes(status as never))) {
+    return NextResponse.json(
+      { error: `status must be one of ${SAVED_FORMULATION_STATUSES.join(', ')}` },
+      { status: 400 }
+    );
+  }
+
+  // Iterating from an existing formulation: inherit its lineage and bump the
+  // version number. The prior version's own row is never modified — this is
+  // always a fresh create, matching the builder's existing create-only
+  // semantics (no update/edit endpoint exists or is needed).
+  let lineageId: string | null = null;
+  let version = 1;
+  if (parentId !== undefined) {
+    if (typeof parentId !== 'string' || !parentId.trim()) {
+      return NextResponse.json({ error: 'parentId must be a non-empty string when provided' }, { status: 400 });
+    }
+    const parent = await prisma.savedFormulation.findUnique({ where: { id: parentId } });
+    if (!parent) {
+      return NextResponse.json({ error: 'parentId does not reference an existing formulation' }, { status: 400 });
+    }
+    lineageId = effectiveLineageId(parent);
+    version = parent.version + 1;
+  }
 
   const formulation = await prisma.savedFormulation.create({
     data: {
@@ -70,6 +97,11 @@ export async function POST(request: NextRequest) {
       lubricantName: typeof lubricantName === 'string' && lubricantName.trim() ? lubricantName.trim() : null,
       lubricantPercent: typeof lubricantPercent === 'number' ? lubricantPercent : null,
       notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
+      lineageId,
+      version,
+      parentId: typeof parentId === 'string' ? parentId : null,
+      status: typeof status === 'string' ? status : 'untested',
+      outcomeNotes: typeof outcomeNotes === 'string' && outcomeNotes.trim() ? outcomeNotes.trim() : null,
     },
   });
 

@@ -73,6 +73,22 @@ model SavedFormulation {
   notes                 String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  // Iteration/versioning (added 2026-07-27). lineageId groups every version
+  // of one formulation together; null means "this row is its own lineage
+  // root" (every consumer falls back to lineageId ?? id — see
+  // effectiveLineageId in lib/savedFormulations.ts — the same nullable +
+  // in-code-fallback pattern already used for Run's COA fields, rather than
+  // a riskier SQLite table-rebuild migration to make it required).
+  lineageId    String?
+  version      Int      @default(1)
+  parentId     String?
+  parent       SavedFormulation?  @relation("FormulationLineage", fields: [parentId], references: [id])
+  children     SavedFormulation[] @relation("FormulationLineage")
+  // 'untested' | 'passed' | 'failed' | 'issue' — drafting-stage outcome
+  // tracking, independent of Run's production-lab COA fields above.
+  status       String   @default("untested")
+  outcomeNotes String?
 }
 
 // Historical manufacturing batches, importable via CSV.

@@ -1,10 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
-import { deriveSavedFormulation, type SavedFormulationActive } from '@/lib/savedFormulations';
+import {
+  deriveSavedFormulation,
+  SAVED_FORMULATION_STATUSES,
+  savedFormulationStatusLabel,
+  type SavedFormulationActive,
+  type SavedFormulationRecord,
+  type SavedFormulationStatus,
+} from '@/lib/savedFormulations';
 import { numOrZero, fmt } from '@/lib/format';
 
 interface ActiveDraft {
@@ -25,14 +32,27 @@ function blankActive(): ActiveDraft {
   return { id: makeActiveId(), label: '', targetMgPerTablet: '', potencyPercent: '', source: '' };
 }
 
+interface FormulationBuilderPageProps {
+  /** When set, this draft pre-fills from and iterates that formulation — see the "Iterate" button on FormulationDetailPage. */
+  iterateFromId?: string;
+}
+
 /**
  * A sandbox for drafting a base formulation from scratch — not tied to a
  * live Fresh Batch or Regrind calculation, and never fed into
  * calculateFreshBatch/calculateRegrind. Reuses the calc engine's mg/tablet
  * <-> %-of-blend conversion (via deriveSavedFormulation) for the live
  * preview, but everything else here is exploratory reference-sheet math.
+ *
+ * When iterateFromId is set, the draft is pre-filled from that formulation
+ * on mount (fully editable from there) but nothing is written to the DB
+ * until Save — "Iterate" only navigates here, it never creates a row by
+ * itself. Save reuses the exact same create-only POST /api/saved-formulations
+ * endpoint, just with parentId set, so no separate update/edit endpoint is
+ * needed and no orphaned empty version is left behind if the user abandons
+ * the edit.
  */
-export default function FormulationBuilderPage() {
+export default function FormulationBuilderPage({ iterateFromId }: FormulationBuilderPageProps) {
   const router = useRouter();
 
   const [name, setName] = useState('');
@@ -45,7 +65,49 @@ export default function FormulationBuilderPage() {
   const [lubricantName, setLubricantName] = useState('Magnesium stearate');
   const [lubricantPercent, setLubricantPercent] = useState('2');
   const [notes, setNotes] = useState('');
+  const [status, setStatus] = useState<SavedFormulationStatus>('untested');
+  const [outcomeNotes, setOutcomeNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [parent, setParent] = useState<SavedFormulationRecord | null>(null);
+  const [loadingParent, setLoadingParent] = useState(!!iterateFromId);
+
+  useEffect(() => {
+    if (!iterateFromId) return;
+    let cancelled = false;
+    setLoadingParent(true);
+    fetch(`/api/saved-formulations/${iterateFromId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: SavedFormulationRecord | null) => {
+        if (cancelled || !data) return;
+        setParent(data);
+        setName(data.name);
+        setTabletWeightG(String(data.tabletWeightG));
+        setReferenceBatchTablets(String(data.referenceBatchTablets));
+        setActives(
+          data.actives.map((a) => ({
+            id: makeActiveId(),
+            label: a.label,
+            targetMgPerTablet: String(a.targetMgPerTablet),
+            potencyPercent: String(a.potencyPercent),
+            source: a.source,
+          }))
+        );
+        setFillerName(data.fillerName);
+        setDisintegrantName(data.disintegrantName ?? '');
+        setDisintegrantPercent(data.disintegrantPercent != null ? String(data.disintegrantPercent) : '');
+        setLubricantName(data.lubricantName ?? '');
+        setLubricantPercent(data.lubricantPercent != null ? String(data.lubricantPercent) : '');
+        // Outcome fields deliberately reset for the new iteration rather than
+        // copying the parent's — the parent's status/notes describe what
+        // already happened to it, not this not-yet-tested draft.
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingParent(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [iterateFromId]);
 
   function updateActive(id: string, patch: Partial<ActiveDraft>) {
     setActives((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
@@ -76,6 +138,7 @@ export default function FormulationBuilderPage() {
   }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent]);
 
   const canSave =
+    !loadingParent &&
     name.trim() !== '' &&
     tabletWeightNum > 0 &&
     referenceBatchNum > 0 &&
@@ -97,6 +160,9 @@ export default function FormulationBuilderPage() {
         lubricantName: string | null;
         lubricantPercent: number | null;
         notes: string | null;
+        parentId?: string;
+        status: SavedFormulationStatus;
+        outcomeNotes: string | null;
       } = {
         name: name.trim(),
         tabletWeightG: tabletWeightNum,
@@ -113,6 +179,9 @@ export default function FormulationBuilderPage() {
         lubricantName: lubricantName.trim() || null,
         lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
         notes: notes.trim() || null,
+        ...(iterateFromId ? { parentId: iterateFromId } : {}),
+        status,
+        outcomeNotes: outcomeNotes.trim() || null,
       };
       const res = await fetch('/api/saved-formulations', {
         method: 'POST',
@@ -142,7 +211,11 @@ export default function FormulationBuilderPage() {
               <i className="ti ti-arrow-left" /> Formulations
             </Link>
             <div className="topbar-title">New formulation</div>
-            <span className="mode-chip">Draft — not a saved run</span>
+            <span className="mode-chip">
+              {iterateFromId
+                ? `Iterating from ${parent ? `v${parent.version} — ${parent.name}` : '…'}`
+                : 'Draft — not a saved run'}
+            </span>
           </div>
           <div className="topbar-right">
             <button className="btn btn-p" onClick={save} disabled={!canSave || saving}>
@@ -316,6 +389,28 @@ export default function FormulationBuilderPage() {
                       onChange={(e) => setLubricantPercent(e.target.value)}
                     />
                   </div>
+                </div>
+
+                <div className="hr" />
+                <div className="sub-lbl">Outcome (this version)</div>
+                <div className="field">
+                  <label>Status</label>
+                  <select value={status} onChange={(e) => setStatus(e.target.value as SavedFormulationStatus)}>
+                    {SAVED_FORMULATION_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {savedFormulationStatusLabel(s)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Issue / outcome notes</label>
+                  <textarea
+                    className="rh-notes"
+                    placeholder="e.g. capping at compression, resolved after increasing lubricant…"
+                    value={outcomeNotes}
+                    onChange={(e) => setOutcomeNotes(e.target.value)}
+                  />
                 </div>
 
                 <div className="hr" />

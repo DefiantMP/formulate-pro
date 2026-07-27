@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
+import VersionHistoryPanel from './VersionHistoryPanel';
+import ChatPanel, { type ChatMessage } from './ChatPanel';
 import { deriveSavedFormulation, type SavedFormulationRecord } from '@/lib/savedFormulations';
 import { fmt } from '@/lib/format';
 
@@ -14,12 +16,26 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
   const [formulation, setFormulation] = useState<SavedFormulationRecord | null | undefined>(undefined);
 
   useEffect(() => {
+    setFormulation(undefined);
     fetch(`/api/saved-formulations/${id}`)
       .then((res) => (res.ok ? res.json() : null))
       .then(setFormulation);
   }, [id]);
 
   const derived = formulation ? deriveSavedFormulation(formulation) : null;
+
+  async function handleChatSend(message: string, history: ChatMessage[]): Promise<string> {
+    const res = await fetch(`/api/saved-formulations/${id}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || typeof data?.reply !== 'string') {
+      throw new Error(data?.error || 'Chat unavailable right now.');
+    }
+    return data.reply;
+  }
 
   return (
     <div className="app">
@@ -32,6 +48,13 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
             </Link>
             <div className="topbar-title">{formulation ? formulation.name : 'Formulation'}</div>
           </div>
+          {formulation && (
+            <div className="topbar-right">
+              <Link href={`/formulations/new?iterateFrom=${id}`} className="btn btn-p">
+                <i className="ti ti-git-branch" /> Iterate
+              </Link>
+            </div>
+          )}
         </div>
         <div className="rh-page">
           {formulation === undefined ? (
@@ -49,6 +72,7 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
               </div>
             </div>
           ) : (
+            <>
             <div className="card card-body">
               <div className="stats">
                 <div className="stat">
@@ -149,6 +173,26 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
                 </>
               )}
             </div>
+
+            <VersionHistoryPanel currentId={id} />
+
+            <div className="card">
+              <div className="card-hdr">
+                <div className="card-hdr-title">
+                  <i className="ti ti-message-circle" /> Troubleshoot
+                </div>
+              </div>
+              <div className="card-body" style={{ padding: 0 }}>
+                <ChatPanel
+                  title="this formulation's history"
+                  icon="message-circle"
+                  placeholder="Describe an issue, e.g. &quot;tablets are capping&quot;…"
+                  emptyHint="Describe an issue (e.g. capping, sticking) to get advisory suggestions grounded in this formulation's version history."
+                  onSend={handleChatSend}
+                />
+              </div>
+            </div>
+            </>
           )}
         </div>
       </div>
