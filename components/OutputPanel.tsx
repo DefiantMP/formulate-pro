@@ -1,4 +1,5 @@
 import type { VarianceRow } from '@/lib/calc-engine/types';
+import { fmt } from '@/lib/format';
 
 export type TabKey = 'output' | 'variance' | 'sop';
 
@@ -41,6 +42,16 @@ export interface LotBreakdownRow {
   isRawPowder: boolean;
 }
 
+export interface ApiStockBreakdownRow {
+  id: string;
+  label: string;
+  availableStockG: number;
+  usedG: number;
+  leftoverG: number;
+  isLimiting: boolean;
+  maxTabletsFromThisAPI: number;
+}
+
 interface OutputPanelProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
@@ -49,6 +60,8 @@ interface OutputPanelProps {
   addRows: AddRowData[];
   warnRows: string[];
   lotBreakdown: LotBreakdownRow[] | null;
+  /** Fresh-batch solve-for-max-tablets mode only — per-API stock used/available/leftover, with the limiting API flagged. */
+  apiStockBreakdown?: ApiStockBreakdownRow[] | null;
   varianceRows: VarianceRow[];
   sopSteps: string[];
   /** Overrides the default empty-state text — e.g. a regrind solve-mode validation or infeasibility error. */
@@ -63,10 +76,12 @@ export default function OutputPanel({
   addRows,
   warnRows,
   lotBreakdown,
+  apiStockBreakdown,
   varianceRows,
   sopSteps,
   emptyMessage,
 }: OutputPanelProps) {
+  const limitingApi = apiStockBreakdown?.find((a) => a.isLimiting) ?? null;
   return (
     <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div className="tabs">
@@ -128,6 +143,14 @@ export default function OutputPanel({
                   <div className="stat-unit">mg</div>
                 </div>
               </div>
+              {limitingApi && (
+                <div className="limit-banner">
+                  <i className="ti ti-gauge" />
+                  <div>
+                    Limited by: <strong>{limitingApi.label}</strong> — {limitingApi.maxTabletsFromThisAPI.toLocaleString('en-US')} tablets max
+                  </div>
+                </div>
+              )}
               <div className="add-sub">Add to V-mix</div>
               <div>
                 {addRows.map((row) => (
@@ -161,6 +184,25 @@ export default function OutputPanel({
                         <div className="lot-breakdown-val">
                           {lot.weightG.toLocaleString('en-US', { maximumFractionDigits: 0 })} g @{' '}
                           {lot.potencyPercent.toFixed(2)}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {apiStockBreakdown && apiStockBreakdown.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div className="add-sub">Stock used per API</div>
+                  <div>
+                    {apiStockBreakdown.map((api) => (
+                      <div className="lot-breakdown-row" key={api.id}>
+                        <div className="lot-breakdown-lbl">
+                          {api.label}
+                          {api.isLimiting && <span className="lot-badge">Limiting</span>}
+                        </div>
+                        <div className="lot-breakdown-val">
+                          {fmt(api.usedG, 2)} g used / {fmt(api.availableStockG, 2)} g available
+                          {api.leftoverG > 0.005 ? ` (${fmt(api.leftoverG, 2)} g leftover)` : ''}
                         </div>
                       </div>
                     ))}

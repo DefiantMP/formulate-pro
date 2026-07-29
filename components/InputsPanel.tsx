@@ -30,6 +30,8 @@ interface InputsPanelProps {
   setFTwt: StrSetter;
   fTabs: string;
   setFTabs: StrSetter;
+  freshSolveMode: boolean;
+  onFreshSolveModeChange: (on: boolean) => void;
   /** Every non-active, non-filler ingredient in the active formulation — one % field is rendered per entry. */
   excipients: IngredientLine[];
   excipientPercents: Record<string, string>;
@@ -58,10 +60,12 @@ interface InputsPanelProps {
   setRgTargetTablets: StrSetter;
   /** The solving lot's computed weight, once solved — null until then. */
   solvedWeightG: number | null;
+  /** True while a run name hasn't been chosen yet — locks every field until it has (see NewRunModal). */
+  disabled?: boolean;
 }
 
 export default function InputsPanel(props: InputsPanelProps) {
-  const { mode, onModeChange } = props;
+  const { mode, onModeChange, disabled = false } = props;
   const lotWeightSum = props.lots.reduce((sum, lot) => sum + numOrZero(lot.weightG), 0);
 
   return (
@@ -72,6 +76,10 @@ export default function InputsPanel(props: InputsPanelProps) {
         </div>
       </div>
       <div className="card-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      <fieldset
+        disabled={disabled}
+        style={{ border: 0, margin: 0, padding: 0, pointerEvents: disabled ? 'none' : undefined }}
+      >
         <div className="mode-toggle">
           <button
             className={`m-btn${mode === 'fresh' ? ' active' : ''}`}
@@ -115,6 +123,15 @@ export default function InputsPanel(props: InputsPanelProps) {
               </div>
             </div>
 
+            <label className="lot-check-row" style={{ marginTop: 12 }}>
+              <input
+                type="checkbox"
+                checked={props.freshSolveMode}
+                onChange={(e) => props.onFreshSolveModeChange(e.target.checked)}
+              />
+              Solve for max tablets from available stock
+            </label>
+
             <div className="sub-lbl" style={{ marginTop: 12 }}>
               APIs
             </div>
@@ -125,6 +142,7 @@ export default function InputsPanel(props: InputsPanelProps) {
                 index={index}
                 canRemove={props.apis.length > 1}
                 potencyMethod={props.potencyMethod}
+                solveMode={props.freshSolveMode}
                 onChange={props.onUpdateApi}
                 onRemove={props.onRemoveApi}
               />
@@ -147,19 +165,21 @@ export default function InputsPanel(props: InputsPanelProps) {
                 <div className="unit">g</div>
               </div>
             </div>
-            <div className="field">
-              <label>Tablets per run</label>
-              <div className="row">
-                <input
-                  type="number"
-                  placeholder="0"
-                  step="1"
-                  value={props.fTabs}
-                  onChange={(e) => props.setFTabs(e.target.value)}
-                />
-                <div className="unit">tabs</div>
+            {!props.freshSolveMode && (
+              <div className="field">
+                <label>Tablets per run</label>
+                <div className="row">
+                  <input
+                    type="number"
+                    placeholder="0"
+                    step="1"
+                    value={props.fTabs}
+                    onChange={(e) => props.setFTabs(e.target.value)}
+                  />
+                  <div className="unit">tabs</div>
+                </div>
               </div>
-            </div>
+            )}
             <div className="hr" />
             <div className="field">
               <label>Filler type</label>
@@ -305,6 +325,7 @@ export default function InputsPanel(props: InputsPanelProps) {
             </div>
           </div>
         )}
+      </fieldset>
       </div>
     </div>
   );

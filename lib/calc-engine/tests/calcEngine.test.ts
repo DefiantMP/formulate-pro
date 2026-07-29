@@ -3,6 +3,7 @@ import {
   calculateFreshBatch,
   calculateRegrind,
   solveRegrindLotWeight,
+  solveFreshBatchMaxTablets,
   activePercentOfBlendFromDose,
   generateVarianceTable,
 } from '../calcEngine';
@@ -13,6 +14,7 @@ import type {
   RegrindLot,
   FreshApiEntry,
   FreshApiPotency,
+  FreshApiStockEntry,
 } from '../types';
 
 /** A single-lot array whose weight matches regroundPowderG — reduces exactly to the pre-multi-lot formula. */
@@ -250,6 +252,124 @@ describe('calculateFreshBatch — multiple APIs (combo product)', () => {
   });
 });
 
+// solveFreshBatchMaxTablets is a standalone calculation kept deliberately
+// separate from calculateFreshBatch (same pattern as solveRegrindLotWeight
+// for regrind) — it never calls or modifies calculateFreshBatch, so the
+// ordinary manual-tablet-count fresh-batch flow above is completely
+// unaffected by this function's existence.
+describe('solveFreshBatchMaxTablets — RR77-PB9 golden tie-in (single API)', () => {
+  // The RR77-PB9 fixture above uses 855.00 g of active raw material to
+  // produce exactly 10,887 tablets at 76.4% potency / 60 mg target — so
+  // feeding that same 855.00 g back in as "available stock" must solve for
+  // exactly 10,887 tablets.
+  const apis: FreshApiStockEntry[] = [
+    { id: 'active', label: 'API', targetActiveMgPerTablet: 60, potency: { method: 'bulkPercent', percent: 76.4 }, availableStockG: 855.0 },
+  ];
+
+  it('solves for exactly 10,887 tablets, matching the golden fixture', () => {
+    const result = solveFreshBatchMaxTablets({ apis });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.tabletCount).toBe(10887);
+      expect(result.limitingApiId).toBe('active');
+      expect(result.perApi[0].maxTabletsFromThisAPI).toBe(10887);
+      expect(result.perApi[0].isLimiting).toBe(true);
+    }
+  });
+
+  it('feeding the solved tabletCount into calculateFreshBatch reproduces the RR77-PB9 golden totals exactly', () => {
+    const solve = solveFreshBatchMaxTablets({ apis });
+    expect(solve.ok).toBe(true);
+    if (!solve.ok) return;
+
+    const result = calculateFreshBatch({
+      tabletCount: solve.tabletCount,
+      targetWeightG: 0.69,
+      apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
+    });
+    expect(result).not.toBeNull();
+    expect(result!.tabletCount).toBe(10887);
+    expect(result!.totalBlendG).toBeCloseTo(7512.03, 6);
+    expect(result!.ingredientGrams['active']).toBeCloseTo(855.0, 2);
+  });
+});
+
+describe('solveFreshBatchMaxTablets — multiple APIs, limiting API + leftover stock', () => {
+  // Both APIs need 50mg of raw material per tablet (API1: 50mg @ 100%
+  // potency; API2: 30mg @ 60% potency -> 50mg raw material/tablet), so
+  // maxTabletsFromThisAPI reduces to availableStockG * 20 for both — only
+  // the stock amounts differ, isolating the "whichever runs out first wins"
+  // logic from any potency-math differences.
+  const apis: FreshApiStockEntry[] = [
+    {
+      id: 'api1',
+      label: 'Ingredient A',
+      targetActiveMgPerTablet: 50,
+      potency: { method: 'bulkPercent', percent: 100 },
+      availableStockG: 1000, // -> 20,000 tablets max
+    },
+    {
+      id: 'api2',
+      label: 'Ingredient B',
+      targetActiveMgPerTablet: 30,
+      potency: { method: 'mgPerUnit', mgPerUnit: 600, unitWeightG: 1 },
+      availableStockG: 90, // -> 1,800 tablets max, the binding constraint
+    },
+  ];
+
+  it('the achievable tablet count is the minimum across APIs, and flags the correct limiting API', () => {
+    const result = solveFreshBatchMaxTablets({ apis });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.tabletCount).toBe(1800);
+      expect(result.limitingApiId).toBe('api2');
+      expect(result.limitingApiLabel).toBe('Ingredient B');
+      const api1 = result.perApi.find((p) => p.id === 'api1')!;
+      const api2 = result.perApi.find((p) => p.id === 'api2')!;
+      expect(api1.maxTabletsFromThisAPI).toBe(20000);
+      expect(api1.isLimiting).toBe(false);
+      expect(api2.maxTabletsFromThisAPI).toBe(1800);
+      expect(api2.isLimiting).toBe(true);
+    }
+  });
+
+  it('feeding the solved tabletCount into calculateFreshBatch shows the limiting API using all its stock and the other with leftover', () => {
+    const solve = solveFreshBatchMaxTablets({ apis });
+    expect(solve.ok).toBe(true);
+    if (!solve.ok) return;
+
+    const ingredients: IngredientLine[] = [
+      { id: 'filler', name: 'Emdex', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
+    ];
+    const freshApis: FreshApiEntry[] = apis.map(({ id, label, targetActiveMgPerTablet, potency }) => ({
+      id,
+      label,
+      targetActiveMgPerTablet,
+      potency,
+    }));
+    const result = calculateFreshBatch({
+      tabletCount: solve.tabletCount,
+      targetWeightG: 1.0,
+      apis: freshApis,
+      ingredients,
+      fillerType: 'Emdex',
+    });
+    expect(result).not.toBeNull();
+    expect(result!.tabletCount).toBe(1800);
+
+    const api1UsedG = result!.ingredientGrams['api1'];
+    const api2UsedG = result!.ingredientGrams['api2'];
+    expect(api1UsedG).toBeCloseTo(90, 6); // 1800 tablets * 0.05g/tablet
+    expect(api2UsedG).toBeCloseTo(90, 6);
+
+    // API1 (non-limiting) has leftover stock; API2 (limiting) uses all of it.
+    expect(1000 - api1UsedG).toBeCloseTo(910, 6);
+    expect(90 - api2UsedG).toBeCloseTo(0, 6);
+  });
+});
+
 describe('activePercentOfBlendFromDose', () => {
   it('matches the RR77-PB9 golden fixture (60mg @ 76.4% potency in a 0.69g tablet -> ~11.3817%)', () => {
     expect(activePercentOfBlendFromDose(60, 76.4, 0.69)).toBeCloseTo(11.3817, 4);
@@ -263,6 +383,54 @@ describe('activePercentOfBlendFromDose', () => {
     expect(activePercentOfBlendFromDose(0, 76.4, 0.69)).toBe(0);
     expect(activePercentOfBlendFromDose(60, 0, 0.69)).toBe(0);
     expect(activePercentOfBlendFromDose(60, 76.4, 0)).toBe(0);
+  });
+});
+
+describe('solveFreshBatchMaxTablets — infeasibility guards', () => {
+  it('returns ok:false when apis is empty', () => {
+    const result = solveFreshBatchMaxTablets({ apis: [] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/at least one api/i);
+  });
+
+  it('returns ok:false when an API has zero available stock', () => {
+    const result = solveFreshBatchMaxTablets({
+      apis: [
+        { id: 'a', label: 'A', targetActiveMgPerTablet: 50, potency: { method: 'bulkPercent', percent: 100 }, availableStockG: 0 },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/no available stock/i);
+  });
+
+  it('returns ok:false when an API has zero potency', () => {
+    const result = solveFreshBatchMaxTablets({
+      apis: [
+        { id: 'a', label: 'A', targetActiveMgPerTablet: 50, potency: { method: 'bulkPercent', percent: 0 }, availableStockG: 100 },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/valid potency/i);
+  });
+
+  it('returns ok:false when an API has zero target mg/tablet', () => {
+    const result = solveFreshBatchMaxTablets({
+      apis: [
+        { id: 'a', label: 'A', targetActiveMgPerTablet: 0, potency: { method: 'bulkPercent', percent: 100 }, availableStockG: 100 },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/valid potency/i);
+  });
+
+  it('returns ok:false when available stock produces less than one tablet', () => {
+    const result = solveFreshBatchMaxTablets({
+      apis: [
+        { id: 'a', label: 'A', targetActiveMgPerTablet: 1000, potency: { method: 'bulkPercent', percent: 1 }, availableStockG: 0.0001 },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/isn't enough/i);
   });
 });
 

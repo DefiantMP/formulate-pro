@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   calculateFreshBatch,
   calculateRegrind,
   solveRegrindLotWeight,
+  solveFreshBatchMaxTablets,
   generateVarianceTable,
   generateFreshBatchSOP,
   generateRegrindSOP,
@@ -17,12 +18,14 @@ import type {
   RegrindLotSourceType,
   FreshApiEntry,
   FreshApiPotency,
+  FreshApiStockEntry,
   FreshFillerType,
 } from '@/lib/calc-engine/types';
 import { fmt, fmtK, numOrZero } from '@/lib/format';
 import Sidebar from './Sidebar';
-import Topbar from './Topbar';
+import Topbar, { type AutosaveStatus } from './Topbar';
 import InputsPanel from './InputsPanel';
+import NewRunModal from './NewRunModal';
 import OutputPanel, { type AddRowData, type StatsData, type TabKey, type LotBreakdownRow } from './OutputPanel';
 import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
@@ -105,6 +108,8 @@ export interface FreshApiState {
   potPercent: string;
   potMgPerUnit: string;
   potUnitWeightG: string;
+  /** Solve-mode only: how much raw material is on hand, in grams. Ignored outside solve mode. */
+  availableStockG: string;
 }
 
 let apiIdCounter = 0;
@@ -122,6 +127,7 @@ function blankApi(label: string, id: string = makeApiId()): FreshApiState {
     potPercent: '',
     potMgPerUnit: '',
     potUnitWeightG: '',
+    availableStockG: '',
   };
 }
 
@@ -138,16 +144,13 @@ export default function FormulateApp() {
 
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  // A counter rather than a boolean so back-to-back saves each restart the
-  // dismiss timer, even if the toast is already showing.
-  const [saveToastToken, setSaveToastToken] = useState(0);
 
-  useEffect(() => {
-    if (saveToastToken === 0) return;
-    const timer = setTimeout(() => setSaveToastToken(0), 3000);
-    return () => clearTimeout(timer);
-  }, [saveToastToken]);
+  // Upfront naming: a new run's fields stay locked (see InputsPanel's
+  // `disabled` prop / NewRunModal) until a name is chosen. Loading a run from
+  // history sets these directly, bypassing the modal (see loadRun below).
+  const [runName, setRunName] = useState('');
+  const [showNamePrompt, setShowNamePrompt] = useState(true);
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
 
   // Chrome/Firefox both let mouse-wheel/trackpad scroll over a *focused*
   // number input silently bump its value by `step` — no scrollbar cue, no
@@ -171,6 +174,7 @@ export default function FormulateApp() {
   const [fPotMethod, setFPotMethod] = useState<FreshPotencyMethod>('bulkPercent');
   const [fTwt, setFTwt] = useState('');
   const [fTabs, setFTabs] = useState('');
+  const [freshSolveMode, setFreshSolveMode] = useState(false);
   const [fFillerType, setFFillerType] = useState<FreshFillerType>('Emdex');
   const [excipientPercents, setExcipientPercents] = useState<Record<string, string>>({});
 
@@ -342,10 +346,31 @@ export default function FormulateApp() {
   );
   const fillerDisplay = Math.max(0, 100 - derivedActivePercent - excipientPercentSum).toFixed(2);
 
+  const freshSolveApiEntries = useMemo<FreshApiStockEntry[]>(
+    () =>
+      apis.map((api, index) => ({
+        id: api.id,
+        label: api.label.trim() || (index === 0 ? 'API' : `API ${index + 1}`),
+        targetActiveMgPerTablet: numOrZero(api.targetMg),
+        potency: apiStateToPotency(fPotMethod, api),
+        availableStockG: numOrZero(api.availableStockG),
+      })),
+    [apis, fPotMethod]
+  );
+
+  const freshSolveOutcome = useMemo(() => {
+    if (!freshSolveMode) return null;
+    return solveFreshBatchMaxTablets({ apis: freshSolveApiEntries });
+  }, [freshSolveMode, freshSolveApiEntries]);
+
+  // Not shown to the user directly — surfaced as OutputPanel's emptyMessage below.
+  const freshSolveError = freshSolveMode && freshSolveOutcome && !freshSolveOutcome.ok ? freshSolveOutcome.reason : null;
+
   const freshResult = useMemo(() => {
+    if (freshSolveMode && (!freshSolveOutcome || !freshSolveOutcome.ok)) return null;
     try {
       return calculateFreshBatch({
-        tabletCount: numOrZero(fTabs),
+        tabletCount: freshSolveMode && freshSolveOutcome?.ok ? freshSolveOutcome.tabletCount : numOrZero(fTabs),
         targetWeightG: numOrZero(fTwt),
         apis: freshApiEntries,
         ingredients: freshIngredients,
@@ -354,7 +379,28 @@ export default function FormulateApp() {
     } catch {
       return null;
     }
-  }, [fTabs, fTwt, freshApiEntries, freshIngredients, fFillerType]);
+  }, [freshSolveMode, freshSolveOutcome, fTabs, fTwt, freshApiEntries, freshIngredients, fFillerType]);
+
+  // Per-API "stock used vs. available" breakdown, only meaningful in solve
+  // mode once solving succeeds — combines the solve outcome's availableStockG
+  // per API with the actual grams calculateFreshBatch used for that same
+  // tabletCount (result.apis[].gramsPerRun), reusing that already-tested
+  // figure rather than recomputing stock usage here.
+  const apiStockBreakdown = useMemo(() => {
+    if (!freshSolveMode || !freshSolveOutcome?.ok || !freshResult) return null;
+    return freshSolveOutcome.perApi.map((p) => {
+      const usedG = freshResult.apis.find((a) => a.id === p.id)?.gramsPerRun ?? 0;
+      return {
+        id: p.id,
+        label: p.label,
+        availableStockG: p.availableStockG,
+        usedG,
+        leftoverG: p.availableStockG - usedG,
+        isLimiting: p.isLimiting,
+        maxTabletsFromThisAPI: p.maxTabletsFromThisAPI,
+      };
+    });
+  }, [freshSolveMode, freshSolveOutcome, freshResult]);
 
   const regrindLots = useMemo<RegrindLot[]>(
     () =>
@@ -433,7 +479,7 @@ export default function FormulateApp() {
   // Only meaningful when regrindSolveMode is on and solving succeeded — the
   // total lot weight (solved lot included), which becomes the authoritative
   // regroundPowderG fed into calculateRegrind, and what gets persisted as
-  // rgPwd when the run is saved (see saveRun / verifyInputsSnapshot).
+  // rgPwd when the run is saved (see performAutosave / verifyInputsSnapshot).
   const solvedTotalRegroundPowderG = useMemo(
     () => resolvedRegrindLots.reduce((sum, l) => sum + l.weightG, 0),
     [resolvedRegrindLots]
@@ -649,12 +695,13 @@ export default function FormulateApp() {
     () =>
       mode === 'fresh'
         ? {
-            apis: freshApiEntries,
+            apis: freshSolveMode ? freshSolveApiEntries : freshApiEntries,
             potencyMethod: fPotMethod,
             fTwt,
-            fTabs,
+            fTabs: freshSolveMode && freshSolveOutcome?.ok ? String(freshSolveOutcome.tabletCount) : fTabs,
             excipients: excipientPercents,
             fillerType: fFillerType,
+            freshSolveMode,
           }
         : {
             lots: regrindSolveMode ? resolvedRegrindLots : regrindLots,
@@ -667,6 +714,9 @@ export default function FormulateApp() {
     [
       mode,
       freshApiEntries,
+      freshSolveMode,
+      freshSolveApiEntries,
+      freshSolveOutcome,
       fPotMethod,
       fTwt,
       fTabs,
@@ -763,6 +813,11 @@ export default function FormulateApp() {
 
   function loadRun(run: RunRecord) {
     setLoadedRun(run.id);
+    // Loading an existing run isn't "starting a new run" — it's already
+    // named and already saved, so skip the naming modal entirely.
+    setRunName(run.label);
+    setShowNamePrompt(false);
+    setAutosaveStatus('saved');
     const inputs = run.inputs;
     const str = (key: string) => (typeof inputs[key] === 'string' ? (inputs[key] as string) : '');
     if (run.mode === 'regrind') {
@@ -790,7 +845,7 @@ export default function FormulateApp() {
               // math exactly.
               sourceType: l.sourceType ?? 'regroundTablets',
               // Solve mode is never re-entered on load — a saved run always
-              // stores the final, resolved lot weights (see saveRun), so
+              // stores the final, resolved lot weights (see performAutosave/buildRunInputs), so
               // every lot restores as an ordinary fixed-weight lot.
               isSolving: false,
               isStart: l.isStart ?? false,
@@ -845,6 +900,7 @@ export default function FormulateApp() {
               potPercent: potency?.method === 'bulkPercent' ? String(potency.percent) : '',
               potMgPerUnit: potency?.method === 'mgPerUnit' ? String(potency.mgPerUnit) : '',
               potUnitWeightG: potency?.method === 'mgPerUnit' ? String(potency.unitWeightG) : '',
+              availableStockG: '',
             };
           })
         );
@@ -860,12 +916,17 @@ export default function FormulateApp() {
             potPercent: str('fPot'),
             potMgPerUnit: '',
             potUnitWeightG: '',
+            availableStockG: '',
           },
         ]);
       }
       setFTwt(str('fTwt'));
       setFTabs(str('fTabs'));
       setFFillerType((inputs.fillerType as FreshFillerType) || 'Emdex');
+      // Solve mode is never re-entered on load — a saved run always stores
+      // the final, resolved tablet count and API grams (see performAutosave/buildRunInputs), so it
+      // always restores into the ordinary manual-tablet-count flow.
+      setFreshSolveMode(false);
       // Backward compat: runs saved before excipients became generic stored
       // fixed fMags/fPvpp fields instead of a per-ingredient map.
       const legacy: Record<string, string> = {};
@@ -876,96 +937,133 @@ export default function FormulateApp() {
     }
   }
 
-  async function saveRun() {
-    if (!result) {
-      alert('Nothing to save yet — enter values first.');
+  function buildRunInputs() {
+    return mode === 'fresh'
+      ? {
+          apis: freshApiEntries,
+          potencyMethod: fPotMethod,
+          fTwt,
+          // Solved runs persist the final resolved tablet count, not the
+          // (unused) manual field — mirrors regrind's solved regroundPowderG.
+          fTabs: freshSolveMode && freshSolveOutcome?.ok ? String(freshSolveOutcome.tabletCount) : fTabs,
+          excipients: excipientPercents,
+          fillerType: fFillerType,
+        }
+      : {
+          lots: regrindSolveMode ? resolvedRegrindLots : regrindLots,
+          rgPwd: regrindSolveMode ? String(solvedTotalRegroundPowderG) : rgPwd,
+          rgTmg,
+          rgTwt,
+          regrindSolveMode,
+          rgTargetTablets,
+        };
+  }
+
+  function buildVerificationAcknowledgment() {
+    return verifyStatus === 'acknowledged' && verifyDiscrepancy && verifyAcknowledgedAt
+      ? {
+          acknowledgedAt: verifyAcknowledgedAt,
+          field: verifyDiscrepancy.field,
+          reportedValue: verifyDiscrepancy.reportedValue,
+          computedValue: verifyDiscrepancy.computedValue,
+          delta: verifyDiscrepancy.computedValue - verifyDiscrepancy.reportedValue,
+          unit: verifyDiscrepancy.unit,
+        }
+      : null;
+  }
+
+  // Guards the upsert against overlapping requests: without this, two
+  // autosaves firing close together (e.g. a slow network) could both see
+  // loadedRun as null and each POST a new run instead of the second one
+  // PATCHing the first's id — exactly the duplicate this feature must avoid.
+  // A save already in flight is followed by at most one more once it settles,
+  // always via the ref so that retry uses the latest inputs/result, not
+  // whatever was captured in the original (possibly now-stale) closure.
+  const savingInFlightRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const autosaveRef = useRef<() => void>(() => {});
+
+  async function performAutosave() {
+    if (!result || !runName) return;
+    if (savingInFlightRef.current) {
+      dirtyRef.current = true;
       return;
     }
-    if (mode === 'fresh') {
-      const uncommitted = excipients.filter((ing) => (excipientPercents[ing.id] ?? '') === '');
-      if (uncommitted.length > 0) {
-        const names = uncommitted.map((i) => i.name);
-        const joined =
-          names.length <= 2
-            ? names.join(' and ')
-            : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
-        alert(
-          `Enter a value for ${joined} before saving — use 0 if it's not used in this batch. An empty field can't be told apart from a forgotten one.`
-        );
-        return;
-      }
-    }
-    if (verifyStatus === 'needs_review') {
-      alert('Review the verification discrepancy above and click "Reviewed, proceeding" before saving this run.');
-      return;
-    }
-    const defaultLabel = `${mode === 'fresh' ? 'Fresh' : 'Regrind'} ${new Date().toLocaleString()}`;
-    const label = window.prompt('Name this run', defaultLabel);
-    if (label === null) return;
-
-    const inputs =
-      mode === 'fresh'
-        ? {
-            apis: freshApiEntries,
-            potencyMethod: fPotMethod,
-            fTwt,
-            fTabs,
-            excipients: excipientPercents,
-            fillerType: fFillerType,
-          }
-        : {
-            lots: regrindSolveMode ? resolvedRegrindLots : regrindLots,
-            rgPwd: regrindSolveMode ? String(solvedTotalRegroundPowderG) : rgPwd,
-            rgTmg,
-            rgTwt,
-            regrindSolveMode,
-            rgTargetTablets,
-          };
-
-    const verificationAcknowledgment =
-      verifyStatus === 'acknowledged' && verifyDiscrepancy && verifyAcknowledgedAt
-        ? {
-            acknowledgedAt: verifyAcknowledgedAt,
-            field: verifyDiscrepancy.field,
-            reportedValue: verifyDiscrepancy.reportedValue,
-            computedValue: verifyDiscrepancy.computedValue,
-            delta: verifyDiscrepancy.computedValue - verifyDiscrepancy.reportedValue,
-            unit: verifyDiscrepancy.unit,
-          }
-        : null;
-
-    setSaving(true);
+    savingInFlightRef.current = true;
+    setAutosaveStatus('saving');
     try {
-      const res = await fetch('/api/runs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          label: label.trim() || defaultLabel,
-          mode,
-          inputs,
-          result,
-          verificationAcknowledgment,
-        }),
-      });
+      const payload = {
+        label: runName,
+        mode,
+        inputs: buildRunInputs(),
+        result,
+        verificationAcknowledgment: buildVerificationAcknowledgment(),
+      };
+      const res = loadedRun
+        ? await fetch(`/api/runs/${loadedRun}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch('/api/runs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
       if (!res.ok) {
-        alert('Failed to save run.');
+        setAutosaveStatus('error');
         return;
       }
       const saved: RunRecord = await res.json();
-      setRuns((prev) => [saved, ...prev]);
+      setRuns((prev) =>
+        prev.some((r) => r.id === saved.id) ? prev.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...prev]
+      );
       setLoadedRun(saved.id);
-      setSaveToastToken((prev) => prev + 1);
+      setAutosaveStatus('saved');
+    } catch {
+      setAutosaveStatus('error');
     } finally {
-      setSaving(false);
+      savingInFlightRef.current = false;
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        autosaveRef.current();
+      }
     }
+  }
+
+  useEffect(() => {
+    autosaveRef.current = performAutosave;
+  });
+
+  // Debounced autosave: fires ~1.5s after inputs settle into a valid result,
+  // rather than on every keystroke. `result` already changes reference on any
+  // input that affects it, so depending on it alone is enough to both trigger
+  // and (via the effect cleanup) restart the debounce on each new change.
+  useEffect(() => {
+    if (showNamePrompt || !runName || !result) return;
+    const timer = setTimeout(() => {
+      autosaveRef.current();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [showNamePrompt, runName, result]);
+
+  function handleNameSubmit(name: string) {
+    setRunName(name);
+    setShowNamePrompt(false);
   }
 
   function resetForm() {
     setLoadedRun(null);
+    setRunName('');
+    setShowNamePrompt(true);
+    setAutosaveStatus('idle');
+    savingInFlightRef.current = false;
+    dirtyRef.current = false;
     setApis([blankApi('', 'active')]);
     setFPotMethod('bulkPercent');
     setFTwt('');
     setFTabs('');
+    setFreshSolveMode(false);
     setFFillerType('Emdex');
     setExcipientPercents({});
     setLots([blankLot('Lot 1')]);
@@ -983,16 +1081,18 @@ export default function FormulateApp() {
       <div className="main">
         <Topbar
           mode={mode}
+          runName={runName}
+          autosaveStatus={autosaveStatus}
           onReset={resetForm}
-          onSaveRun={saveRun}
-          saving={saving}
           onPrint={() => window.print()}
           canPrint={!!result}
         />
         <div className="content">
-          <div className="col-left">
+          <div className="col-left" style={{ position: 'relative' }}>
+            {showNamePrompt && <NewRunModal mode={mode} onSubmit={handleNameSubmit} />}
             <InputsPanel
               mode={mode}
+              disabled={showNamePrompt}
               onModeChange={setMode}
               apis={apis}
               onUpdateApi={updateApi}
@@ -1004,6 +1104,8 @@ export default function FormulateApp() {
               setFTwt={setFTwt}
               fTabs={fTabs}
               setFTabs={setFTabs}
+              freshSolveMode={freshSolveMode}
+              onFreshSolveModeChange={setFreshSolveMode}
               excipients={excipients}
               excipientPercents={excipientPercents}
               setExcipientPercent={setExcipientPercent}
@@ -1050,9 +1152,10 @@ export default function FormulateApp() {
               addRows={addRows}
               warnRows={warnRows}
               lotBreakdown={lotBreakdown}
+              apiStockBreakdown={apiStockBreakdown}
               varianceRows={varianceRows}
               sopSteps={sopSteps}
-              emptyMessage={mode === 'regrind' ? regrindSolveError : null}
+              emptyMessage={mode === 'regrind' ? regrindSolveError : freshSolveError}
             />
           </div>
 
@@ -1062,11 +1165,6 @@ export default function FormulateApp() {
           </div>
         </div>
       </div>
-      {saveToastToken > 0 && (
-        <div className="toast" role="status">
-          <i className="ti ti-circle-check" /> Run saved
-        </div>
-      )}
     </div>
 
     {/* Print-only combined Output + Variances + SOP sheet — hidden on
@@ -1079,9 +1177,7 @@ export default function FormulateApp() {
         <h1>Batch Instructions</h1>
         <div className="print-meta">
           <div>
-            <strong>Run:</strong>{' '}
-            {runs.find((r) => r.id === loadedRun)?.label ??
-              `Unsaved ${mode === 'fresh' ? 'fresh batch' : 'regrind'} run`}
+            <strong>Run:</strong> {runName || `Unnamed ${mode === 'fresh' ? 'fresh batch' : 'regrind'} run`}
           </div>
           <div>
             <strong>Mode:</strong> {mode === 'fresh' ? 'Fresh batch' : 'Regrind'}

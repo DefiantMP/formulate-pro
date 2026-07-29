@@ -4,6 +4,7 @@ export {
   calculateFreshBatch,
   calculateRegrind,
   solveRegrindLotWeight,
+  solveFreshBatchMaxTablets,
   activePercentOfBlendFromDose,
   generateVarianceTable,
 } from './calcEngine';

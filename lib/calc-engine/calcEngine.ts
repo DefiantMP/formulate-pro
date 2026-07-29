@@ -4,6 +4,9 @@ import type {
   FreshApiEntry,
   FreshApiPotency,
   FreshApiResult,
+  FreshBatchSolveMaxInput,
+  FreshBatchSolveMaxResult,
+  FreshApiMaxTabletsBreakdown,
   RegrindInput,
   RegrindResult,
   RegrindLot,
@@ -137,6 +140,79 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
     ingredientPercents,
     activePercentOfBlend: combinedActivePercent,
     fillerType,
+  };
+}
+
+/**
+ * Solves for the maximum number of tablets achievable given a fixed amount of
+ * available raw material per API, rather than requiring the user to enter a
+ * tablet count and iteratively adjust it to match what they have on hand.
+ * Deliberately standalone: it does not call or modify calculateFreshBatch at
+ * all, so the ordinary (manual tablet-count) fresh-batch flow is completely
+ * unaffected by this function's existence. The caller feeds the resulting
+ * tabletCount back into an ordinary FreshBatchInput (dropping availableStockG,
+ * which calculateFreshBatch has no use for) and calls calculateFreshBatch as
+ * usual to get the full per-API grams, filler, and totals — reusing that
+ * already-tested math rather than duplicating it here.
+ *
+ * For each API: maxTabletsFromThisAPI = floor((availableStockG * potencyFraction)
+ * / (targetActiveMgPerTablet / 1000)) — the raw material's active content in
+ * grams, divided by the raw material grams needed per tablet. The achievable
+ * tablet count for the whole run is the minimum across all APIs, since
+ * whichever API's stock runs out first constrains the batch.
+ */
+export function solveFreshBatchMaxTablets(input: FreshBatchSolveMaxInput): FreshBatchSolveMaxResult {
+  const { apis } = input;
+
+  if (apis.length === 0) {
+    return { ok: false, reason: 'At least one API is required to solve for max tablets.' };
+  }
+
+  const perApi: FreshApiMaxTabletsBreakdown[] = [];
+  for (const api of apis) {
+    if (api.availableStockG <= 0) {
+      return {
+        ok: false,
+        reason: `"${api.label}" has no available stock entered — enter how much raw material is on hand (g) before solving.`,
+      };
+    }
+    const potencyFraction = freshApiEffectivePotency(api.potency);
+    if (potencyFraction <= 0 || api.targetActiveMgPerTablet <= 0) {
+      return {
+        ok: false,
+        reason: `"${api.label}" needs a valid potency and target mg/tablet before solving.`,
+      };
+    }
+    const maxTabletsFromThisAPI = Math.floor(
+      (api.availableStockG * potencyFraction) / (api.targetActiveMgPerTablet / 1000)
+    );
+    if (maxTabletsFromThisAPI <= 0) {
+      return {
+        ok: false,
+        reason: `"${api.label}"'s available stock (${api.availableStockG} g) isn't enough to produce a single tablet at the entered potency and target mg/tablet.`,
+      };
+    }
+    perApi.push({
+      id: api.id,
+      label: api.label,
+      availableStockG: api.availableStockG,
+      maxTabletsFromThisAPI,
+      isLimiting: false,
+    });
+  }
+
+  const tabletCount = Math.min(...perApi.map((p) => p.maxTabletsFromThisAPI));
+  for (const p of perApi) {
+    if (p.maxTabletsFromThisAPI === tabletCount) p.isLimiting = true;
+  }
+  const limiting = perApi.find((p) => p.isLimiting)!;
+
+  return {
+    ok: true,
+    tabletCount,
+    limitingApiId: limiting.id,
+    limitingApiLabel: limiting.label,
+    perApi,
   };
 }
 

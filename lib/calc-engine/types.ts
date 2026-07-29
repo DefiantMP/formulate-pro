@@ -264,6 +264,56 @@ export type RegrindSolveResult =
     }
   | { ok: false; reason: string };
 
+/**
+ * One API within a "solve for max tablets from available stock" fresh-batch
+ * run — same shape as FreshApiEntry, plus how much raw material is actually
+ * on hand. Drives solveFreshBatchMaxTablets instead of a manually entered
+ * tabletCount.
+ */
+export interface FreshApiStockEntry {
+  id: string;
+  label: string;
+  targetActiveMgPerTablet: number;
+  potency: FreshApiPotency;
+  availableStockG: number;
+}
+
+export interface FreshBatchSolveMaxInput {
+  /** At least one API — whichever API's stock runs out first constrains the batch. */
+  apis: FreshApiStockEntry[];
+}
+
+export interface FreshApiMaxTabletsBreakdown {
+  id: string;
+  label: string;
+  availableStockG: number;
+  /** floor((availableStockG * potencyFraction) / (targetActiveMgPerTablet / 1000)). */
+  maxTabletsFromThisAPI: number;
+  /** True for the API(s) whose stock is the binding constraint — the minimum across all APIs. */
+  isLimiting: boolean;
+}
+
+/**
+ * Solves for the maximum achievable tablet count given a fixed amount of
+ * available raw material per API, rather than requiring the user to enter a
+ * tablet count and iteratively adjust it to match what they have on hand.
+ * Deliberately a separate, standalone calculation kept out of
+ * calculateFreshBatch — the same pattern as solveRegrindLotWeight below. The
+ * caller feeds the resulting tabletCount back into an ordinary
+ * FreshBatchInput and calls the unmodified calculateFreshBatch to get the
+ * full per-API grams, filler, and totals, reusing that already-tested math
+ * rather than duplicating it here.
+ */
+export type FreshBatchSolveMaxResult =
+  | {
+      ok: true;
+      tabletCount: number;
+      limitingApiId: string;
+      limitingApiLabel: string;
+      perApi: FreshApiMaxTabletsBreakdown[];
+    }
+  | { ok: false; reason: string };
+
 export type CalcResult = FreshBatchResult | RegrindResult;
 
 export interface VarianceRow {

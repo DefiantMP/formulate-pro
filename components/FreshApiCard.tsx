@@ -7,6 +7,8 @@ interface FreshApiCardProps {
   index: number;
   canRemove: boolean;
   potencyMethod: FreshPotencyMethod;
+  /** Solve-for-max-tablets mode — shows an "Available stock" field instead of relying on a manual tablet count. */
+  solveMode: boolean;
   onChange: (id: string, patch: Partial<FreshApiState>) => void;
   onRemove: (id: string) => void;
 }
@@ -16,6 +18,7 @@ export default function FreshApiCard({
   index,
   canRemove,
   potencyMethod,
+  solveMode,
   onChange,
   onRemove,
 }: FreshApiCardProps) {
@@ -92,6 +95,22 @@ export default function FreshApiCard({
               value={api.potUnitWeightG}
               onChange={(e) => onChange(api.id, { potUnitWeightG: e.target.value })}
             />
+          </div>
+        </div>
+      )}
+
+      {solveMode && (
+        <div className="field" style={{ marginTop: 8, marginBottom: 0 }}>
+          <label>Available stock</label>
+          <div className="row">
+            <input
+              type="number"
+              placeholder="0.00"
+              step="0.01"
+              value={api.availableStockG}
+              onChange={(e) => onChange(api.id, { availableStockG: e.target.value })}
+            />
+            <div className="unit">g</div>
           </div>
         </div>
       )}
