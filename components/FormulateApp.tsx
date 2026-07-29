@@ -1074,6 +1074,10 @@ export default function FormulateApp() {
     setRgTargetTablets('');
   }
 
+  // Drives TipsCard's "Option B" tip — only relevant once potency is
+  // actually being entered that way, not just because the mode supports it.
+  const usingOptionB = mode === 'fresh' ? fPotMethod === 'mgPerUnit' : lots.some((lot) => lot.opt === 'b');
+
   return (
     <>
     <div className="app">
@@ -1161,7 +1165,7 @@ export default function FormulateApp() {
 
           <div className="col-right">
             <RunHistoryPanel runs={runs} loading={runsLoading} loadedRun={loadedRun} onLoadRun={loadRun} />
-            <TipsCard />
+            <TipsCard mode={mode} usingOptionB={usingOptionB} />
           </div>
         </div>
       </div>
