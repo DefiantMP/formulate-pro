@@ -505,7 +505,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
           </div>
 
           <div className="col-right">
-            <div className="card">
+            {/* flexShrink: 0 — see RunHistoryPanel.tsx for why .col-right's
+                flex column needs this on every card it stacks. */}
+            <div className="card" style={{ flexShrink: 0 }}>
               <div className="card-hdr">
                 <div className="card-hdr-title">
                   <i className="ti ti-flask-2" /> Continue in R&D Suite

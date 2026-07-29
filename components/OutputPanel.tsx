@@ -132,7 +132,7 @@ export default function OutputPanel({
                 </div>
                 {stats.finalBlendPotency && (
                   <div className="stat">
-                    <div className="stat-lbl">Final blend potency</div>
+                    <div className="stat-lbl">% of API in batch total</div>
                     <div className="stat-val">{stats.finalBlendPotency}</div>
                     <div className="stat-unit">of blend</div>
                   </div>

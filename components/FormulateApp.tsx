@@ -1212,7 +1212,7 @@ export default function FormulateApp() {
             </div>
             {stats.finalBlendPotency && (
               <div>
-                <span>Final blend potency</span>
+                <span>% of API in batch total</span>
                 <strong>{stats.finalBlendPotency}</strong>
               </div>
             )}

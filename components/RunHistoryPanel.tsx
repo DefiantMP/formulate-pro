@@ -32,7 +32,11 @@ function metaLine(result: CalcResult): string {
 
 export default function RunHistoryPanel({ runs, loading, loadedRun, onLoadRun }: RunHistoryPanelProps) {
   return (
-    <div className="card">
+    // flexShrink: 0 keeps this card at its natural content height inside
+    // .col-right's flex column — without it, flexbox's default shrink
+    // behavior (combined with .card's overflow:hidden) silently clips runs
+    // below the fold instead of letting .col-right's overflow-y:auto scroll.
+    <div className="card" style={{ flexShrink: 0 }}>
       <div className="card-hdr">
         <div className="card-hdr-title">
           <i className="ti ti-history" /> Recent runs

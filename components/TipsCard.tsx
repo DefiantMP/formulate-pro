@@ -1,6 +1,10 @@
 export default function TipsCard() {
   return (
-    <div className="card">
+    // flexShrink: 0 keeps this card at its natural content height inside
+    // .col-right's flex column — without it, flexbox's default shrink
+    // behavior (combined with .card's overflow:hidden) silently clips tips
+    // below the fold instead of letting .col-right's overflow-y:auto scroll.
+    <div className="card" style={{ flexShrink: 0 }}>
       <div className="card-hdr">
         <div className="card-hdr-title">
           <i className="ti ti-bulb" /> Tips

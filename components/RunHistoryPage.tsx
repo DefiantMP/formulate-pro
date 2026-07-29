@@ -196,7 +196,10 @@ export default function RunHistoryPage() {
           </div>
         </div>
         <div className="rh-page">
-          <div className="card">
+          {/* flexShrink: 0 — see RunHistoryPanel.tsx: without this, expanding
+              a row's COA detail overflows the card and gets silently clipped
+              instead of .rh-page scrolling to reveal it. */}
+          <div className="card" style={{ flexShrink: 0 }}>
             {loading ? (
               <div className="empty">
                 <i className="ti ti-history" />

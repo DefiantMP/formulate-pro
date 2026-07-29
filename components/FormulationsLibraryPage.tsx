@@ -32,7 +32,10 @@ export default function FormulationsLibraryPage() {
           </div>
         </div>
         <div className="rh-page">
-          <div className="card">
+          {/* flexShrink: 0 — see RunHistoryPanel.tsx: keeps this card at its
+              natural content height so .rh-page scrolls once the list grows
+              past available space, instead of silently clipping rows. */}
+          <div className="card" style={{ flexShrink: 0 }}>
             {loading ? (
               <div className="empty">
                 <i className="ti ti-library" />

@@ -28,7 +28,7 @@ export default function VersionHistoryPanel({ currentId }: VersionHistoryPanelPr
 
   if (versions === null) {
     return (
-      <div className="card">
+      <div className="card" style={{ flexShrink: 0 }}>
         <div className="empty">
           <i className="ti ti-history" />
           Loading version history…
@@ -37,8 +37,11 @@ export default function VersionHistoryPanel({ currentId }: VersionHistoryPanelPr
     );
   }
 
+  // flexShrink: 0 — see RunHistoryPanel.tsx for why: .rh-page stacks several
+  // cards in a flex column, and without this each card gets silently
+  // compressed below its content height instead of the page scrolling.
   return (
-    <div className="card">
+    <div className="card" style={{ flexShrink: 0 }}>
       <div className="card-hdr">
         <div className="card-hdr-title">
           <i className="ti ti-versions" /> Version history

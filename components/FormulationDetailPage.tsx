@@ -58,14 +58,14 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
         </div>
         <div className="rh-page">
           {formulation === undefined ? (
-            <div className="card">
+            <div className="card" style={{ flexShrink: 0 }}>
               <div className="empty">
                 <i className="ti ti-library" />
                 Loading…
               </div>
             </div>
           ) : formulation === null ? (
-            <div className="card">
+            <div className="card" style={{ flexShrink: 0 }}>
               <div className="empty">
                 <i className="ti ti-alert-triangle" />
                 Formulation not found
@@ -73,7 +73,10 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
             </div>
           ) : (
             <>
-            <div className="card card-body">
+            {/* flexShrink: 0 — see RunHistoryPanel.tsx: .rh-page stacks
+                multiple cards in a flex column and needs each one held to
+                its natural content height, or they get silently clipped. */}
+            <div className="card card-body" style={{ flexShrink: 0 }}>
               <div className="stats">
                 <div className="stat">
                   <div className="stat-lbl">Tablet weight</div>
@@ -176,7 +179,10 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
 
             <VersionHistoryPanel currentId={id} />
 
-            <div className="card">
+            {/* flexShrink: 0 — see RunHistoryPanel.tsx. Without this, this card
+                (and the chat input inside it) was getting compressed below its
+                content height and clipped entirely off-screen. */}
+            <div className="card" style={{ flexShrink: 0 }}>
               <div className="card-hdr">
                 <div className="card-hdr-title">
                   <i className="ti ti-message-circle" /> Troubleshoot
