@@ -35,6 +35,14 @@ model Run {
   // discrepancy needing review.
   verificationAcknowledgment Json?
   createdAt     DateTime @default(now())
+
+  // COA (Certificate of Analysis) results, entered on the Run History page
+  // after the batch is physically made and lab-tested. All nullable/additive
+  // — absent on every run until an operator records them.
+  actualMgPerTablet  Float?
+  actualTabletWeight Float?
+  passFail           String? // 'pass' | 'fail'
+  notes              String?
 }
 
 // A saved regrind lot recipe: potency + excipient makeup, reusable across

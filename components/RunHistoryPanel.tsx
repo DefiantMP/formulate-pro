@@ -8,6 +8,11 @@ export interface RunRecord {
   inputs: Record<string, unknown>;
   result: CalcResult;
   createdAt: string;
+  /** Lab COA results, entered later on the Run History page — absent until recorded. */
+  actualMgPerTablet?: number | null;
+  actualTabletWeight?: number | null;
+  passFail?: 'pass' | 'fail' | null;
+  notes?: string | null;
 }
 
 interface RunHistoryPanelProps {

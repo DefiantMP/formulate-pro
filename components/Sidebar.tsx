@@ -17,9 +17,9 @@ export default function Sidebar() {
         <Link href="/" className={`nav-btn${pathname === '/' ? ' active' : ''}`}>
           <i className="ti ti-flask" /> New run
         </Link>
-        <button className="nav-btn">
+        <Link href="/run-history" className={`nav-btn${pathname === '/run-history' ? ' active' : ''}`}>
           <i className="ti ti-history" /> Run history
-        </button>
+        </Link>
         <Link
           href="/formulations"
           className={`nav-btn${pathname.startsWith('/formulations') ? ' active' : ''}`}
