@@ -64,6 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     parentId: v.parentId,
     status: v.status as SavedFormulationRecord['status'],
     outcomeNotes: v.outcomeNotes,
+    equipmentNotes: v.equipmentNotes,
   }));
 
   const systemPrompt = buildTroubleshootSystemPrompt(versions);

@@ -67,6 +67,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<SavedFormulationStatus>('untested');
   const [outcomeNotes, setOutcomeNotes] = useState('');
+  const [equipmentNotes, setEquipmentNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [parent, setParent] = useState<SavedFormulationRecord | null>(null);
   const [loadingParent, setLoadingParent] = useState(!!iterateFromId);
@@ -97,9 +98,10 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         setDisintegrantPercent(data.disintegrantPercent != null ? String(data.disintegrantPercent) : '');
         setLubricantName(data.lubricantName ?? '');
         setLubricantPercent(data.lubricantPercent != null ? String(data.lubricantPercent) : '');
-        // Outcome fields deliberately reset for the new iteration rather than
-        // copying the parent's — the parent's status/notes describe what
-        // already happened to it, not this not-yet-tested draft.
+        // Outcome fields (status/outcomeNotes/equipmentNotes) deliberately
+        // reset for the new iteration rather than copying the parent's —
+        // the parent's describe what already happened to it, not this
+        // not-yet-tested draft.
       })
       .finally(() => {
         if (!cancelled) setLoadingParent(false);
@@ -163,6 +165,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         parentId?: string;
         status: SavedFormulationStatus;
         outcomeNotes: string | null;
+        equipmentNotes: string | null;
       } = {
         name: name.trim(),
         tabletWeightG: tabletWeightNum,
@@ -182,6 +185,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         ...(iterateFromId ? { parentId: iterateFromId } : {}),
         status,
         outcomeNotes: outcomeNotes.trim() || null,
+        equipmentNotes: equipmentNotes.trim() || null,
       };
       const res = await fetch('/api/saved-formulations', {
         method: 'POST',
@@ -403,13 +407,22 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                     ))}
                   </select>
                 </div>
-                <div className="field" style={{ marginBottom: 0 }}>
+                <div className="field">
                   <label>Issue / outcome notes</label>
                   <textarea
                     className="rh-notes"
                     placeholder="e.g. capping at compression, resolved after increasing lubricant…"
                     value={outcomeNotes}
                     onChange={(e) => setOutcomeNotes(e.target.value)}
+                  />
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Equipment / tooling notes</label>
+                  <textarea
+                    className="rh-notes"
+                    placeholder="e.g. Press X, 3/8&quot; round tooling, fill cam set to slow, gravity-fed hopper…"
+                    value={equipmentNotes}
+                    onChange={(e) => setEquipmentNotes(e.target.value)}
                   />
                 </div>
 

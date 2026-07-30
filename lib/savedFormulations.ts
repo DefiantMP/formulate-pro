@@ -47,6 +47,8 @@ export interface SavedFormulationRecord {
   parentId: string | null;
   status: SavedFormulationStatus;
   outcomeNotes: string | null;
+  /** Physical/mechanical context (press, tooling size, fill cam behavior, hopper type, …) — optional, added 2026-07-29. */
+  equipmentNotes: string | null;
 }
 
 /**
@@ -142,7 +144,8 @@ export function buildTroubleshootSystemPrompt(versions: SavedFormulationRecord[]
       .filter(Boolean)
       .join('; ');
     const notesText = v.outcomeNotes?.trim() || 'none';
-    return `Version ${v.version} (${new Date(v.createdAt).toLocaleDateString()}): Actives: ${activesText}. ${excipientsText}. Status: ${savedFormulationStatusLabel(v.status)}. Notes: ${notesText}.`;
+    const equipmentText = v.equipmentNotes?.trim() || 'none';
+    return `Version ${v.version} (${new Date(v.createdAt).toLocaleDateString()}): Actives: ${activesText}. ${excipientsText}. Status: ${savedFormulationStatusLabel(v.status)}. Notes: ${notesText}. Equipment/tooling: ${equipmentText}.`;
   });
 
   return `${TROUBLESHOOT_SYSTEM_PROMPT_PREFIX}

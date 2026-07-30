@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     parentId,
     status,
     outcomeNotes,
+    equipmentNotes,
   } = body;
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
       parentId: typeof parentId === 'string' ? parentId : null,
       status: typeof status === 'string' ? status : 'untested',
       outcomeNotes: typeof outcomeNotes === 'string' && outcomeNotes.trim() ? outcomeNotes.trim() : null,
+      equipmentNotes: typeof equipmentNotes === 'string' && equipmentNotes.trim() ? equipmentNotes.trim() : null,
     },
   });
 

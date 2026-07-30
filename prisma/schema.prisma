@@ -97,6 +97,10 @@ model SavedFormulation {
   // tracking, independent of Run's production-lab COA fields above.
   status       String   @default("untested")
   outcomeNotes String?
+  // Physical/mechanical context (press, tooling size, fill cam behavior,
+  // hopper type, …) that formulation-percentage data alone can't capture.
+  // Additive nullable column, same pattern as the outcome fields above.
+  equipmentNotes String?
 }
 
 // Historical manufacturing batches, importable via CSV.

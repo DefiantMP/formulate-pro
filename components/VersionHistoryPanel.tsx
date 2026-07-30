@@ -77,7 +77,12 @@ export default function VersionHistoryPanel({ currentId }: VersionHistoryPanelPr
                 <div className="rh-cell">
                   <span className={`status-badge status-${v.status}`}>{savedFormulationStatusLabel(v.status)}</span>
                 </div>
-                <div className="rh-cell rh-notes-snippet">{v.outcomeNotes || '—'}</div>
+                <div
+                  className="rh-cell rh-notes-snippet"
+                  title={[v.outcomeNotes, v.equipmentNotes ? `Equipment: ${v.equipmentNotes}` : null].filter(Boolean).join(' — ') || undefined}
+                >
+                  {[v.outcomeNotes, v.equipmentNotes ? `Equipment: ${v.equipmentNotes}` : null].filter(Boolean).join(' — ') || '—'}
+                </div>
               </Link>
             </div>
           );

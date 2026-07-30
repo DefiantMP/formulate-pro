@@ -20,6 +20,7 @@ function baseVersion(overrides: Partial<SavedFormulationRecord> = {}): SavedForm
     parentId: null,
     status: 'untested',
     outcomeNotes: null,
+    equipmentNotes: null,
     ...overrides,
   };
 }
@@ -79,5 +80,15 @@ describe('buildTroubleshootSystemPrompt', () => {
     const prompt = buildTroubleshootSystemPrompt([baseVersion()]);
     expect(prompt).toMatch(/advisory/i);
     expect(prompt).toMatch(/not making any change/i);
+  });
+
+  it('renders "none" for empty equipment notes, and the real text when set', () => {
+    const untilled = buildTroubleshootSystemPrompt([baseVersion({ equipmentNotes: null })]);
+    expect(untilled).toMatch(/Equipment\/tooling: none\./);
+
+    const withNotes = buildTroubleshootSystemPrompt([
+      baseVersion({ equipmentNotes: 'Press A, 3/8" round tooling, slow fill cam' }),
+    ]);
+    expect(withNotes).toContain('Press A, 3/8" round tooling, slow fill cam');
   });
 });
