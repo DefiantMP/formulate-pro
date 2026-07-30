@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
 import VersionHistoryPanel from './VersionHistoryPanel';
-import ChatPanel, { type ChatMessage } from './ChatPanel';
+import FloatingChatWidget from './FloatingChatWidget';
+import type { ChatMessage } from './ChatPanel';
 import { deriveSavedFormulation, type SavedFormulationRecord } from '@/lib/savedFormulations';
 import { fmt } from '@/lib/format';
 
@@ -178,30 +179,19 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
             </div>
 
             <VersionHistoryPanel currentId={id} />
-
-            {/* flexShrink: 0 — see RunHistoryPanel.tsx. Without this, this card
-                (and the chat input inside it) was getting compressed below its
-                content height and clipped entirely off-screen. */}
-            <div className="card" style={{ flexShrink: 0 }}>
-              <div className="card-hdr">
-                <div className="card-hdr-title">
-                  <i className="ti ti-message-circle" /> Troubleshoot
-                </div>
-              </div>
-              <div className="card-body" style={{ padding: 0 }}>
-                <ChatPanel
-                  title="this formulation's history"
-                  icon="message-circle"
-                  placeholder="Describe an issue, e.g. &quot;tablets are capping&quot;…"
-                  emptyHint="Describe an issue (e.g. capping, sticking) to get advisory suggestions grounded in this formulation's version history."
-                  onSend={handleChatSend}
-                />
-              </div>
-            </div>
             </>
           )}
         </div>
       </div>
+      {formulation && (
+        <FloatingChatWidget
+          title="Troubleshoot"
+          icon="message-circle"
+          placeholder="Describe an issue, e.g. &quot;tablets are capping&quot;…"
+          emptyHint="Describe an issue (e.g. capping, sticking) to get advisory suggestions grounded in this formulation's version history."
+          onSend={handleChatSend}
+        />
+      )}
     </div>
   );
 }

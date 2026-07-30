@@ -7,7 +7,7 @@ export interface ChatMessage {
   content: string;
 }
 
-interface ChatPanelProps {
+export interface ChatPanelProps {
   title: string;
   icon?: string;
   placeholder?: string;
