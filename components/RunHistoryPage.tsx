@@ -45,7 +45,9 @@ function summarizeMaterials(run: RunRecord): MaterialRow[] {
     return rows;
   }
   const rows: MaterialRow[] = [];
-  if (result.lots.length > 0) {
+  // `lots` didn't exist at all before multi-lot regrind — runs saved before
+  // that shipped have no lots array on their stored result JSON.
+  if ((result.lots ?? []).length > 0) {
     rows.push({ label: 'Lots', value: result.lots.map((l) => l.label).join(', ') });
   }
   rows.push({ label: 'Reground powder', value: `${fmt(result.regroundPowderG, 0)} g` });
