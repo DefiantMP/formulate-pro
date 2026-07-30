@@ -101,6 +101,16 @@ model SavedFormulation {
   // hopper type, …) that formulation-percentage data alone can't capture.
   // Additive nullable column, same pattern as the outcome fields above.
   equipmentNotes String?
+
+  // Set only on rows auto-promoted from a Run's autosave (see
+  // lib/runFormulationSync.ts) — null for every manually-created
+  // formulation. @unique (not @relation: Run and SavedFormulation
+  // deliberately stay distinct, unrelated models) lets the sync logic
+  // upsert by run id so repeated autosaves update this same row instead of
+  // creating duplicates, the same way Run's own autosave upserts by run id.
+  // SQLite's UNIQUE constraint doesn't apply to NULL, so any number of
+  // manually-created rows can coexist with this column left unset.
+  sourceRunId String? @unique
 }
 
 // Historical manufacturing batches, importable via CSV.

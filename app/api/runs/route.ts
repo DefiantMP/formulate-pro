@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getOrCreateDefaultFormulation } from '@/lib/formulations';
+import { syncFormulationFromRun } from '@/lib/runFormulationSync';
 
 export async function GET() {
   const runs = await prisma.run.findMany({
@@ -36,6 +37,15 @@ export async function POST(request: NextRequest) {
       verificationAcknowledgment: verificationAcknowledgment ?? undefined,
     },
   });
+
+  // Auto-promotion side effect: mirror this run into the Formulations
+  // library so it has something to Iterate from without a manual save.
+  // Best-effort — never let a promotion failure fail the run save itself.
+  try {
+    await syncFormulationFromRun(run);
+  } catch (err) {
+    console.error('[run-formulation-sync] failed to sync formulation for run', run.id, err);
+  }
 
   return NextResponse.json(run, { status: 201 });
 }

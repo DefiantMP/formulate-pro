@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { syncFormulationFromRun } from '@/lib/runFormulationSync';
 
 /**
  * Two independent partial-update use cases share this endpoint:
@@ -70,6 +71,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       where: { id: params.id },
       data,
     });
+
+    // Auto-promotion side effect, only for an autosave-shaped PATCH (one
+    // that actually carries composition data) — never for a COA-only PATCH,
+    // which has neither inputs nor result. Best-effort, same as the create
+    // path in POST /api/runs — never let a promotion failure fail the run
+    // update itself.
+    if (inputs !== undefined && result !== undefined) {
+      try {
+        await syncFormulationFromRun(run);
+      } catch (err) {
+        console.error('[run-formulation-sync] failed to sync formulation for run', run.id, err);
+      }
+    }
+
     return NextResponse.json(run);
   } catch {
     return NextResponse.json({ error: 'Run not found' }, { status: 404 });
