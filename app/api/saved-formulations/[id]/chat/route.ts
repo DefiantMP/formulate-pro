@@ -5,6 +5,8 @@ import { runChatTurn, type ChatMessage } from '@/lib/chat';
 import {
   buildTroubleshootSystemPrompt,
   effectiveLineageId,
+  findRelevantCrossFormulationNotes,
+  type CrossFormulationCandidate,
   type SavedFormulationActive,
   type SavedFormulationRecord,
 } from '@/lib/savedFormulations';
@@ -67,7 +69,59 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     equipmentNotes: v.equipmentNotes,
   }));
 
-  const systemPrompt = buildTroubleshootSystemPrompt(versions);
+  // Cross-formulation knowledge: pulls relevant history from OTHER
+  // formulations' saved iterations into the prompt, additive to the
+  // per-lineage version history above (which is unchanged). A single lean
+  // select over every saved iteration — cheap even at hundreds of rows,
+  // since findRelevantCrossFormulationNotes' hard caps (not this query) are
+  // what bound actual prompt/request cost as the library grows.
+  const allCandidateRows = await prisma.savedFormulation.findMany({
+    select: {
+      id: true,
+      name: true,
+      version: true,
+      lineageId: true,
+      createdAt: true,
+      status: true,
+      outcomeNotes: true,
+      equipmentNotes: true,
+      actives: true,
+      fillerName: true,
+      disintegrantName: true,
+      lubricantName: true,
+    },
+  });
+  const candidates: CrossFormulationCandidate[] = allCandidateRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    version: c.version,
+    lineageId: c.lineageId,
+    createdAt: c.createdAt.toISOString(),
+    status: c.status as SavedFormulationRecord['status'],
+    outcomeNotes: c.outcomeNotes,
+    equipmentNotes: c.equipmentNotes,
+    actives: c.actives as unknown as SavedFormulationActive[],
+    fillerName: c.fillerName,
+    disintegrantName: c.disintegrantName,
+    lubricantName: c.lubricantName,
+  }));
+  const latestVersion = versions[versions.length - 1];
+  const crossFormulationContext = findRelevantCrossFormulationNotes(candidates, lineageId, latestVersion, message);
+
+  const systemPrompt = buildTroubleshootSystemPrompt(versions, crossFormulationContext);
+
+  // Cost observability: this is the "actual context size being sent" per
+  // the requirement — logged server-side (always) and echoed in the
+  // response as an extra field the existing ChatPanel UI simply ignores
+  // (it only reads .reply), so nothing about the chat UI/flow changes.
+  const estimatedSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
+  console.log(
+    `[troubleshoot-chat] formulation=${params.id} lineage=${lineageId} ` +
+      `crossFormulationMatched=${crossFormulationContext.matched.length}/${candidates.length} ` +
+      `crossFormulationEstTokens=${crossFormulationContext.estimatedTokens} ` +
+      `systemPromptEstTokens=${estimatedSystemPromptTokens}`
+  );
+
   const client = new Anthropic({ apiKey });
   const outcome = await runChatTurn(
     { systemPrompt, history, userMessage: message },
@@ -77,5 +131,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!outcome.ok) {
     return NextResponse.json({ error: outcome.error }, { status: outcome.status });
   }
-  return NextResponse.json({ reply: outcome.reply });
+  return NextResponse.json({
+    reply: outcome.reply,
+    contextStats: {
+      crossFormulationCandidates: candidates.length,
+      crossFormulationMatched: crossFormulationContext.matched.length,
+      estimatedSystemPromptTokens,
+    },
+  });
 }
