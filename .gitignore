@@ -7,3 +7,4 @@ dist
 .env*.local
 prisma/dev.db
 prisma/dev.db-journal
+.claude/settings.local.json
