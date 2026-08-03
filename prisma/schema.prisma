@@ -125,3 +125,49 @@ model BatchHistory {
   notes                   String?
   createdAt               DateTime @default(now())
 }
+
+// Phase 1 scale-photo verification — a standalone mobile-web feature,
+// unrelated to Fresh Batch/Regrind runs, Formulations, or Iterations. A
+// photo of a scale display is read by Claude vision (lib/scaleVerification.ts)
+// to extract a numeric weight; pass/fail is then computed deterministically
+// in code against expectedWeightG +/- tolerance, never asserted by the
+// model itself (same "model reads, code computes" split as
+// lib/aiVerification.ts's calculate-tool integrity gate).
+model ScaleVerification {
+  id             String   @id @default(cuid())
+  // Real column now even though every row currently gets the same value —
+  // see lib/organization.ts's currentOrganizationId() for why this isn't a
+  // schema-level @default (keeps the "single value for now" in one
+  // app-level place instead of baked into the DB).
+  organizationId String
+  ingredientLabel String
+  expectedWeightG Float
+  toleranceType   String // 'absolute' | 'percent'
+  toleranceValue  Float
+  // The model's raw extraction — immutable after creation, kept so a
+  // manager can see exactly what the AI saw even after an operator edit.
+  // Null only when the model could not read a number off the display at
+  // all — never a stand-in for "photo looked fine but happens to be 0".
+  aiReadingWeightG Float?
+  // The operator-confirmed value that pass/fail is actually computed
+  // against. Defaults to aiReadingWeightG at creation; editable by the
+  // operator (e.g. via a correction on the submit page) any time before
+  // manager approval, in case the AI misread the display. Independently
+  // nullable from aiReadingWeightG so an operator can key in a reading by
+  // hand even when the AI failed to read one.
+  operatorReadingWeightG Float?
+  // 'pass' | 'fail' | null; null exactly when operatorReadingWeightG is null.
+  passFail        String?
+  // Whether the model was confident in its reading (false for blurry,
+  // ambiguous, or non-gram-unit displays) — always populated, not just when
+  // unclear, so a human can sanity-check any reading before trusting it.
+  confident       Boolean
+  modelNotes      String
+  // Temporary storage as a data: URL (renders directly in an <img> tag, no
+  // separate file-serving route needed) — nulled out, not the row, on
+  // manager approval. Everything else on the record is kept permanently.
+  photoDataUrl    String?
+  status          String   @default("pending") // 'pending' | 'approved'
+  createdAt       DateTime @default(now())
+  approvedAt      DateTime?
+}
