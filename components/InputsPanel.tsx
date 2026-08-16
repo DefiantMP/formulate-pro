@@ -176,7 +176,7 @@ export default function InputsPanel(props: InputsPanelProps) {
                     value={props.fTabs}
                     onChange={(e) => props.setFTabs(e.target.value)}
                   />
-                  <div className="unit">tabs</div>
+                  <div className="unit">tablets</div>
                 </div>
               </div>
             )}
@@ -263,7 +263,7 @@ export default function InputsPanel(props: InputsPanelProps) {
                     value={props.rgTargetTablets}
                     onChange={(e) => props.setRgTargetTablets(e.target.value)}
                   />
-                  <div className="unit">tabs</div>
+                  <div className="unit">tablets</div>
                 </div>
               </div>
             ) : (

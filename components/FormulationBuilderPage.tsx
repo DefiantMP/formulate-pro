@@ -268,7 +268,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                       value={referenceBatchTablets}
                       onChange={(e) => setReferenceBatchTablets(e.target.value)}
                     />
-                    <div className="unit">tabs</div>
+                    <div className="unit">tablets</div>
                   </div>
                 </div>
 

@@ -25,7 +25,7 @@ interface RunHistoryPanelProps {
 function metaLine(result: CalcResult): string {
   const mg = `${result.targetActiveMgPerTablet} mg`;
   if (result.mode === 'fresh') {
-    return `${mg} · ${result.tabletCount.toLocaleString()} tabs`;
+    return `${mg} · ${result.tabletCount.toLocaleString()} tablets`;
   }
   return `${mg} · ${result.regroundPowderG.toLocaleString()} g`;
 }
