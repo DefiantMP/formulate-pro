@@ -1,9 +1,11 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
-import { numOrZero } from '@/lib/format';
-import type { ScaleVerificationRecord, ToleranceType } from '@/lib/scaleVerification';
+import { fmt, numOrZero } from '@/lib/format';
+import { DEFAULT_TOLERANCE_PERCENT, type ScaleVerificationRecord } from '@/lib/scaleVerification';
+import { getRunIngredientBreakdown, type RunIngredientRow } from '@/lib/runIngredientBreakdown';
+import type { RunRecord } from './RunHistoryPanel';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
@@ -17,16 +19,33 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export default function ScaleVerifySubmitPage() {
-  const [ingredientLabel, setIngredientLabel] = useState('');
-  const [expectedWeightG, setExpectedWeightG] = useState('');
-  const [toleranceType, setToleranceType] = useState<ToleranceType>('absolute');
-  const [toleranceValue, setToleranceValue] = useState('');
+  const [runs, setRuns] = useState<RunRecord[] | null>(null);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedIngredient, setSelectedIngredient] = useState<RunIngredientRow | null>(null);
+
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScaleVerificationRecord | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/api/runs')
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: RunRecord[]) => setRuns(data))
+      .catch(() => setRunsError('Could not load saved runs. Please try again.'));
+  }, []);
+
+  const selectedRun = useMemo(() => runs?.find((r) => r.id === selectedRunId) ?? null, [runs, selectedRunId]);
+  // Same derivation the run's own Output tab used when the run was
+  // calculated — no recalculation here, just reading back what's already
+  // stored on the run's result.
+  const breakdown = useMemo(
+    () => (selectedRun ? getRunIngredientBreakdown(selectedRun.mode, selectedRun.result) : []),
+    [selectedRun]
+  );
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -46,15 +65,10 @@ export default function ScaleVerifySubmitPage() {
     }
   }
 
-  const canSubmit =
-    !submitting &&
-    ingredientLabel.trim() !== '' &&
-    numOrZero(expectedWeightG) > 0 &&
-    numOrZero(toleranceValue) >= 0 &&
-    photoDataUrl !== null;
+  const canSubmit = !submitting && selectedRun !== null && selectedIngredient !== null && photoDataUrl !== null;
 
   async function submit() {
-    if (!canSubmit || !photoDataUrl) return;
+    if (!canSubmit || !selectedRun || !selectedIngredient || !photoDataUrl) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -62,10 +76,8 @@ export default function ScaleVerifySubmitPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ingredientLabel: ingredientLabel.trim(),
-          expectedWeightG: numOrZero(expectedWeightG),
-          toleranceType,
-          toleranceValue: numOrZero(toleranceValue),
+          runId: selectedRun.id,
+          ingredientLabel: selectedIngredient.label,
           photoDataUrl,
         }),
       });
@@ -83,10 +95,8 @@ export default function ScaleVerifySubmitPage() {
   }
 
   function submitAnother() {
-    setIngredientLabel('');
-    setExpectedWeightG('');
-    setToleranceType('absolute');
-    setToleranceValue('');
+    setSelectedRunId(null);
+    setSelectedIngredient(null);
     setPhotoDataUrl(null);
     setPhotoError(null);
     setError(null);
@@ -98,65 +108,37 @@ export default function ScaleVerifySubmitPage() {
     <div className="sv-page">
       <div className="sv-hdr">
         <div className="sv-title">Scale verification</div>
-        <div className="sv-subtitle">Photograph a scale reading to verify it against an expected weight.</div>
+        <div className="sv-subtitle">Photograph a scale reading to verify it against a run&apos;s calculated expected weight.</div>
       </div>
 
       {result ? (
         <ResultCard result={result} onSubmitAnother={submitAnother} onUpdated={setResult} />
+      ) : !selectedRun ? (
+        <RunPicker runs={runs} error={runsError} onSelect={setSelectedRunId} />
+      ) : !selectedIngredient ? (
+        <IngredientPicker run={selectedRun} breakdown={breakdown} onSelect={setSelectedIngredient} onBack={() => setSelectedRunId(null)} />
       ) : (
         <div className="sv-card">
-          <div className="field">
-            <label>Ingredient / label</label>
-            <input
-              type="text"
-              placeholder="e.g. Magnesium stearate"
-              value={ingredientLabel}
-              onChange={(e) => setIngredientLabel(e.target.value)}
-            />
+          <button type="button" className="sv-context-back" onClick={() => setSelectedIngredient(null)}>
+            <i className="ti ti-chevron-left" /> Change ingredient
+          </button>
+          <div className="sv-context-line">
+            <b>{selectedRun.label}</b> · {selectedRun.mode === 'fresh' ? 'Fresh Batch' : 'Regrind'}
           </div>
 
           <div className="field">
-            <label>Expected weight</label>
-            <div className="row">
-              <input
-                type="number"
-                placeholder="0.00"
-                step="0.01"
-                value={expectedWeightG}
-                onChange={(e) => setExpectedWeightG(e.target.value)}
-              />
-              <div className="unit">g</div>
-            </div>
+            <label>Verifying</label>
+            <div className="sv-locked-value">{selectedIngredient.label}</div>
           </div>
 
           <div className="field">
-            <label>Tolerance</label>
-            <div className="sv-tolerance-toggle">
-              <button
-                type="button"
-                className={`sv-tolerance-btn${toleranceType === 'absolute' ? ' active' : ''}`}
-                onClick={() => setToleranceType('absolute')}
-              >
-                ± grams
-              </button>
-              <button
-                type="button"
-                className={`sv-tolerance-btn${toleranceType === 'percent' ? ' active' : ''}`}
-                onClick={() => setToleranceType('percent')}
-              >
-                ± %
-              </button>
-            </div>
-            <div className="row">
-              <input
-                type="number"
-                placeholder="0.00"
-                step="0.01"
-                value={toleranceValue}
-                onChange={(e) => setToleranceValue(e.target.value)}
-              />
-              <div className="unit">{toleranceType === 'percent' ? '%' : 'g'}</div>
-            </div>
+            <label>Expected weight (locked to this run)</label>
+            <div className="sv-locked-value">{fmt(selectedIngredient.grams, 2)} g</div>
+          </div>
+
+          <div className="field">
+            <label>Tolerance (default)</label>
+            <div className="sv-locked-value">± {DEFAULT_TOLERANCE_PERCENT}%</div>
           </div>
 
           <div className="field" style={{ marginBottom: 0 }}>
@@ -193,7 +175,7 @@ export default function ScaleVerifySubmitPage() {
         </div>
       )}
 
-      {!result && (
+      {!result && selectedRun && selectedIngredient && (
         <button type="button" className="btn btn-p sv-submit-btn" onClick={submit} disabled={!canSubmit}>
           {submitting ? (
             <>
@@ -212,6 +194,85 @@ export default function ScaleVerifySubmitPage() {
           <i className="ti ti-clipboard-check" /> Manager review queue
         </Link>
       </div>
+    </div>
+  );
+}
+
+function RunPicker({
+  runs,
+  error,
+  onSelect,
+}: {
+  runs: RunRecord[] | null;
+  error: string | null;
+  onSelect: (runId: string) => void;
+}) {
+  return (
+    <div className="sv-card">
+      <div className="sub-lbl">Select a run</div>
+      {error ? (
+        <div className="warn-row">
+          <i className="ti ti-alert-triangle" /> {error}
+        </div>
+      ) : runs === null ? (
+        <div className="empty">
+          <i className="ti ti-history" /> Loading runs…
+        </div>
+      ) : runs.length === 0 ? (
+        <div className="empty">
+          <i className="ti ti-history" /> No saved runs yet — save a Fresh Batch or Regrind run first.
+        </div>
+      ) : (
+        runs.map((run) => (
+          <button type="button" key={run.id} className="sv-run-row" onClick={() => onSelect(run.id)}>
+            <div>
+              <div className="sv-run-row-label">{run.label}</div>
+              <div className="sv-run-row-date">{new Date(run.createdAt).toLocaleDateString()}</div>
+            </div>
+            <span className={`run-tag ${run.mode === 'fresh' ? 'tag-fr' : 'tag-rg'}`}>
+              {run.mode === 'fresh' ? 'Fresh' : 'Regrind'}
+            </span>
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
+
+function IngredientPicker({
+  run,
+  breakdown,
+  onSelect,
+  onBack,
+}: {
+  run: RunRecord;
+  breakdown: RunIngredientRow[];
+  onSelect: (row: RunIngredientRow) => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="sv-card">
+      <button type="button" className="sv-context-back" onClick={onBack}>
+        <i className="ti ti-chevron-left" /> Change run
+      </button>
+      <div className="sv-context-line">
+        <b>{run.label}</b> · {run.mode === 'fresh' ? 'Fresh Batch' : 'Regrind'}
+      </div>
+      <div className="sub-lbl" style={{ marginTop: 10 }}>
+        Select the ingredient you&apos;re weighing
+      </div>
+      {breakdown.length === 0 ? (
+        <div className="empty">
+          <i className="ti ti-alert-triangle" /> No ingredient breakdown available for this run
+        </div>
+      ) : (
+        breakdown.map((row) => (
+          <button type="button" key={row.label} className="sv-ingredient-row" onClick={() => onSelect(row)}>
+            <span>{row.label}</span>
+            <span>{fmt(row.grams, 2)} g</span>
+          </button>
+        ))
+      )}
     </div>
   );
 }
@@ -275,6 +336,10 @@ function ResultCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={result.photoDataUrl} alt="Submitted scale reading" className="sv-photo-preview" />
       )}
+
+      <div className="sv-context-line">
+        Verifying <b>{result.ingredientLabel}</b> for Run: <b>{result.run?.label ?? result.runId}</b>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span className={`sv-result-badge ${badgeClass}`}>

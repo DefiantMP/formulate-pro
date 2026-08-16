@@ -37,6 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const updated = await prisma.scaleVerification.update({
       where: { id: params.id },
       data: { operatorReadingWeightG: body.operatorReadingWeightG, passFail },
+      include: { run: { select: { label: true } } },
     });
     return NextResponse.json(updated);
   }
@@ -48,6 +49,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const updated = await prisma.scaleVerification.update({
       where: { id: params.id },
       data: { status: 'approved', approvedAt: new Date(), photoDataUrl: null },
+      include: { run: { select: { label: true } } },
     });
     return NextResponse.json(updated);
   }

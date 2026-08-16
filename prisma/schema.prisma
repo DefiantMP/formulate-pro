@@ -44,6 +44,7 @@ model Run {
   passFail           String? // 'pass' | 'fail'
   notes              String?
 
+  scaleVerifications ScaleVerification[]
   // Back-relation for RunLotUsage's FK (see below). Virtual field only —
   // Prisma requires it to declare the relation, but the column and FK both
   // live on RunLotUsage, so this adds no column to Run and no table rebuild.
@@ -145,6 +146,16 @@ model ScaleVerification {
   // schema-level @default (keeps the "single value for now" in one
   // app-level place instead of baked into the DB).
   organizationId String
+  // Which run and which of that run's already-computed ingredients this
+  // verification is for. Required — expectedWeightG below is derived
+  // server-side from run.result via lib/runIngredientBreakdown.ts and is
+  // never operator-entered, so a verification can't exist without a run to
+  // anchor it to. ingredientLabel is a plain string match against that
+  // breakdown's labels rather than an ingredient id, since the breakdown is
+  // synthesized per-run from calc-engine result JSON and has no stable
+  // per-ingredient id of its own.
+  runId          String
+  run            Run    @relation(fields: [runId], references: [id])
   ingredientLabel String
   expectedWeightG Float
   toleranceType   String // 'absolute' | 'percent'

@@ -118,9 +118,12 @@ export default function ScaleVerifyReviewPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={record.photoDataUrl} alt={`${record.ingredientLabel} scale reading`} className="sv-review-photo" />
               )}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{record.ingredientLabel}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Verifying {record.ingredientLabel}</div>
                 <PassFailBadge record={record} />
+              </div>
+              <div className="sv-context-line" style={{ marginBottom: 6 }}>
+                Run: <b>{record.run?.label ?? record.runId}</b>
               </div>
               <div className="sv-reading-row">
                 <span>Expected</span>
@@ -169,12 +172,15 @@ export default function ScaleVerifyReviewPage() {
           <div className="sub-lbl">Recently approved</div>
           {approved.map((record) => (
             <div className="sv-review-item" key={record.id}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{record.ingredientLabel}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Verifying {record.ingredientLabel}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {wasEdited(record) && <EditedBadge />}
                   <PassFailBadge record={record} />
                 </div>
+              </div>
+              <div className="sv-context-line" style={{ marginBottom: 6 }}>
+                Run: <b>{record.run?.label ?? record.runId}</b>
               </div>
               <div className="sv-reading-row">
                 <span>Expected / operator reading</span>

@@ -5,6 +5,11 @@ export type ToleranceType = 'absolute' | 'percent';
 export interface ScaleVerificationRecord {
   id: string;
   organizationId: string;
+  runId: string;
+  // Populated when the API includes the Run relation (every GET/POST/PATCH
+  // response) — kept optional here rather than required so this type
+  // doesn't lie about payloads that skip the include.
+  run?: { label: string } | null;
   ingredientLabel: string;
   expectedWeightG: number;
   toleranceType: ToleranceType;
@@ -19,6 +24,21 @@ export interface ScaleVerificationRecord {
   createdAt: string;
   approvedAt: string | null;
 }
+
+/**
+ * Default weighing tolerance applied to every scale verification — percent
+ * rather than a flat gram figure, since ingredients in a single run range
+ * from a few grams (an API) to several kilograms (filler), and a flat
+ * absolute tolerance would be needlessly loose on the low end or
+ * unachievably tight on the high end. This specific figure is a
+ * placeholder, not derived from any existing variance/tolerance concept in
+ * the codebase (lib/calc-engine's VarianceRow tracks cumulative
+ * step-potency drift during blending, a different concept from a single
+ * weighing check) — it has not been validated against real operational
+ * requirements and should be revisited with real input before this feature
+ * is trusted for production weighing decisions.
+ */
+export const DEFAULT_TOLERANCE_PERCENT = 0.5;
 
 /**
  * Deterministic tolerance check — the model only reads the number off the
