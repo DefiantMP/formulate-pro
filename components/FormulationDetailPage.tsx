@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
 import VersionHistoryPanel from './VersionHistoryPanel';
-import FloatingChatWidget from './FloatingChatWidget';
-import type { ChatMessage } from './ChatPanel';
 import { deriveSavedFormulation, type SavedFormulationRecord } from '@/lib/savedFormulations';
 import { fmt } from '@/lib/format';
 
@@ -24,19 +22,6 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
   }, [id]);
 
   const derived = formulation ? deriveSavedFormulation(formulation) : null;
-
-  async function handleChatSend(message: string, history: ChatMessage[]): Promise<string> {
-    const res = await fetch(`/api/saved-formulations/${id}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || typeof data?.reply !== 'string') {
-      throw new Error(data?.error || 'Chat unavailable right now.');
-    }
-    return data.reply;
-  }
 
   return (
     <div className="app">
@@ -151,18 +136,6 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
                     <div className="add-val">
                       {(formulation.disintegrantPercent ?? 0).toFixed(2)}% ·{' '}
                       {fmt(derived!.disintegrantGramsPerBatch ?? 0, 1)} g
-                {formulation.glidantName && (
-                  <div className="add-row">
-                    <div className="add-lbl">
-                      <i className="ti ti-wind" />
-                      {formulation.glidantName}
-                    </div>
-                    <div className="add-val">
-                      {(formulation.glidantPercent ?? 0).toFixed(2)}% ·{' '}
-                      {fmt(derived!.glidantGramsPerBatch ?? 0, 1)} g
-                    </div>
-                  </div>
-                )}
                     </div>
                   </div>
                 )}
@@ -175,6 +148,18 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
                     <div className="add-val">
                       {(formulation.lubricantPercent ?? 0).toFixed(2)}% ·{' '}
                       {fmt(derived!.lubricantGramsPerBatch ?? 0, 1)} g
+                    </div>
+                  </div>
+                )}
+                {formulation.glidantName && (
+                  <div className="add-row">
+                    <div className="add-lbl">
+                      <i className="ti ti-wind" />
+                      {formulation.glidantName}
+                    </div>
+                    <div className="add-val">
+                      {(formulation.glidantPercent ?? 0).toFixed(2)}% ·{' '}
+                      {fmt(derived!.glidantGramsPerBatch ?? 0, 1)} g
                     </div>
                   </div>
                 )}
@@ -195,15 +180,6 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
           )}
         </div>
       </div>
-      {formulation && (
-        <FloatingChatWidget
-          title="Troubleshoot"
-          icon="message-circle"
-          placeholder="Describe an issue, e.g. &quot;tablets are capping&quot;…"
-          emptyHint="Describe an issue (e.g. capping, sticking) to get advisory suggestions grounded in this formulation's version history."
-          onSend={handleChatSend}
-        />
-      )}
     </div>
   );
 }

@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
+import FloatingChatWidget from './FloatingChatWidget';
+import type { ChatMessage } from './ChatPanel';
+import GuidedFormulationWizard from './GuidedFormulationWizard';
+import type { RunRecord } from './RunHistoryPanel';
 import {
   deriveSavedFormulation,
   SAVED_FORMULATION_STATUSES,
@@ -14,7 +18,7 @@ import {
 } from '@/lib/savedFormulations';
 import { numOrZero, fmt } from '@/lib/format';
 
-interface ActiveDraft {
+export interface ActiveDraft {
   id: string;
   label: string;
   targetMgPerTablet: string;
@@ -55,6 +59,7 @@ interface FormulationBuilderPageProps {
 export default function FormulationBuilderPage({ iterateFromId }: FormulationBuilderPageProps) {
   const router = useRouter();
 
+  const [builderMode, setBuilderMode] = useState<'quick' | 'guided'>('quick');
   const [name, setName] = useState('');
   const [tabletWeightG, setTabletWeightG] = useState('');
   const [referenceBatchTablets, setReferenceBatchTablets] = useState('10000');
@@ -114,6 +119,42 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
       cancelled = true;
     };
   }, [iterateFromId]);
+
+  // Sampled once for the Guided wizard's step-1 tablet-weight guidance —
+  // deliberately drawn from this app's own saved data (never hardcoded
+  // figures in the copy) and simply unused if the library/run history is
+  // empty. Quick Entry doesn't need this, but fetching is cheap regardless
+  // of which mode the page opens in.
+  const [tabletWeightSamples, setTabletWeightSamples] = useState<number[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch('/api/saved-formulations')
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []) as Promise<SavedFormulationRecord[]>,
+      fetch('/api/runs')
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []) as Promise<RunRecord[]>,
+    ]).then(([formulations, runs]) => {
+      if (cancelled) return;
+      const samples = [
+        ...formulations.map((f) => f.tabletWeightG),
+        ...runs.map((r) => (r.result as { targetWeightG?: number } | null)?.targetWeightG),
+      ].filter((n): n is number => typeof n === 'number' && n > 0);
+      setTabletWeightSamples(samples);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const tabletWeightHint = useMemo(() => {
+    if (tabletWeightSamples.length === 0) return null;
+    const min = Math.min(...tabletWeightSamples);
+    const max = Math.max(...tabletWeightSamples);
+    return min === max
+      ? `Formulations already in this app use ${min.toFixed(2)}g per tablet.`
+      : `Formulations already in this app range from ${min.toFixed(2)}g to ${max.toFixed(2)}g per tablet.`;
+  }, [tabletWeightSamples]);
 
   function updateActive(id: string, patch: Partial<ActiveDraft>) {
     setActives((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
@@ -214,6 +255,19 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
     }
   }
 
+  async function handleChatSend(message: string, history: ChatMessage[]): Promise<string> {
+    const res = await fetch(`/api/saved-formulations/${iterateFromId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || typeof data?.reply !== 'string') {
+      throw new Error(data?.error || 'Chat unavailable right now.');
+    }
+    return data.reply;
+  }
+
   return (
     <div className="app">
       <Sidebar />
@@ -231,11 +285,62 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
             </span>
           </div>
           <div className="topbar-right">
+            <div className="mode-toggle" style={{ marginBottom: 0, width: 200 }}>
+              <button
+                type="button"
+                className={`m-btn${builderMode === 'quick' ? ' active' : ''}`}
+                onClick={() => setBuilderMode('quick')}
+              >
+                Quick entry
+              </button>
+              <button
+                type="button"
+                className={`m-btn${builderMode === 'guided' ? ' active' : ''}`}
+                onClick={() => setBuilderMode('guided')}
+              >
+                Guided
+              </button>
+            </div>
             <button className="btn btn-p" onClick={save} disabled={!canSave || saving}>
               <i className="ti ti-device-floppy" /> {saving ? 'Saving…' : 'Save to library'}
             </button>
           </div>
         </div>
+        {builderMode === 'guided' ? (
+          <div className="content">
+            <GuidedFormulationWizard
+              name={name}
+              setName={setName}
+              tabletWeightG={tabletWeightG}
+              setTabletWeightG={setTabletWeightG}
+              referenceBatchTablets={referenceBatchTablets}
+              setReferenceBatchTablets={setReferenceBatchTablets}
+              tabletWeightHint={tabletWeightHint}
+              actives={actives}
+              updateActive={updateActive}
+              addActive={addActive}
+              removeActive={removeActive}
+              fillerName={fillerName}
+              setFillerName={setFillerName}
+              disintegrantName={disintegrantName}
+              setDisintegrantName={setDisintegrantName}
+              disintegrantPercent={disintegrantPercent}
+              setDisintegrantPercent={setDisintegrantPercent}
+              lubricantName={lubricantName}
+              setLubricantName={setLubricantName}
+              lubricantPercent={lubricantPercent}
+              setLubricantPercent={setLubricantPercent}
+              glidantName={glidantName}
+              setGlidantName={setGlidantName}
+              glidantPercent={glidantPercent}
+              setGlidantPercent={setGlidantPercent}
+              derived={derived}
+              canSave={canSave}
+              saving={saving}
+              onSave={save}
+            />
+          </div>
+        ) : (
         <div className="content">
           <div className="col-left">
             <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -584,7 +689,17 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
             </div>
           </div>
         </div>
+        )}
       </div>
+      {iterateFromId && (
+        <FloatingChatWidget
+          title="Troubleshoot"
+          icon="message-circle"
+          placeholder="Describe an issue, e.g. &quot;tablets are capping&quot;…"
+          emptyHint="Describe an issue (e.g. capping, sticking) to get advisory suggestions grounded in the parent formulation's version history."
+          onSend={handleChatSend}
+        />
+      )}
     </div>
   );
 }
