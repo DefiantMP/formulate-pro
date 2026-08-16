@@ -674,7 +674,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
               </div>
               <div className="card-body">
                 <div className="tip">
-                  Keep experimenting with this draft's excipients before saving it to the library.
+                  Keep experimenting with this draft&rsquo;s excipients before saving it to the library.
                 </div>
                 <Link href="/iterations" className="btn" style={{ width: '100%', marginBottom: 6 }}>
                   <i className="ti ti-chart-line" /> Iterations
