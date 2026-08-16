@@ -26,6 +26,16 @@ export default function Sidebar() {
         >
           <i className="ti ti-library" /> Formulations
         </Link>
+        {/* /lots/[id] is reached only from a material, and has no list page of
+            its own, so it highlights this entry too rather than nothing. */}
+        <Link
+          href="/raw-materials"
+          className={`nav-btn${
+            pathname.startsWith('/raw-materials') || pathname.startsWith('/lots') ? ' active' : ''
+          }`}
+        >
+          <i className="ti ti-package" /> Raw materials
+        </Link>
         <div className="nav-section" style={{ marginTop: 8 }}>
           R&D Suite
         </div>

@@ -383,3 +383,96 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .sv-review-item:first-child { padding-top: 4px; }
 .sv-review-item:last-child { border-bottom: none; padding-bottom: 4px; }
 .sv-review-photo { width: 100%; border-radius: 10px; margin-bottom: 10px; max-height: 280px; object-fit: cover; }
+
+/* ── Raw materials / lots / component specs ─────────────────────────────── */
+
+/* Date inputs and textareas weren't previously used anywhere, so they never
+   picked up the shared input styling above. Matched to it rather than
+   restyled, so spec/lot forms look like the rest of the app. */
+input[type=date] { height: 32px; width: 100%; padding: 0 9px; border: 0.5px solid var(--border-md); border-radius: 6px; font-size: 12px; background: var(--surface); color: var(--text); outline: none; font-family: inherit; }
+input[type=date]:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15,110,86,0.12); }
+textarea.rm-textarea { width: 100%; min-height: 54px; padding: 8px 10px; border-radius: 6px; border: 0.5px solid var(--border-md); font: inherit; font-size: 12px; resize: vertical; background: var(--surface); color: var(--text); outline: none; }
+textarea.rm-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15,110,86,0.12); }
+
+/* Lot spec status. Three states must be distinguishable at a glance and not
+   by color alone (each carries its own icon and label), because "pending"
+   being mistaken for "pass" is the specific failure this system exists to
+   prevent — see the Spec System Invariants in CLAUDE.md. */
+.spec-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.4px; }
+.spec-status i { font-size: 13px; }
+.spec-status.pass { background: var(--brand-bg); color: var(--brand); border: 0.5px solid var(--brand-border); }
+.spec-status.fail { background: var(--danger-bg); color: var(--danger-text); border: 0.5px solid var(--danger-border); }
+.spec-status.pending { background: var(--warning-bg); color: var(--warning-text); border: 0.5px solid var(--warning-border); }
+.spec-status.lg { font-size: 14px; padding: 7px 16px; border-radius: 24px; letter-spacing: 0.6px; }
+.spec-status.lg i { font-size: 18px; }
+
+/* Lot detail status header — the one place a lot-level verdict is rendered,
+   always from the server-computed rollup (LotDetailRecord.specStatus). */
+.spec-hero { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: 10px; border: 0.5px solid var(--border); }
+.spec-hero.pass { background: var(--brand-bg); border-color: var(--brand-border); }
+.spec-hero.fail { background: var(--danger-bg); border-color: var(--danger-border); }
+.spec-hero.pending { background: var(--warning-bg); border-color: var(--warning-border); }
+.spec-hero-body { flex: 1; min-width: 0; }
+.spec-hero-explain { font-size: 12px; line-height: 1.55; margin-top: 8px; }
+.spec-hero.pass .spec-hero-explain { color: var(--brand); }
+.spec-hero.fail .spec-hero-explain { color: var(--danger-text); }
+.spec-hero.pending .spec-hero-explain { color: var(--warning-text); }
+
+/* Criterion blocks on the lot detail page */
+.crit-block { border: 0.5px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.crit-block.retired { opacity: 0.75; border-style: dashed; }
+.crit-hdr { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; background: var(--bg); }
+.crit-name { font-size: 12px; font-weight: 600; color: var(--text); }
+.crit-limits { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.crit-latest { font-size: 11px; color: var(--text-2); }
+.crit-latest b { color: var(--text); }
+.crit-tests { padding: 4px 12px 8px; }
+.test-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 12px; }
+.test-row:last-child { border-bottom: none; }
+.test-row-main { flex: 1; min-width: 0; }
+.test-row-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.test-pf { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.3px; }
+.test-pf.pass { background: var(--brand-bg); color: var(--brand); }
+.test-pf.fail { background: var(--danger-bg); color: var(--danger-text); }
+.test-pf.set-aside { background: var(--bg); color: var(--text-3); border: 0.5px solid var(--border-md); text-decoration: line-through; }
+
+/* Inline note explaining a rule the operator can't infer from the data */
+.rule-note { display: flex; gap: 8px; padding: 9px 11px; border-radius: 8px; background: var(--info-bg); color: var(--info-text); font-size: 11px; line-height: 1.5; margin-bottom: 10px; }
+.rule-note i { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.rule-note.warn { background: var(--warning-bg); color: var(--warning-text); border: 0.5px solid var(--warning-border); }
+.rule-note.danger { background: var(--danger-bg); color: var(--danger-text); border: 0.5px solid var(--danger-border); }
+
+/* OOS investigation */
+.oos-block { border: 1px solid var(--danger-border); border-radius: 8px; margin-top: 8px; background: var(--surface); }
+.oos-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-bottom: 0.5px solid var(--border); }
+.oos-hdr-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--danger-text); }
+.oos-body { padding: 12px; }
+.oos-badge { font-size: 9px; font-weight: 600; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+.oos-badge.open { background: var(--warning-bg); color: var(--warning-text); border: 0.5px solid var(--warning-border); }
+.oos-badge.approved { background: var(--bg); color: var(--text-2); border: 0.5px solid var(--border-md); }
+.oos-badge.cleared { background: var(--brand-bg); color: var(--brand); border: 0.5px solid var(--brand-border); }
+.oos-meta { font-size: 11px; color: var(--text-2); line-height: 1.6; }
+.oos-meta b { color: var(--text); font-weight: 600; }
+.oos-approve-btn { height: 30px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid var(--danger-text); background: var(--danger-text); color: #fff; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.oos-approve-btn:hover { opacity: 0.9; }
+.oos-approve-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Raw materials list/table tweaks on top of the shared .rh-* grid */
+.rm-list-hdr, .rm-row-summary { display: grid; grid-template-columns: 2fr 1fr 1.2fr 0.8fr 20px; gap: 10px; align-items: center; padding: 10px 14px; }
+.rm-lot-hdr, .rm-lot-summary { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 20px; gap: 10px; align-items: center; padding: 10px 14px; }
+/* These override .rh-row-summary's grid rather than extending it, so the link
+   resets it carries have to be repeated — without them every cell in the row
+   renders underlined and link-colored. */
+.rm-row-summary, .rm-lot-summary { cursor: pointer; text-decoration: none; color: inherit; font: inherit; }
+.rm-row-summary:hover, .rm-lot-summary:hover { background: var(--bg); }
+.rm-list-hdr, .rm-lot-hdr { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 0.5px solid var(--border); }
+.rm-filters { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.rm-filters .field { margin-bottom: 0; }
+.rm-form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.rm-form-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.rm-inline-err { font-size: 11px; color: var(--danger-text); margin-top: 6px; }
+.rm-crit-row { border: 0.5px solid var(--border-md); border-radius: 8px; padding: 10px 11px; margin-bottom: 8px; }
+.rm-crit-row.retired { border-style: dashed; background: var(--bg); }
+.rm-crit-row-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rm-crit-row-hdr .rm-crit-title { flex: 1; font-size: 12px; font-weight: 600; }
+.rm-retired-tag { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; padding: 2px 7px; border-radius: 10px; background: var(--bg); color: var(--text-3); border: 0.5px solid var(--border-md); }

@@ -43,6 +43,11 @@ model Run {
   actualTabletWeight Float?
   passFail           String? // 'pass' | 'fail'
   notes              String?
+
+  // Back-relation for RunLotUsage's FK (see below). Virtual field only —
+  // Prisma requires it to declare the relation, but the column and FK both
+  // live on RunLotUsage, so this adds no column to Run and no table rebuild.
+  lotUsages          RunLotUsage[]
 }
 
 // A saved regrind lot recipe: potency + excipient makeup, reusable across
@@ -170,4 +175,222 @@ model ScaleVerification {
   status          String   @default("pending") // 'pending' | 'approved'
   createdAt       DateTime @default(now())
   approvedAt      DateTime?
+}
+
+// ---------------------------------------------------------------------------
+// Raw material / lot traceability + incoming-component QC specs.
+// Added 2026-08-13, entirely additive — no existing model's columns change.
+// These describe *physical inventory that arrived on the dock* and the QC
+// testing done on it, which is a separate concern from the calc-engine's
+// RegrindLot (a per-batch input shape in lib/calc-engine/types.ts, not a
+// persisted record) and from the ingredient-name strings that Formulation /
+// SavedFormulation carry. Nothing here is wired into the calculators yet.
+// ---------------------------------------------------------------------------
+
+// A material as a *kind* ("Magnesium stearate"), not a physical quantity of
+// it — the thing lots arrive as and specs are written against.
+model RawMaterial {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  // 'active' | 'filler' | 'lubricant' | 'glidant' | 'disintegrant' | 'other'
+  // Plain string, not an enum: SQLite has no native enum and the rest of this
+  // schema already spells closed sets out this way (Run.passFail, etc.).
+  category  String
+  createdAt DateTime @default(now())
+
+  lots Lot[]
+  // At most one spec per raw material — enforced by @unique on the FK side.
+  spec ComponentSpec?
+}
+
+// A specific physical receipt of a raw material: one lot number, one
+// quantity, drawn down over time as runs consume it.
+model Lot {
+  id            String      @id @default(cuid())
+  rawMaterialId String
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id])
+  // Human-entered lot number off the supplier's label / internal tag. Free
+  // text on purpose — real lot numbers have no consistent format.
+  lotLabel      String
+  receivedDate  DateTime
+  quantityReceivedG  Float
+  // Drawn down as RunLotUsage rows are recorded. Kept as its own stored
+  // column rather than derived from usages, so a physical recount or a
+  // non-run loss (spillage, sampling for QC) can be reflected directly.
+  quantityRemainingG Float
+  // 'regroundTablets' | 'rawPowder' | 'purchased'. The first two align
+  // exactly with RegrindLotSourceType in lib/calc-engine/types.ts, so a lot
+  // fed into a regrind run maps across without translation; 'purchased' is
+  // additional here and has no calc-engine meaning — it distinguishes
+  // bought-in material from material we produced or reclaimed ourselves.
+  sourceType    String
+  supplier      String?
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  specTests LotSpecTest[]
+  runUsages RunLotUsage[]
+  // Back-relation for OosInvestigation's FK — virtual, no column here.
+  oosInvestigations OosInvestigation[]
+
+  // The same lot number can legitimately recur across different materials,
+  // but not twice for the same one — this is what makes lotLabel usable as
+  // the operator-facing identifier when scanning/searching.
+  @@unique([rawMaterialId, lotLabel])
+}
+
+// The QC spec a raw material's incoming lots are tested against — one per
+// raw material.
+model ComponentSpec {
+  id            String      @id @default(cuid())
+  rawMaterialId String      @unique
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id])
+  // e.g. "Magnesium stearate NF, in-house spec rev. 3" — the spec document's
+  // own title, distinct from the raw material's name.
+  name          String
+  createdAt     DateTime    @default(now())
+
+  criteria SpecCriterion[]
+}
+
+// One testable line on a ComponentSpec, e.g. "Identity", "Purity",
+// "Contaminant — heavy metals".
+model SpecCriterion {
+  id              String        @id @default(cuid())
+  componentSpecId String
+  componentSpec   ComponentSpec @relation(fields: [componentSpecId], references: [id])
+  parameterName   String
+  // 'numeric_range' | 'qualitative'
+  testType        String
+  // Numeric bounds — nullable because they're meaningless on a qualitative
+  // criterion, and because a one-sided limit is common (heavy metals has a
+  // maxValue and no minValue). A numeric_range criterion with both null
+  // can never be evaluated; lib/lotSpecStatus.ts treats that as pending
+  // rather than silently passing.
+  minValue        Float?
+  maxValue        Float?
+  targetValue     Float?
+  // Human-readable pass condition for qualitative criteria, e.g. "Conforms
+  // to reference IR spectrum". Recorded for the tester to judge against —
+  // never matched against resultText in code.
+  passCriteriaText String?
+  createdAt       DateTime      @default(now())
+  // Soft delete. "Removing" a criterion from a spec sets this instead of
+  // deleting the row, because LotSpecTest's FK to it is RESTRICT — a hard
+  // delete would either be blocked or would have to take the historical
+  // test results down with it, and those must be retained. A retired
+  // criterion is excluded from the active spec and therefore from status
+  // (computeLotSpecStatus already ignores tests whose criterion isn't in the
+  // criteria list), while every LotSpecTest row that references it stays
+  // exactly where it is. Re-adding a retired criterion clears this back to
+  // null rather than creating a duplicate.
+  retiredAt       DateTime?
+
+  lotTests LotSpecTest[]
+}
+
+// A test result: one criterion, evaluated against one lot.
+model LotSpecTest {
+  id              String        @id @default(cuid())
+  lotId           String
+  lot             Lot           @relation(fields: [lotId], references: [id])
+  specCriterionId String
+  specCriterion   SpecCriterion @relation(fields: [specCriterionId], references: [id])
+  // Exactly one of these carries the result, per the criterion's testType.
+  resultValue     Float?
+  resultText      String?
+  // For numeric_range criteria this is *computed* in code from resultValue
+  // against min/max (evaluateNumericResult in lib/lotSpecStatus.ts) rather
+  // than accepted from the client — same "code computes the verdict, not the
+  // operator or the model" split as ScaleVerification.passFail. For
+  // qualitative criteria there is nothing to compute, so it's the tester's
+  // own judgment, set by hand.
+  passFail        Boolean
+  methodUsed      String?
+  testedBy        String?
+  testedAt        DateTime      @default(now())
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  // Back-relation for OosInvestigation's FK — virtual, no column here.
+  // A failing test is only ever set aside by an approved investigation
+  // carrying it; see lib/lotSpecStatus.ts.
+  oosInvestigations OosInvestigation[]
+
+  // Deliberately NOT unique on (lotId, specCriterionId): retesting a lot
+  // after an out-of-spec result is normal. Note that a later passing retest
+  // does NOT on its own supersede an earlier failure — see the rollup rules
+  // in lib/lotSpecStatus.ts and OosInvestigation below.
+  @@index([lotId, specCriterionId])
+}
+
+// An out-of-specification (OOS) investigation: the formal record of what a
+// failing spec result was traced back to, and whether that result may be set
+// aside. This is the ONLY thing that can stop a failed LotSpecTest from
+// holding its criterion — and its lot — at 'fail' forever. A passing retest
+// on its own never clears a failure; without an approved investigation
+// concluding the original result was invalid, the retest is just another
+// data point next to a failure that still stands.
+model OosInvestigation {
+  id                  String      @id @default(cuid())
+  lotId               String
+  lot                 Lot         @relation(fields: [lotId], references: [id])
+  // The specific failing result that triggered this investigation. Not
+  // unique: an investigation can be reopened, or a second one raised after
+  // one closed as confirm_original_result. The rollup asks whether *any*
+  // investigation on a failed test is approved-and-invalidating, so an
+  // earlier non-invalidating one never blocks a later valid one.
+  failedLotSpecTestId String
+  failedLotSpecTest   LotSpecTest @relation(fields: [failedLotSpecTestId], references: [id])
+  openedBy            String
+  openedAt            DateTime    @default(now())
+  reasonForInvestigation String
+  // Both nullable until the investigation is worked and closed out.
+  rootCauseFindings   String?
+  // Whether a retest is warranted and scientifically valid. Nullable —
+  // undecided until the root cause is understood. Note this is the
+  // *justification* to retest, distinct from disposition: justifying a
+  // retest does not by itself invalidate the original result.
+  retestJustified     Boolean?
+  // 'pending' | 'invalidate_original_result' | 'confirm_original_result' |
+  // 'reject_lot'. String, not a Prisma enum — enums are unsupported on
+  // SQLite, and the rest of this schema spells closed sets out the same way.
+  // Only 'invalidate_original_result', AND only once approved, sets the
+  // original failure aside; 'confirm_original_result' and 'reject_lot' both
+  // leave the lot failed.
+  disposition         String      @default("pending")
+  // An investigation is closed only once approved — both set together, and
+  // the rollup requires both before honoring any disposition.
+  approvedBy          String?
+  approvedAt          DateTime?
+  notes               String?
+  createdAt           DateTime    @default(now())
+
+  @@index([lotId])
+  @@index([failedLotSpecTestId])
+}
+
+// The relational link between a Run and the real physical Lots it consumed.
+// Separate from, and not a replacement for, the lot data already embedded in
+// Run.inputs / Run.result JSON: that JSON is the calc-engine's own input and
+// output (potencies, weights, the numbers the math ran on) and stays the
+// source of truth for the calculation. This table answers the traceability
+// question that JSON can't — which received-and-QC'd lot the material
+// actually came from.
+model RunLotUsage {
+  id          String   @id @default(cuid())
+  runId       String
+  run         Run      @relation(fields: [runId], references: [id])
+  lotId       String
+  lot         Lot      @relation(fields: [lotId], references: [id])
+  amountUsedG Float
+  // e.g. "regrind", "fresh_filler", "fresh_lubricant" — how this lot was
+  // used in that run. Free string rather than a closed set: the role
+  // vocabulary tracks the calculators' ingredient roles, which are still
+  // growing.
+  roleInRun   String
+  createdAt   DateTime @default(now())
+
+  @@index([runId])
+  @@index([lotId])
 }
