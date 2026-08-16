@@ -19,6 +19,8 @@ function baseVersion(overrides: Partial<SavedFormulationRecord> = {}): SavedForm
     disintegrantPercent: 5,
     lubricantName: 'Magnesium stearate',
     lubricantPercent: 2,
+    glidantName: null,
+    glidantPercent: null,
     notes: null,
     createdAt: '2026-07-22T00:00:00.000Z',
     lineageId: null,
@@ -45,6 +47,7 @@ function baseCandidate(overrides: Partial<CrossFormulationCandidate> = {}): Cros
     fillerName: 'Dipac',
     disintegrantName: null,
     lubricantName: 'Magnesium stearate',
+    glidantName: null,
     ...overrides,
   };
 }
@@ -94,6 +97,16 @@ describe('buildTroubleshootSystemPrompt', () => {
     expect(prompt).toMatch(/Version 2.*Lubricant: Magnesium stearate 3%/s);
   });
 
+  it('includes a Glidant line when set, and omits it entirely when not', () => {
+    const withGlidant = buildTroubleshootSystemPrompt([
+      baseVersion({ glidantName: 'Silicon Dioxide', glidantPercent: 0.5 }),
+    ]);
+    expect(withGlidant).toContain('Glidant: Silicon Dioxide 0.5%');
+
+    const withoutGlidant = buildTroubleshootSystemPrompt([baseVersion({ glidantName: null, glidantPercent: null })]);
+    expect(withoutGlidant).not.toContain('Glidant:');
+  });
+
   it('renders "none" for empty outcome notes rather than a blank', () => {
     const v1 = baseVersion({ outcomeNotes: null });
     const prompt = buildTroubleshootSystemPrompt([v1]);
@@ -141,7 +154,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const result = findRelevantCrossFormulationNotes(
       [sameLineage],
       'lineage-a',
-      { actives: [{ label: 'API', targetMgPerTablet: 60, potencyPercent: 76.4, source: '' }], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [{ label: 'API', targetMgPerTablet: 60, potencyPercent: 76.4, source: '' }], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'capping issue'
     );
     expect(result.matched).toHaveLength(0);
@@ -168,7 +181,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const result = findRelevantCrossFormulationNotes(
       [recentUnrelated, olderRelevant],
       'current-lineage',
-      { actives: [{ label: 'API', targetMgPerTablet: 60, potencyPercent: 76.4, source: '' }], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [{ label: 'API', targetMgPerTablet: 60, potencyPercent: 76.4, source: '' }], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'tablets are capping at compression, what should I check?'
     );
 
@@ -180,7 +193,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const result = findRelevantCrossFormulationNotes(
       [noNotes],
       'current-lineage',
-      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'Emdex filler question'
     );
     expect(result.matched).toHaveLength(0);
@@ -193,7 +206,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const result = findRelevantCrossFormulationNotes(
       candidates,
       'current-lineage',
-      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'capping at compression'
     );
     expect(result.matched.length).toBeLessThanOrEqual(15);
@@ -206,7 +219,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const result = findRelevantCrossFormulationNotes(
       [candidate],
       'current-lineage',
-      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'capping at compression'
     );
     expect(result.matched).toHaveLength(1);
@@ -221,7 +234,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const result = findRelevantCrossFormulationNotes(
       [success, failure],
       'current-lineage',
-      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'capping issue, tried increasing lubricant'
     );
 
@@ -238,7 +251,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const withMatch = findRelevantCrossFormulationNotes(
       [matching],
       'current-lineage',
-      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'capping at compression'
     );
     expect(withMatch.estimatedTokens).toBeGreaterThan(0);
@@ -247,7 +260,7 @@ describe('findRelevantCrossFormulationNotes', () => {
     const noMatch = findRelevantCrossFormulationNotes(
       [baseCandidate({ outcomeNotes: 'totally unrelated zinc batch note' })],
       'current-lineage',
-      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null },
+      { actives: [], fillerName: 'Emdex', disintegrantName: null, lubricantName: null, glidantName: null },
       'capping at compression'
     );
     expect(noMatch.estimatedTokens).toBe(0);

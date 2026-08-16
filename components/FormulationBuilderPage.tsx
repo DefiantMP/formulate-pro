@@ -64,6 +64,8 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
   const [disintegrantPercent, setDisintegrantPercent] = useState('5');
   const [lubricantName, setLubricantName] = useState('Magnesium stearate');
   const [lubricantPercent, setLubricantPercent] = useState('2');
+  const [glidantName, setGlidantName] = useState('');
+  const [glidantPercent, setGlidantPercent] = useState('');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<SavedFormulationStatus>('untested');
   const [outcomeNotes, setOutcomeNotes] = useState('');
@@ -98,6 +100,8 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         setDisintegrantPercent(data.disintegrantPercent != null ? String(data.disintegrantPercent) : '');
         setLubricantName(data.lubricantName ?? '');
         setLubricantPercent(data.lubricantPercent != null ? String(data.lubricantPercent) : '');
+        setGlidantName(data.glidantName ?? '');
+        setGlidantPercent(data.glidantPercent != null ? String(data.glidantPercent) : '');
         // Outcome fields (status/outcomeNotes/equipmentNotes) deliberately
         // reset for the new iteration rather than copying the parent's —
         // the parent's describe what already happened to it, not this
@@ -136,8 +140,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
       })),
       disintegrantPercent: disintegrantPercent === '' ? null : numOrZero(disintegrantPercent),
       lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
+      glidantPercent: glidantPercent === '' ? null : numOrZero(glidantPercent),
     });
-  }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent]);
+  }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent, glidantPercent]);
 
   const canSave =
     !loadingParent &&
@@ -161,6 +166,8 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         disintegrantPercent: number | null;
         lubricantName: string | null;
         lubricantPercent: number | null;
+        glidantName: string | null;
+        glidantPercent: number | null;
         notes: string | null;
         parentId?: string;
         status: SavedFormulationStatus;
@@ -181,6 +188,8 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         disintegrantPercent: disintegrantPercent === '' ? null : numOrZero(disintegrantPercent),
         lubricantName: lubricantName.trim() || null,
         lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
+        glidantName: glidantName.trim() || null,
+        glidantPercent: glidantPercent === '' ? null : numOrZero(glidantPercent),
         notes: notes.trim() || null,
         ...(iterateFromId ? { parentId: iterateFromId } : {}),
         status,
@@ -394,6 +403,27 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                     />
                   </div>
                 </div>
+                <div className="lot-field-grid" style={{ marginTop: 8 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Glidant</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Silicon Dioxide"
+                      value={glidantName}
+                      onChange={(e) => setGlidantName(e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>%</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      step="0.1"
+                      value={glidantPercent}
+                      onChange={(e) => setGlidantPercent(e.target.value)}
+                    />
+                  </div>
+                </div>
 
                 <div className="hr" />
                 <div className="sub-lbl">Outcome (this version)</div>
@@ -509,6 +539,17 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                       </div>
                       <div className="add-val">
                         {numOrZero(lubricantPercent).toFixed(2)}% · {fmt(derived.lubricantGramsPerBatch ?? 0, 1)} g
+                      </div>
+                    </div>
+                  )}
+                  {glidantName.trim() && (
+                    <div className="add-row">
+                      <div className="add-lbl">
+                        <i className="ti ti-wind" />
+                        {glidantName}
+                      </div>
+                      <div className="add-val">
+                        {numOrZero(glidantPercent).toFixed(2)}% · {fmt(derived.glidantGramsPerBatch ?? 0, 1)} g
                       </div>
                     </div>
                   )}

@@ -151,6 +151,18 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
                     <div className="add-val">
                       {(formulation.disintegrantPercent ?? 0).toFixed(2)}% ·{' '}
                       {fmt(derived!.disintegrantGramsPerBatch ?? 0, 1)} g
+                {formulation.glidantName && (
+                  <div className="add-row">
+                    <div className="add-lbl">
+                      <i className="ti ti-wind" />
+                      {formulation.glidantName}
+                    </div>
+                    <div className="add-val">
+                      {(formulation.glidantPercent ?? 0).toFixed(2)}% ·{' '}
+                      {fmt(derived!.glidantGramsPerBatch ?? 0, 1)} g
+                    </div>
+                  </div>
+                )}
                     </div>
                   </div>
                 )}

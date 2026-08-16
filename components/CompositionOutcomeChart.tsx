@@ -53,6 +53,10 @@ function buildChartData(versions: SavedFormulationRecord[]): { data: ChartPoint[
         point[v.lubricantName] = v.lubricantPercent ?? 0;
         addName(v.lubricantName);
       }
+      if (v.glidantName) {
+        point[v.glidantName] = v.glidantPercent ?? 0;
+        addName(v.glidantName);
+      }
       return point;
     });
 
@@ -71,7 +75,7 @@ interface CompositionOutcomeChartProps {
 
 /**
  * X axis = version number, one line per component (each active + filler +
- * disintegrant + lubricant) so a component's trend across versions is
+ * disintegrant + lubricant + glidant) so a component's trend across versions is
  * traceable by line color, while every line's marker at a given version is
  * colored by THAT version's outcome status — letting the reader see both
  * what changed and whether it worked in one view (spec's "Option B").

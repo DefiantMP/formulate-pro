@@ -84,6 +84,10 @@ model SavedFormulation {
   disintegrantPercent   Float?
   lubricantName         String?
   lubricantPercent      Float?
+  // Glidant (e.g. Silicon Dioxide) — improves powder flow. Additive nullable
+  // column, same pattern as disintegrant/lubricant above. Added 2026-08-07.
+  glidantName           String?
+  glidantPercent        Float?
   notes                 String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

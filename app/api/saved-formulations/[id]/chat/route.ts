@@ -59,6 +59,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     disintegrantPercent: v.disintegrantPercent,
     lubricantName: v.lubricantName,
     lubricantPercent: v.lubricantPercent,
+    glidantName: v.glidantName,
+    glidantPercent: v.glidantPercent,
     notes: v.notes,
     createdAt: v.createdAt.toISOString(),
     lineageId: v.lineageId,
@@ -89,6 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       fillerName: true,
       disintegrantName: true,
       lubricantName: true,
+      glidantName: true,
     },
   });
   const candidates: CrossFormulationCandidate[] = allCandidateRows.map((c) => ({
@@ -104,6 +107,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     fillerName: c.fillerName,
     disintegrantName: c.disintegrantName,
     lubricantName: c.lubricantName,
+    glidantName: c.glidantName,
   }));
   const latestVersion = versions[versions.length - 1];
   const crossFormulationContext = findRelevantCrossFormulationNotes(candidates, lineageId, latestVersion, message);

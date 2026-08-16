@@ -39,6 +39,9 @@ export interface SavedFormulationRecord {
   disintegrantPercent: number | null;
   lubricantName: string | null;
   lubricantPercent: number | null;
+  /** Improves powder flow (e.g. Silicon Dioxide) — added 2026-08-07, additive/nullable like disintegrant and lubricant. */
+  glidantName: string | null;
+  glidantPercent: number | null;
   notes: string | null;
   createdAt: string;
   /** Groups every version of one formulation together; null means this row is its own lineage root — see effectiveLineageId. */
@@ -75,6 +78,7 @@ export interface SavedFormulationDerived {
   fillerGramsPerBatch: number;
   disintegrantGramsPerBatch: number | null;
   lubricantGramsPerBatch: number | null;
+  glidantGramsPerBatch: number | null;
   totalBatchG: number;
 }
 
@@ -93,6 +97,7 @@ export function deriveSavedFormulation(f: {
   actives: SavedFormulationActive[];
   disintegrantPercent: number | null;
   lubricantPercent: number | null;
+  glidantPercent: number | null;
 }): SavedFormulationDerived {
   const totalBatchG = f.tabletWeightG * f.referenceBatchTablets;
 
@@ -102,7 +107,8 @@ export function deriveSavedFormulation(f: {
   });
 
   const combinedActivePercent = actives.reduce((sum, a) => sum + a.percentOfBlend, 0);
-  const fixedPercentSum = combinedActivePercent + (f.disintegrantPercent ?? 0) + (f.lubricantPercent ?? 0);
+  const fixedPercentSum =
+    combinedActivePercent + (f.disintegrantPercent ?? 0) + (f.lubricantPercent ?? 0) + (f.glidantPercent ?? 0);
   const fillerPercent = Math.max(0, 100 - fixedPercentSum);
 
   return {
@@ -112,6 +118,7 @@ export function deriveSavedFormulation(f: {
     fillerGramsPerBatch: totalBatchG * (fillerPercent / 100),
     disintegrantGramsPerBatch: f.disintegrantPercent != null ? totalBatchG * (f.disintegrantPercent / 100) : null,
     lubricantGramsPerBatch: f.lubricantPercent != null ? totalBatchG * (f.lubricantPercent / 100) : null,
+    glidantGramsPerBatch: f.glidantPercent != null ? totalBatchG * (f.glidantPercent / 100) : null,
     totalBatchG,
   };
 }
@@ -166,6 +173,7 @@ export interface CrossFormulationCandidate {
   fillerName: string;
   disintegrantName: string | null;
   lubricantName: string | null;
+  glidantName: string | null;
 }
 
 export interface RelevantCrossFormulationNote {
@@ -210,8 +218,11 @@ function compositionText(f: {
   fillerName: string;
   disintegrantName: string | null;
   lubricantName: string | null;
+  glidantName: string | null;
 }): string {
-  return [...f.actives.map((a) => a.label), f.fillerName, f.disintegrantName ?? '', f.lubricantName ?? ''].join(' ');
+  return [...f.actives.map((a) => a.label), f.fillerName, f.disintegrantName ?? '', f.lubricantName ?? '', f.glidantName ?? ''].join(
+    ' '
+  );
 }
 
 function truncateNote(text: string, maxChars: number): string {
@@ -233,6 +244,7 @@ export function findRelevantCrossFormulationNotes(
     fillerName: string;
     disintegrantName: string | null;
     lubricantName: string | null;
+    glidantName: string | null;
   },
   userMessage: string
 ): CrossFormulationContext {
@@ -318,6 +330,7 @@ export function buildTroubleshootSystemPrompt(
       `Filler: ${v.fillerName} ${derived.fillerPercent.toFixed(2)}%`,
       v.disintegrantName ? `Disintegrant: ${v.disintegrantName} ${v.disintegrantPercent ?? 0}%` : null,
       v.lubricantName ? `Lubricant: ${v.lubricantName} ${v.lubricantPercent ?? 0}%` : null,
+      v.glidantName ? `Glidant: ${v.glidantName} ${v.glidantPercent ?? 0}%` : null,
     ]
       .filter(Boolean)
       .join('; ');
