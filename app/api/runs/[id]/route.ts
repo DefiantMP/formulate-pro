@@ -22,6 +22,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     passFail,
     notes,
     label,
+    product,
     mode,
     inputs,
     result,
@@ -54,8 +55,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (mode !== undefined && mode !== 'fresh' && mode !== 'regrind') {
     return NextResponse.json({ error: 'mode must be "fresh" or "regrind"' }, { status: 400 });
   }
+  // Nullable on purpose: this is also how an existing run gets tagged after
+  // the fact, and how a mistagged one is cleared.
+  if (product !== null && product !== undefined && typeof product !== 'string') {
+    return NextResponse.json({ error: 'product must be a string or null' }, { status: 400 });
+  }
 
   const data: Record<string, unknown> = {};
+  if ('product' in body) {
+    data.product = typeof product === 'string' && product.trim() ? product.trim() : null;
+  }
   if ('actualMgPerTablet' in body) data.actualMgPerTablet = actualMgPerTablet;
   if ('actualTabletWeight' in body) data.actualTabletWeight = actualTabletWeight;
   if ('passFail' in body) data.passFail = passFail;

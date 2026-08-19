@@ -24,6 +24,14 @@ model Formulation {
 model Run {
   id            String   @id @default(cuid())
   label         String
+  // Which product this batch is of ("OGS", "RR77"), as distinct from label,
+  // which is a free-text name for this one run and in practice carries dates
+  // and rework notes ("77s rework - 7/20/26"). Kept as its own column rather
+  // than parsed back out of label, because grouping runs by product is what
+  // makes prior-run suggestions possible and label is too irregular to key on.
+  // Nullable and additive: every run predating this column has none, and a
+  // run without a product simply gets no suggestions.
+  product       String?
   mode          String // 'fresh' | 'regrind'
   formulationId String
   formulation   Formulation @relation(fields: [formulationId], references: [id])
