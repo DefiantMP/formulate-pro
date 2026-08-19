@@ -19,7 +19,6 @@ import type {
   FreshApiEntry,
   FreshApiPotency,
   FreshApiStockEntry,
-  FreshFillerType,
 } from '@/lib/calc-engine/types';
 import { fmt, fmtK, numOrZero } from '@/lib/format';
 import Sidebar from './Sidebar';
@@ -175,7 +174,7 @@ export default function FormulateApp() {
   const [fTwt, setFTwt] = useState('');
   const [fTabs, setFTabs] = useState('');
   const [freshSolveMode, setFreshSolveMode] = useState(false);
-  const [fFillerType, setFFillerType] = useState<FreshFillerType>('Emdex');
+  const [fFillerType, setFFillerType] = useState<string>('Emdex');
   const [excipientPercents, setExcipientPercents] = useState<Record<string, string>>({});
 
   function setExcipientPercent(id: string, value: string) {
@@ -922,7 +921,7 @@ export default function FormulateApp() {
       }
       setFTwt(str('fTwt'));
       setFTabs(str('fTabs'));
-      setFFillerType((inputs.fillerType as FreshFillerType) || 'Emdex');
+      setFFillerType((inputs.fillerType as string) || 'Emdex');
       // Solve mode is never re-entered on load — a saved run always stores
       // the final, resolved tablet count and API grams (see performAutosave/buildRunInputs), so it
       // always restores into the ordinary manual-tablet-count flow.

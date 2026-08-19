@@ -68,6 +68,18 @@ export interface FreshApiResult {
 export const FRESH_FILLER_TYPES = ['Emdex', 'Dipac'] as const;
 export type FreshFillerType = (typeof FRESH_FILLER_TYPES)[number];
 
+/**
+ * The filler is identified by NAME only — nothing in calculateFreshBatch
+ * reads it (it is destructured, echoed into the result, and copied per
+ * regrind lot, never used in arithmetic), because fillers here are 1:1
+ * interchangeable by weight. FRESH_FILLER_TYPES is therefore a list of
+ * suggestions for the UI, not a constraint: an operator running a real
+ * batch may be using a filler this codebase has never heard of, and
+ * forcing them to mislabel it as Emdex would put a wrong material name
+ * on the batch sheet. Kept exported for the datalist that offers the
+ * common two.
+ */
+
 export interface FreshBatchInput {
   tabletCount: number;
   targetWeightG: number;
@@ -80,7 +92,7 @@ export interface FreshBatchInput {
    */
   ingredients: IngredientLine[];
   /** Informational only — which filler was used (e.g. Emdex vs Dipac). Filler mass math is identical either way. */
-  fillerType: FreshFillerType;
+  fillerType: string;
 }
 
 export interface FreshBatchResult {
@@ -97,7 +109,7 @@ export interface FreshBatchResult {
   ingredientPercents: Record<string, number>;
   /** Combined % of blend taken up by every API's raw material together. */
   activePercentOfBlend: number;
-  fillerType: FreshFillerType;
+  fillerType: string;
 }
 
 export type PotencyInput =

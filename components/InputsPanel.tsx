@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { IngredientLine } from '@/lib/calc-engine/types';
-import { FRESH_FILLER_TYPES, type FreshFillerType } from '@/lib/calc-engine/types';
+import { FRESH_FILLER_TYPES } from '@/lib/calc-engine/types';
 import { numOrZero } from '@/lib/format';
 import type {
   Mode,
@@ -36,8 +36,8 @@ interface InputsPanelProps {
   excipients: IngredientLine[];
   excipientPercents: Record<string, string>;
   setExcipientPercent: (id: string, value: string) => void;
-  fillerType: FreshFillerType;
-  onFillerTypeChange: (type: FreshFillerType) => void;
+  fillerType: string;
+  onFillerTypeChange: (type: string) => void;
   fillerDisplay: string;
 
   lots: RegrindLotState[];
@@ -183,16 +183,22 @@ export default function InputsPanel(props: InputsPanelProps) {
             <div className="hr" />
             <div className="field">
               <label>Filler type</label>
-              <select
+              {/* Free text with suggestions, not a closed list: the filler name
+                  is a label the engine never computes on, and an operator may
+                  legitimately be using one this app doesn't ship. The datalist
+                  keeps the two common choices one keystroke away. */}
+              <input
+                type="text"
+                list="fresh-filler-types"
                 value={props.fillerType}
-                onChange={(e) => props.onFillerTypeChange(e.target.value as FreshFillerType)}
-              >
+                placeholder="e.g. Emdex"
+                onChange={(e) => props.onFillerTypeChange(e.target.value)}
+              />
+              <datalist id="fresh-filler-types">
                 {FRESH_FILLER_TYPES.map((ft) => (
-                  <option key={ft} value={ft}>
-                    {ft}
-                  </option>
+                  <option key={ft} value={ft} />
                 ))}
-              </select>
+              </datalist>
             </div>
             <div className="sub-lbl">Excipients</div>
             {props.excipients.map((ing) => (
