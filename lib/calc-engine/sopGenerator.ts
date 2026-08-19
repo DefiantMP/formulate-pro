@@ -34,9 +34,23 @@ export function generateFreshBatchSOP(
   // ingredient here would silently hide it from the SOP instead of making
   // the zero visible.
   const lubricants = ingredients.filter((i) => i.role === 'lubricant');
-  const primary = ingredients
-    .filter((i) => i.role !== 'lubricant')
-    .map((i) => ({ id: i.id, name: i.calculatedByDifference ? result.fillerType : i.name }));
+
+  // The filler is named freely, so it can be the SAME physical material as a
+  // fixed excipient (filler "EZTAB" alongside the EZTAB excipient). Weighing
+  // instructions must not name it twice: "weigh 49,258.6 g EZTAB ... and
+  // 6,527.8 g EZTAB" reads as two separate additions of one material, which
+  // is a dispensing error waiting to happen. Same-named entries are summed
+  // into one line — the merge regrind already does for its bulk EasyTab
+  // filler and its fixed EasyTab processing aid.
+  const primary: { name: string; grams: number }[] = [];
+  for (const i of ingredients) {
+    if (i.role === 'lubricant') continue;
+    const name = i.calculatedByDifference ? result.fillerType : i.name;
+    const grams = result.ingredientGrams[i.id] ?? 0;
+    const existing = primary.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (existing) existing.grams += grams;
+    else primary.push({ name, grams });
+  }
 
   const steps: string[] = [];
 
@@ -45,7 +59,7 @@ export function generateFreshBatchSOP(
   }
   if (primary.length > 0) {
     steps.push(
-      `Weigh ${joinNatural(primary.map((i) => `${fmt(result.ingredientGrams[i.id])} g ${i.name}`))}`
+      `Weigh ${joinNatural(primary.map((i) => `${fmt(i.grams)} g ${i.name}`))}`
     );
   }
   const vmixNames = [...result.apis.map((a) => a.label), ...primary.map((i) => i.name)];

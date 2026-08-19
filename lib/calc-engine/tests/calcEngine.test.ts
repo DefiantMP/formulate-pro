@@ -7,6 +7,7 @@ import {
   activePercentOfBlendFromDose,
   generateVarianceTable,
 } from '../calcEngine';
+import { generateFreshBatchSOP } from '../sopGenerator';
 import { defaultIngredients } from '../defaultFormulation';
 import type {
   IngredientLine,
@@ -15,6 +16,7 @@ import type {
   FreshApiEntry,
   FreshApiPotency,
   FreshApiStockEntry,
+  FreshBatchResult,
 } from '../types';
 
 /** A single-lot array whose weight matches regroundPowderG — reduces exactly to the pre-multi-lot formula. */
@@ -1287,5 +1289,48 @@ describe('validation guards', () => {
       fillerType: 'Emdex',
     });
     expect(result).toBeNull();
+  });
+});
+
+describe('generateFreshBatchSOP — filler sharing a name with an excipient', () => {
+  // Regression: the filler name is free text, so it can be the same material
+  // as a fixed excipient. Naming it twice in a weighing step ("weigh 49,258.6 g
+  // EZTAB ... and 6,527.8 g EZTAB") reads as two separate additions of one
+  // material — a dispensing error, not a cosmetic one.
+  const ingredients: IngredientLine[] = [
+    { id: 'eztabFiller', name: 'ignored', role: 'filler', percentOfBlend: null, calculatedByDifference: true },
+    { id: 'pvpp', name: 'PVPP XL', role: 'other', percentOfBlend: 10, calculatedByDifference: false },
+    { id: 'eztab', name: 'EZTAB', role: 'other', percentOfBlend: 10, calculatedByDifference: false },
+    { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 1.5, calculatedByDifference: false },
+  ];
+  const result = {
+    mode: 'fresh',
+    tabletCount: 112549,
+    targetWeightG: 0.58,
+    targetActiveMgPerTablet: 14,
+    totalBlendG: 65278.42,
+    fillerType: 'EZTAB',
+    apis: [{ id: 'active', label: '7OH', targetActiveMgPerTablet: 14, effectivePotency: 0.7938, percentOfBlend: 3.04, gramsPerRun: 1984.99 }],
+    ingredientGrams: { active: 1984.99, eztabFiller: 49258.57, pvpp: 6527.84, eztab: 6527.84, magstearate: 979.18 },
+    ingredientPercents: {},
+    activePercentOfBlend: 3.04,
+  } as unknown as FreshBatchResult;
+
+  it('names the shared material once, with the weights summed', () => {
+    const steps = generateFreshBatchSOP(result, ingredients);
+    const weighStep = steps.find((s) => s.startsWith('Weigh 4') || s.startsWith('Weigh 5'))!;
+    // 49,258.57 + 6,527.84 = 55,786.41 in one instruction, not two.
+    expect(weighStep).toContain('55,786.4 g EZTAB');
+    expect(weighStep.match(/EZTAB/g)).toHaveLength(1);
+  });
+
+  it('lists it once in the V-mix step too', () => {
+    const vmix = generateFreshBatchSOP(result, ingredients).find((s) => s.startsWith('Add '))!;
+    expect(vmix.match(/EZTAB/g)).toHaveLength(1);
+  });
+
+  it('leaves differently-named ingredients alone', () => {
+    const steps = generateFreshBatchSOP(result, ingredients);
+    expect(steps.some((s) => s.includes('6,527.8 g PVPP XL'))).toBe(true);
   });
 });

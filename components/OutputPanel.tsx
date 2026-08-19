@@ -13,10 +13,14 @@ export interface AddRowData {
 export interface StatsData {
   tablets: string;
   blend: string;
-  /** "Active potency" for fresh batch, "Reground powder potency" for regrind (see potency below). */
+  /** "API raw material" for fresh batch, "Reground powder potency" for regrind (see potency below). */
   potencyLabel: string;
   /**
-   * Fresh: activePercentOfBlend, already the finished-tablet potency.
+   * Fresh: activePercentOfBlend — the % of the blend taken up by the API's
+   * RAW MATERIAL, not the assay-adjusted active content. At 79.38% potency,
+   * 3.041% raw material is only 2.414% actual active, so labelling this
+   * "potency" overstates the finished tablet. The assay-adjusted figure is
+   * activeInBlendPercent below.
    * Regrind: activeInOldPowderG / regroundPowderG — the reground powder's
    * own potency, BEFORE Emdex, lubricant top-up, EasyTab, and Silicon
    * Dioxide are added — not the actual final tablet blend potency (see
@@ -30,6 +34,13 @@ export interface StatsData {
    * figure). Undefined for fresh batch, where potency above already is this.
    */
   finalBlendPotency?: string;
+  /**
+   * Fresh only: the assay-adjusted active as a % of the finished blend —
+   * each API's raw material grams times its own effective potency, over the
+   * total blend. This is what "how much drug is in the tablet" means;
+   * `potency` above is how much raw powder is in it.
+   */
+  activeInBlendPercent?: string;
   mgPerTab: string;
 }
 
@@ -135,6 +146,16 @@ export default function OutputPanel({
                     <div className="stat-lbl">% of API in batch total</div>
                     <div className="stat-val">{stats.finalBlendPotency}</div>
                     <div className="stat-unit">of blend</div>
+                  </div>
+                )}
+                {/* Shown next to the raw-material figure rather than instead of
+                    it: an operator needs the raw weight to dispense, and the
+                    assay-adjusted figure to know what the tablet contains. */}
+                {stats.activeInBlendPercent && (
+                  <div className="stat">
+                    <div className="stat-lbl">Actual active</div>
+                    <div className="stat-val">{stats.activeInBlendPercent}</div>
+                    <div className="stat-unit">of blend, assay-adjusted</div>
                   </div>
                 )}
                 <div className="stat">

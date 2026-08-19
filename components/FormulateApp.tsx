@@ -546,8 +546,11 @@ export default function FormulateApp() {
 
   const stats: StatsData | null = useMemo(() => {
     if (!result) return null;
-    // Fresh batch is built directly to the target blend, so
-    // activePercentOfBlend already is the finished-tablet potency. Regrind's
+    // Fresh: activePercentOfBlend is the % of blend taken up by the API's RAW
+    // MATERIAL, NOT the assay-adjusted active content — at 79.38% potency,
+    // 3.041% raw material is 2.414% actual active. It was previously labelled
+    // "Active potency", which overstated what is in the finished tablet; both
+    // figures are now shown, each named for what it actually is. Regrind's
     // effectivePotency is the reground powder's OWN potency, before Emdex,
     // lubricant top-up, EasyTab, and Silicon Dioxide are added — not the
     // final tablet blend's potency (see finalBlendPotency below).
@@ -561,8 +564,20 @@ export default function FormulateApp() {
     return {
       tablets: fmtK(result.tabletCount),
       blend,
-      potencyLabel: result.mode === 'fresh' ? 'Active potency' : 'Reground powder potency',
+      potencyLabel: result.mode === 'fresh' ? 'API raw material' : 'Reground powder potency',
       potency: potencyPercent.toFixed(3) + '%',
+      // Assay-adjusted active as a % of the finished blend: each API's raw
+      // material grams times its OWN effective potency, over the total blend.
+      // Display-only arithmetic over figures the engine already computed —
+      // nothing here feeds back into a calculation.
+      activeInBlendPercent:
+        result.mode === 'fresh' && result.totalBlendG > 0
+          ? (
+              (result.apis.reduce((sum, api) => sum + api.gramsPerRun * api.effectivePotency, 0) /
+                result.totalBlendG) *
+              100
+            ).toFixed(3) + '%'
+          : undefined,
       // Actual final blend potency once every addition is included —
       // reconciles with Verified mg/tab (this × target tablet weight ≈ that).
       finalBlendPotency:
@@ -586,16 +601,34 @@ export default function FormulateApp() {
         icon: 'plus',
         key: true,
       }));
-      const otherRows: AddRowData[] = freshIngredients.map((ing) => {
-        const grams = result.ingredientGrams[ing.id] ?? 0;
-        const isFiller = ing.calculatedByDifference;
-        return {
-          label: isFiller ? result.fillerType : ing.name,
-          value: `${fmt(grams, 2)} g`,
-          icon: isFiller ? 'cube' : 'circle-plus',
-          key: isFiller,
-        };
-      });
+      // The filler is named freely, so it can be the SAME physical material as
+      // a fixed excipient (e.g. filler "EZTAB" alongside the EZTAB excipient).
+      // When that happens the two are merged into one line carrying the summed
+      // weight, rather than printed as two rows the operator would have to
+      // realise are the same tub — the same merge regrind already does for its
+      // bulk EasyTab filler and its fixed EasyTab processing aid.
+      const fillerLabel = result.fillerType.trim();
+      const mergesIntoFiller = (ing: { name: string; calculatedByDifference: boolean }) =>
+        !ing.calculatedByDifference &&
+        fillerLabel !== '' &&
+        ing.name.trim().toLowerCase() === fillerLabel.toLowerCase();
+
+      const mergedIntoFillerG = freshIngredients
+        .filter(mergesIntoFiller)
+        .reduce((sum, ing) => sum + (result.ingredientGrams[ing.id] ?? 0), 0);
+
+      const otherRows: AddRowData[] = freshIngredients
+        .filter((ing) => !mergesIntoFiller(ing))
+        .map((ing) => {
+          const isFiller = ing.calculatedByDifference;
+          const grams = (result.ingredientGrams[ing.id] ?? 0) + (isFiller ? mergedIntoFillerG : 0);
+          return {
+            label: isFiller ? fillerLabel : ing.name,
+            value: `${fmt(grams, 2)} g`,
+            icon: isFiller ? 'cube' : 'circle-plus',
+            key: isFiller,
+          };
+        });
       return [...apiRows, ...otherRows];
     }
     const solvedRow: AddRowData[] = solvedLotDisplay
