@@ -25,9 +25,11 @@ import Sidebar from './Sidebar';
 import Topbar, { type AutosaveStatus } from './Topbar';
 import InputsPanel from './InputsPanel';
 import NewRunModal from './NewRunModal';
+import PriorRunsPanel from './PriorRunsPanel';
 import OutputPanel, { type AddRowData, type StatsData, type TabKey, type LotBreakdownRow } from './OutputPanel';
 import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
+import type { PriorRunSummary } from '@/lib/productHistory';
 import VerifyIndicator, { type VerifyDiscrepancy, type VerifyStatus } from './VerifyIndicator';
 
 export type Mode = 'fresh' | 'regrind';
@@ -148,6 +150,8 @@ export default function FormulateApp() {
   // `disabled` prop / NewRunModal) until a name is chosen. Loading a run from
   // history sets these directly, bypassing the modal (see loadRun below).
   const [runName, setRunName] = useState('');
+  // Which product this run is of — drives the prior-run suggestions panel.
+  const [runProduct, setRunProduct] = useState('');
   const [showNamePrompt, setShowNamePrompt] = useState(true);
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
 
@@ -815,6 +819,7 @@ export default function FormulateApp() {
     // Loading an existing run isn't "starting a new run" — it's already
     // named and already saved, so skip the naming modal entirely.
     setRunName(run.label);
+    setRunProduct(run.product ?? '');
     setShowNamePrompt(false);
     setAutosaveStatus('saved');
     const inputs = run.inputs;
@@ -993,6 +998,7 @@ export default function FormulateApp() {
     try {
       const payload = {
         label: runName,
+        product: runProduct.trim() || null,
         mode,
         inputs: buildRunInputs(),
         result,
@@ -1046,14 +1052,66 @@ export default function FormulateApp() {
     return () => clearTimeout(timer);
   }, [showNamePrompt, runName, result]);
 
-  function handleNameSubmit(name: string) {
+  /**
+   * Copy a past run's figures into the form.
+   *
+   * Only ever runs on an explicit click — the panel never writes anything on
+   * its own. Fresh-mode only: a regrind run's inputs (lot weights, pressed
+   * weights) have no counterpart in the fresh form, so applying one would
+   * half-fill the sheet with figures that don't correspond to what's being
+   * entered.
+   *
+   * Excipients are matched to this formulation's ingredients BY NAME, and any
+   * that don't match are left alone rather than dropped in under a guessed
+   * id — a percentage landing on the wrong ingredient is a real batch error,
+   * where simply not applying it is a visible no-op the operator can correct.
+   */
+  function applyPriorRun(run: PriorRunSummary) {
+    if (run.mode !== 'fresh' || mode !== 'fresh') return;
+
+    if (run.tabletWeightG !== null) setFTwt(String(run.tabletWeightG));
+    if (run.tabletCount !== null) setFTabs(String(run.tabletCount));
+    if (run.fillerName) setFFillerType(run.fillerName);
+
+    if (run.actives.length > 0) {
+      // potencyPercent is a bulk percentage regardless of how the original
+      // run entered it, so the form has to be on that method to match.
+      setFPotMethod('bulkPercent');
+      setApis(
+        run.actives.map((a, i) =>
+          ({
+            ...blankApi(a.label, i === 0 ? 'active' : makeApiId()),
+            targetMg: String(a.targetMgPerTablet),
+            potPercent: String(Number(a.potencyPercent.toFixed(4))),
+          })
+        )
+      );
+    }
+
+    if (run.excipients.length > 0) {
+      setExcipientPercents((prev) => {
+        const next = { ...prev };
+        for (const exc of run.excipients) {
+          const match = baseIngredients.find(
+            (i) => i.name.toLowerCase() === exc.name.toLowerCase() && !i.calculatedByDifference
+          );
+          if (match) next[match.id] = String(exc.percentOfBlend);
+        }
+        return next;
+      });
+    }
+  }
+
+  function handleNameSubmit(name: string, product: string) {
     setRunName(name);
+    setRunProduct(product);
     setShowNamePrompt(false);
   }
 
   function resetForm() {
     setLoadedRun(null);
     setRunName('');
+    setRunProduct('');
     setShowNamePrompt(true);
     setAutosaveStatus('idle');
     savingInFlightRef.current = false;
@@ -1163,6 +1221,9 @@ export default function FormulateApp() {
           </div>
 
           <div className="col-right">
+            {!showNamePrompt && runProduct.trim() && (
+              <PriorRunsPanel product={runProduct} currentRunId={loadedRun} onApply={applyPriorRun} />
+            )}
             <RunHistoryPanel runs={runs} loading={runsLoading} loadedRun={loadedRun} onLoadRun={loadRun} />
             <TipsCard mode={mode} usingOptionB={usingOptionB} />
           </div>

@@ -56,6 +56,33 @@ describe('summarizePriorRun', () => {
     expect(s.excipients).toEqual([{ name: 'PVPP XL', percentOfBlend: 5 }]);
   });
 
+  it('reads the excipient shape the calculator actually saves', () => {
+    // Taken from a real stored run: inputs carry `excipients` as an id ->
+    // STRING map, with no `ingredients` array at all. Reading only the array
+    // shape yielded no excipients for every run ever saved by the New run
+    // page, which is precisely the bug this pins.
+    const real: RunForSummary = {
+      ...baseRun,
+      inputs: { excipients: { pvpp: '10', magstearate: '1.5', eztab: '100' } },
+      result: {
+        mode: 'fresh',
+        tabletCount: 112549,
+        targetWeightG: 0.58,
+        fillerType: 'Emdex',
+        ingredientPercents: { active: 3.04, emdex: 0, pvpp: 10, magstearate: 1.5, eztab: 100 },
+        apis: [{ label: '7OH', targetActiveMgPerTablet: 14, effectivePotency: 0.7938 }],
+      },
+    };
+    const s = summarizePriorRun(real);
+    expect(s.excipients).toEqual([
+      { name: 'PVPP XL', percentOfBlend: 10 },
+      { name: 'Magnesium stearate', percentOfBlend: 1.5 },
+      { name: 'EZTAB', percentOfBlend: 100 },
+    ]);
+    // The by-difference filler stays out even though it has a percentage.
+    expect(s.excipients.map((e) => e.name)).not.toContain('Emdex');
+  });
+
   it('reads a pre-combo-product run that stored a single scalar active', () => {
     const legacy: RunForSummary = {
       ...baseRun,

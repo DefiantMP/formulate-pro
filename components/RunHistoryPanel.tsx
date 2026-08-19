@@ -3,6 +3,9 @@ import type { CalcResult } from '@/lib/calc-engine/types';
 export interface RunRecord {
   id: string;
   label: string;
+  /** Which product this batch is of. Null on runs saved before products
+   *  existed, and on any run the operator chose not to tag. */
+  product?: string | null;
   mode: 'fresh' | 'regrind';
   /** Flat string fields plus, for fresh-mode runs, a nested `excipients` map. */
   inputs: Record<string, unknown>;

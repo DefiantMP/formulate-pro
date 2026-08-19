@@ -14,6 +14,8 @@
  * History page already follow.
  */
 
+import { defaultIngredients } from './calc-engine';
+
 /** What a past run recorded for one active. */
 export interface PriorActive {
   label: string;
@@ -127,28 +129,57 @@ function activesOf(result: Record<string, unknown>): PriorActive[] {
 }
 
 /**
- * Fixed-percentage excipients, read from the run's stored ingredient list.
+ * Fixed-percentage excipients from a past run.
  *
- * The filler is excluded: it is calculated by difference, so quoting its
- * percentage as a starting point for the next batch would be quoting an
- * output as if it were an input.
+ * Two stored shapes exist and both are real. Runs save their excipients as
+ * `inputs.excipients`, a map of ingredient id to a STRING percentage
+ * ("pvpp": "10") — that is what the New run page actually writes. Some
+ * payloads instead carry a full `inputs.ingredients` array with names on it.
+ * Reading only the array shape silently yields no excipients for every run
+ * the calculator has ever saved, so both are handled, with names resolved
+ * from the id when the shape doesn't carry them.
+ *
+ * The calculated-by-difference filler is excluded either way: its percentage
+ * is an output of the last batch, not an input to the next.
  */
-function excipientsOf(inputs: Record<string, unknown>, result: Record<string, unknown>): PriorExcipient[] {
+function excipientsOf(
+  inputs: Record<string, unknown>,
+  result: Record<string, unknown>
+): PriorExcipient[] {
+  const byId = new Map(defaultIngredients().map((i) => [i.id, i]));
+
   const ingredients = inputs.ingredients;
-  const percents = (result.ingredientPercents ?? {}) as Record<string, unknown>;
-  if (!Array.isArray(ingredients)) return [];
-  const out: PriorExcipient[] = [];
-  for (const raw of ingredients) {
-    const ing = (raw ?? {}) as Record<string, unknown>;
-    if (ing.calculatedByDifference === true) continue;
-    if (ing.role === 'active') continue;
-    const name = typeof ing.name === 'string' ? ing.name : null;
-    if (!name) continue;
-    const pct = num(ing.percentOfBlend) ?? num(percents[String(ing.id)]);
-    if (pct === null) continue;
-    out.push({ name, percentOfBlend: pct });
+  if (Array.isArray(ingredients) && ingredients.length > 0) {
+    const out: PriorExcipient[] = [];
+    for (const raw of ingredients) {
+      const ing = (raw ?? {}) as Record<string, unknown>;
+      if (ing.calculatedByDifference === true || ing.role === 'active') continue;
+      const name = typeof ing.name === 'string' ? ing.name : byId.get(String(ing.id))?.name;
+      const pct = num(ing.percentOfBlend);
+      if (!name || pct === null) continue;
+      out.push({ name, percentOfBlend: pct });
+    }
+    return out;
   }
-  return out;
+
+  // The shape the calculator actually writes: id -> string percentage.
+  const excipients = inputs.excipients;
+  if (excipients && typeof excipients === 'object') {
+    const percents = (result.ingredientPercents ?? {}) as Record<string, unknown>;
+    const out: PriorExcipient[] = [];
+    for (const [id, raw] of Object.entries(excipients as Record<string, unknown>)) {
+      const meta = byId.get(id);
+      if (!meta || meta.calculatedByDifference || meta.role === 'active') continue;
+      // Prefer the computed percentage, which is numeric and is what the run
+      // was actually calculated on; the input string is the fallback.
+      const pct = num(percents[id]) ?? num(typeof raw === 'string' ? Number(raw) : raw);
+      if (pct === null) continue;
+      out.push({ name: meta.name, percentOfBlend: pct });
+    }
+    return out;
+  }
+
+  return [];
 }
 
 export function summarizePriorRun(run: RunForSummary): PriorRunSummary {
