@@ -68,11 +68,16 @@ export function generateFreshBatchSOP(
     steps.push('Mix for 15 minutes');
   }
 
+  // The lubricant goes in last and gets a SHORT final mix — over-mixing
+  // magnesium stearate shears it over the granule surface and causes capping
+  // and poor hardness. Two minutes, matching the regrind SOP's own lubricant
+  // top-up step and floor practice; this was 5 minutes, which is long enough
+  // to over-lubricate.
   for (const lube of lubricants) {
     steps.push(`Add ${fmt(result.ingredientGrams[lube.id])} g ${lube.name}`);
   }
   if (lubricants.length > 0) {
-    steps.push('Mix for 5 minutes');
+    steps.push('Mix for 2 minutes');
   }
 
   steps.push(
