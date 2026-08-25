@@ -36,6 +36,22 @@ export default function Sidebar() {
         >
           <i className="ti ti-package" /> Raw materials
         </Link>
+        <Link
+          href="/scale-verify"
+          className={`nav-btn${pathname.startsWith('/scale-verify') ? ' active' : ''}`}
+        >
+          <i className="ti ti-scale" /> Scale verification
+        </Link>
+        {/* Post press — everything downstream of the tablet press. Bucket
+            fill is the only entry today; yield/count reconciliation and
+            packaging are expected to land here too, which is why this is a
+            section rather than a single nav button. */}
+        <div className="nav-section" style={{ marginTop: 8 }}>
+          Post press
+        </div>
+        <Link href="/bucket-fill" className={`nav-btn${pathname === '/bucket-fill' ? ' active' : ''}`}>
+          <i className="ti ti-bucket" /> Bucket fill
+        </Link>
         <div className="nav-section" style={{ marginTop: 8 }}>
           R&D Suite
         </div>

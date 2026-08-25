@@ -1,5 +1,10 @@
+import BenchShell from '@/components/BenchShell';
 import ScaleVerifyReviewPage from '@/components/ScaleVerifyReviewPage';
 
 export default function ScaleVerifyReview() {
-  return <ScaleVerifyReviewPage />;
+  return (
+    <BenchShell>
+      <ScaleVerifyReviewPage />
+    </BenchShell>
+  );
 }

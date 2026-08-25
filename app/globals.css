@@ -433,12 +433,18 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .sv-context-line { font-size: 12px; color: var(--text-2); margin-bottom: 10px; }
 
 .sv-locked-value { font-size: 14px; font-weight: 600; color: var(--text); background: var(--bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
-/* --- Scale-verify tab bar (verify vs. bucket fill) --- */
-.sv-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-.sv-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 38px; border-radius: 8px; border: 0.5px solid var(--border-md); background: var(--surface); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-2); cursor: pointer; }
-.sv-tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
 
-/* --- Bucket fill calculator --- */
+/* Bench pages (/scale-verify, /bucket-fill) get the normal nav rail on a
+   desktop, but drop it on a phone — an operator holding a camera up to a
+   scale needs the full 375px. Scoped to .app-bench on purpose: the rest of
+   the app has no breakpoints, and this isn't the change that should give it
+   some. */
+@media (max-width: 767px) {
+  .app-bench .sidebar { display: none; }
+}
+
+/* --- Bucket fill calculator (shares .sv-page/.sv-card with /scale-verify —
+   the same mobile-width bench layout, two different pages) --- */
 .bf-source-note { font-size: 11px; color: var(--text-3); margin-top: 6px; line-height: 1.4; }
 .bf-source-note i { margin-right: 4px; }
 .bf-source-picks { display: flex; gap: 6px; margin-top: 8px; }

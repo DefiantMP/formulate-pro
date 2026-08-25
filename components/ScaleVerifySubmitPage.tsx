@@ -104,11 +104,13 @@ export default function ScaleVerifySubmitPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  // The page shell (.sv-page and its header) lives in ScaleVerifyPage,
-  // which owns the tab bar this flow sits under — this component renders
-  // its cards only.
   return (
-    <>
+    <div className="sv-page">
+      <div className="sv-hdr">
+        <div className="sv-title">Scale verification</div>
+        <div className="sv-subtitle">Photograph a scale reading to verify it against a run&apos;s calculated expected weight.</div>
+      </div>
+
       {result ? (
         <ResultCard result={result} onSubmitAnother={submitAnother} onUpdated={setResult} />
       ) : !selectedRun ? (
@@ -192,7 +194,7 @@ export default function ScaleVerifySubmitPage() {
           <i className="ti ti-clipboard-check" /> Manager review queue
         </Link>
       </div>
-    </>
+    </div>
   );
 }
 
