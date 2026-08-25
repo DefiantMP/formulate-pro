@@ -5,6 +5,24 @@ function fmt(n: number, dec = 1): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
+/**
+ * A potency fraction (0-1) as a display percent: 0.7938 -> "79.38",
+ * 0.764 -> "76.4", 20.1/0.27/1000 -> "7.444". Trailing zeros are trimmed so a
+ * clean assay figure doesn't print as "76.400%", and three decimals are kept
+ * so a potency *derived* from mg-per-unit still carries enough digits for an
+ * operator to retrace the grams by hand.
+ */
+function fmtPotencyPct(fraction: number): string {
+  if (!isFinite(fraction)) return '0';
+  return trim(fraction * 100, 3);
+}
+
+/** Fixed-decimal, with trailing zeros dropped — 60 -> "60", 12.50 -> "12.5". */
+function trim(n: number, dec: number): string {
+  if (!isFinite(n)) return '0';
+  return String(parseFloat(n.toFixed(dec)));
+}
+
 /** Joins items as "A", "A and B", or "A, B, and C" — natural for a weighing instruction. */
 function joinNatural(items: string[]): string {
   if (items.length <= 1) return items.join('');
@@ -54,8 +72,14 @@ export function generateFreshBatchSOP(
 
   const steps: string[] = [];
 
+  // The potency and target dose ride along with the weight: the gram figure
+  // alone is unverifiable on the floor, while grams x potency / tablet count
+  // reproduces the mg/tab an operator can check against the batch record.
   for (const api of result.apis) {
-    steps.push(`Weigh ${fmt(result.ingredientGrams[api.id])} g of ${api.label}`);
+    steps.push(
+      `Weigh ${fmt(result.ingredientGrams[api.id])} g of ${api.label} ` +
+        `(${fmtPotencyPct(api.effectivePotency)}% potency, ${trim(api.targetActiveMgPerTablet, 3)} mg/tab target)`
+    );
   }
   if (primary.length > 0) {
     steps.push(
@@ -91,9 +115,13 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
   const steps: string[] = ['Grind old tablets to fine powder'];
 
   if (result.lots.length <= 1) {
-    // Single-lot wording is unchanged from before lots existed.
+    // Single-lot wording, otherwise unchanged from before lots existed.
+    // Same reasoning as the fresh-batch weigh steps: the powder's own potency
+    // is what makes the confirmed weight checkable. Only the confirm step
+    // carries it — repeating it on the V-mix step would read as a second,
+    // different material.
     steps.push(
-      `Weigh reground powder — confirm ${fmt(result.regroundPowderG, 0)} g`,
+      `Weigh reground powder — confirm ${fmt(result.regroundPowderG, 0)} g (${fmtPotencyPct(result.effectivePotency)}% potency)`,
       `Add ${fmt(result.regroundPowderG, 0)} g reground powder to V-mix`
     );
   } else {
@@ -101,7 +129,9 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
     for (const lot of result.lots) {
       const fillerNote = lot.fillerType ? ` — filler: ${lot.fillerType}` : '';
       const flag = lot.isStart ? ' (starts — estimated, low confidence)' : '';
-      steps.push(`Weigh lot "${lot.label}" — ${fmt(lot.weightG, 0)} g${fillerNote}${flag}`);
+      steps.push(
+        `Weigh lot "${lot.label}" — ${fmt(lot.weightG, 0)} g at ${fmtPotencyPct(lot.effectivePotency)}% potency${fillerNote}${flag}`
+      );
     }
     const mismatchNote = result.regroundPowderMismatch
       ? ` — does not match entered lot weights (${fmt(result.lotWeightSum, 0)} g), re-check`

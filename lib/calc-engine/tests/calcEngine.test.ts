@@ -7,7 +7,7 @@ import {
   activePercentOfBlendFromDose,
   generateVarianceTable,
 } from '../calcEngine';
-import { generateFreshBatchSOP } from '../sopGenerator';
+import { generateFreshBatchSOP, generateRegrindSOP } from '../sopGenerator';
 import { defaultIngredients } from '../defaultFormulation';
 import type {
   IngredientLine,
@@ -1298,7 +1298,7 @@ describe('generateFreshBatchSOP — filler sharing a name with an excipient', ()
   // EZTAB ... and 6,527.8 g EZTAB") reads as two separate additions of one
   // material — a dispensing error, not a cosmetic one.
   const ingredients: IngredientLine[] = [
-    { id: 'eztabFiller', name: 'ignored', role: 'filler', percentOfBlend: null, calculatedByDifference: true },
+    { id: 'eztabFiller', name: 'ignored', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
     { id: 'pvpp', name: 'PVPP XL', role: 'other', percentOfBlend: 10, calculatedByDifference: false },
     { id: 'eztab', name: 'EZTAB', role: 'other', percentOfBlend: 10, calculatedByDifference: false },
     { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 1.5, calculatedByDifference: false },
@@ -1332,5 +1332,116 @@ describe('generateFreshBatchSOP — filler sharing a name with an excipient', ()
   it('leaves differently-named ingredients alone', () => {
     const steps = generateFreshBatchSOP(result, ingredients);
     expect(steps.some((s) => s.includes('6,527.8 g PVPP XL'))).toBe(true);
+  });
+});
+
+describe('SOP weigh steps — potency shown alongside the assay amount', () => {
+  // The SOP sheet previously printed only the gram amount to weigh, so an
+  // operator had no way to retrace those grams back to the potency and
+  // mg/tablet they were derived from. The potency is the one input that
+  // makes the number checkable by hand on the floor.
+
+  it('states each API potency and target dose on its fresh-batch weigh step', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 10887,
+      targetWeightG: 0.69,
+      apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
+    })!;
+    const step = generateFreshBatchSOP(result, nonActiveIngredients())[0];
+    // 855.00 g at 76.4% = 653.22 g active = 60 mg across 10,887 tablets.
+    expect(step).toBe('Weigh 855.0 g of API (76.4% potency, 60 mg/tab target)');
+  });
+
+  it('derives a displayable percent from a mg-per-unit potency too', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 0.8,
+      apis: [
+        {
+          id: 'active',
+          label: '7OH',
+          targetActiveMgPerTablet: 14,
+          potency: { method: 'mgPerUnit', mgPerUnit: 200, unitWeightG: 1 },
+        },
+      ],
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
+    })!;
+    // 200 mg active per 1 g of raw material = 20% potency.
+    expect(generateFreshBatchSOP(result, nonActiveIngredients())[0]).toBe(
+      'Weigh 70.0 g of 7OH (20% potency, 14 mg/tab target)'
+    );
+  });
+
+  it('gives every API in a combo product its own potency', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 1000,
+      targetWeightG: 0.8,
+      apis: [
+        { id: 'a', label: '7OH', targetActiveMgPerTablet: 14, potency: { method: 'bulkPercent', percent: 79.38 } },
+        { id: 'b', label: 'Caffeine', targetActiveMgPerTablet: 50, potency: { method: 'bulkPercent', percent: 99 } },
+      ],
+      ingredients: nonActiveIngredients(),
+      fillerType: 'Emdex',
+    })!;
+    const steps = generateFreshBatchSOP(result, nonActiveIngredients());
+    expect(steps[0]).toContain('7OH (79.38% potency, 14 mg/tab target)');
+    expect(steps[1]).toContain('Caffeine (99% potency, 50 mg/tab target)');
+  });
+
+  it('states the reground powder potency on the single-lot regrind confirm step', () => {
+    const result = calculateRegrind({
+      lots: singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000),
+      regroundPowderG: 8000,
+      targetActiveMgPerTablet: 60,
+      targetWeightG: 1.15,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: ['PVPP XL'],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    })!;
+    const steps = generateRegrindSOP(result);
+    expect(steps.some((s) => s === 'Weigh reground powder — confirm 8,000 g (55.5% potency)')).toBe(true);
+  });
+
+  it('states each lot potency on the multi-lot regrind weigh steps', () => {
+    const result = calculateRegrind({
+      lots: [
+        { ...singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000)[0], id: 'l1', label: 'Lot 1' },
+        {
+          ...singleLot({ method: 'mgPerTablet', mgPerOldTablet: 20.1, oldTabletWeightG: 0.27 }, 6500)[0],
+          id: 'l2',
+          label: 'Lot 2',
+        },
+      ],
+      regroundPowderG: 14500,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: ['PVPP XL'],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    })!;
+    const steps = generateRegrindSOP(result);
+    expect(steps.some((s) => s.startsWith('Weigh lot "Lot 1" — 8,000 g at 55.5% potency'))).toBe(true);
+    // 20.1 mg per 0.27 g old tablet = 7.444% potency.
+    expect(steps.some((s) => s.startsWith('Weigh lot "Lot 2" — 6,500 g at 7.444% potency'))).toBe(true);
+  });
+
+  it('keeps the lot filler note and starts flag after the potency', () => {
+    const result = calculateRegrind({
+      lots: [
+        { ...singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000)[0], id: 'l1', label: 'Lot 1', fillerType: 'Emdex', isStart: true },
+        { ...singleLot({ method: 'bulkPercent', percent: 40 }, 6500)[0], id: 'l2', label: 'Lot 2' },
+      ],
+      regroundPowderG: 14500,
+      targetActiveMgPerTablet: 40,
+      targetWeightG: 0.9,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: ['PVPP XL'],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    })!;
+    const step = generateRegrindSOP(result).find((s) => s.includes('"Lot 1"'))!;
+    expect(step).toBe('Weigh lot "Lot 1" — 8,000 g at 55.5% potency — filler: Emdex (starts — estimated, low confidence)');
   });
 });
