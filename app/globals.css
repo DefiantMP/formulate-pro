@@ -433,7 +433,27 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .sv-context-line { font-size: 12px; color: var(--text-2); margin-bottom: 10px; }
 
 .sv-locked-value { font-size: 14px; font-weight: 600; color: var(--text); background: var(--bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+/* --- Scale-verify tab bar (verify vs. bucket fill) --- */
+.sv-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.sv-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 38px; border-radius: 8px; border: 0.5px solid var(--border-md); background: var(--surface); font: inherit; font-size: 12px; font-weight: 500; color: var(--text-2); cursor: pointer; }
+.sv-tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
 
+/* --- Bucket fill calculator --- */
+.bf-source-note { font-size: 11px; color: var(--text-3); margin-top: 6px; line-height: 1.4; }
+.bf-source-note i { margin-right: 4px; }
+.bf-source-picks { display: flex; gap: 6px; margin-top: 8px; }
+.bf-source-picks select { flex: 1; min-width: 0; height: 34px; border-radius: 8px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text-2); font: inherit; font-size: 12px; padding: 0 22px 0 8px; text-overflow: ellipsis; }
+.bf-source-picks .btn { height: 34px; white-space: nowrap; }
+.bf-preset-save { display: flex; gap: 6px; margin-top: 8px; }
+.bf-preset-save input { flex: 1; min-width: 0; }
+.bf-preset-list { margin-top: 8px; }
+.bf-preset-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); padding: 6px 0; border-bottom: 0.5px solid var(--border); }
+.bf-preset-row:last-child { border-bottom: none; }
+.bf-preset-row button { background: none; border: none; padding: 2px 4px; color: var(--text-3); cursor: pointer; font-size: 14px; }
+.bf-preset-row button:hover { color: var(--danger-text); }
+.bf-target { font-size: 38px; font-weight: 700; color: var(--brand); line-height: 1.1; margin: 4px 0 2px; }
+.bf-target-note { font-size: 11px; color: var(--text-3); margin-bottom: 10px; }
+.bf-total-row { border-top: 0.5px solid var(--border); padding-top: 8px; font-weight: 600; color: var(--text); }
 /* ── Raw materials / lots / component specs ─────────────────────────────── */
 
 /* Date inputs and textareas weren't previously used anywhere, so they never

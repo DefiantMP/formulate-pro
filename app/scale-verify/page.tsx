@@ -1,5 +1,5 @@
-import ScaleVerifySubmitPage from '@/components/ScaleVerifySubmitPage';
+import ScaleVerifyPage from '@/components/ScaleVerifyPage';
 
 export default function ScaleVerify() {
-  return <ScaleVerifySubmitPage />;
+  return <ScaleVerifyPage />;
 }

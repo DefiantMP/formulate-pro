@@ -73,6 +73,19 @@ model RegrindLotPreset {
   updatedAt           DateTime @updatedAt
 }
 
+// A named empty bucket and its tare weight, reusable across bucket fills
+// (e.g. "5-gal bucket A"). Deliberately mirrors RegrindLotPreset above: a
+// small, unique-by-name lookup table so an operator doesn't re-key the same
+// tare every run. Holds no tablet count and no tablet weight — those are
+// per-fill figures, not properties of the bucket.
+model BucketPreset {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  tareWeightG Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // A drafted/reference base formulation from the Formulations library
 // builder — a sandbox/reference sheet (in the style of RR8/PB50/PB30-type
 // sheets), never tied to a live Fresh Batch or Regrind calculation. Distinct
