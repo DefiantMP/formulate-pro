@@ -52,6 +52,13 @@ export function generateFreshBatchSOP(
   // ingredient here would silently hide it from the SOP instead of making
   // the zero visible.
   const lubricants = ingredients.filter((i) => i.role === 'lubricant');
+  // Glidant (e.g. Silicon Dioxide) gets its own addition + moderate mix,
+  // separate from the main blend and from the lubricant's short final mix —
+  // same convention regrind mode already uses for its own fixed Silicon
+  // Dioxide processing aid (weighed and mixed on its own, 3 minutes, before
+  // the lubricant goes in last). Kept out of `primary` below for the same
+  // reason lubricant is: it needs its own step, not the 20-minute main mix.
+  const glidants = ingredients.filter((i) => i.role === 'glidant');
 
   // The filler is named freely, so it can be the SAME physical material as a
   // fixed excipient (filler "EZTAB" alongside the EZTAB excipient). Weighing
@@ -62,7 +69,7 @@ export function generateFreshBatchSOP(
   // filler and its fixed EasyTab processing aid.
   const primary: { name: string; grams: number }[] = [];
   for (const i of ingredients) {
-    if (i.role === 'lubricant') continue;
+    if (i.role === 'lubricant' || i.role === 'glidant') continue;
     const name = i.calculatedByDifference ? result.fillerType : i.name;
     const grams = result.ingredientGrams[i.id] ?? 0;
     const existing = primary.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
@@ -90,6 +97,30 @@ export function generateFreshBatchSOP(
   if (vmixNames.length > 0) {
     steps.push(`Add ${vmixNames.join(' + ')} to V-mix`);
     steps.push('Mix for 20 minutes');
+  }
+
+  // Glidant goes in on its own after the main blend, with a moderate mix —
+  // three minutes, matching regrind's own fixed Silicon Dioxide step (see
+  // generateRegrindSOP below). Not folded into the primary weigh-and-add
+  // line above, since it needs its own mix step rather than sharing the
+  // 20-minute main mix.
+  //
+  // Gated on grams > 0, unlike the always-show-even-at-0g primary/lubricant
+  // steps above: those are ingredients the operator explicitly defined as
+  // part of THIS product's recipe, where a 0 is a meaningful "deliberately
+  // none this run." Glidant now ships as part of the default ingredient
+  // template for every product (see defaultFormulation.ts), so an untouched
+  // 0% here means "this formula was never given one," not "zeroed out" —
+  // showing a 0g weigh-and-mix step on every single fresh-batch SOP,
+  // including every formula that never used a glidant, would be actively
+  // misleading rather than informative. Same reasoning as regrind's
+  // lubricant top-up, which is omitted entirely rather than shown at 0g.
+  const glidantsToAdd = glidants.filter((g) => (result.ingredientGrams[g.id] ?? 0) > 0);
+  for (const glidant of glidantsToAdd) {
+    steps.push(`Add ${fmt(result.ingredientGrams[glidant.id])} g ${glidant.name}`);
+  }
+  if (glidantsToAdd.length > 0) {
+    steps.push('Mix for 3 minutes');
   }
 
   // The lubricant goes in last and gets a SHORT final mix — over-mixing

@@ -12,11 +12,31 @@
  *  - All other ingredients carry a fixed percentOfBlend for a given run.
  */
 
+/**
+ * A role is a single tag naming an ingredient's PRIMARY job in the blend —
+ * it does not model that some real excipients do more than one job at
+ * once. When assigning a role to an ingredient, pick the function it's
+ * actually being added for here, not just what the material is capable of.
+ * Known dual-function materials worth double-checking against (see the
+ * fuller writeups in lib/knownExcipients.ts):
+ *  - Talc: tagged 'glidant' here, but its own reference entry notes it also
+ *    acts as an anti-adherent "sometimes used alongside a true lubricant" —
+ *    it is not a lubricant substitute, so it stays 'glidant'.
+ *  - Microcrystalline cellulose (Avicel): "filler and dry binder in one" —
+ *    tagged 'diluent' (this codebase's filler role) since that's the
+ *    quantity-dominant job; its binding property has no separate role here.
+ *  - EZTAB: filler + binder + flow properties per its own writeup, tagged
+ *    'other' (see defaultFormulation.ts) rather than 'glidant', because in
+ *    this app's default template its job is bulk/filler-adjacent, not flow.
+ *  - HPMC: binder at typical levels, but a sustained-release matrix former
+ *    at higher ones — same material, different job depending on %.
+ */
 export type IngredientRole =
   | 'active'
   | 'diluent'
   | 'disintegrant'
   | 'lubricant'
+  | 'glidant'
   | 'other';
 
 export interface IngredientLine {

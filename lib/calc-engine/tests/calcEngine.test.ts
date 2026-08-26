@@ -177,6 +177,38 @@ describe('calculateFreshBatch — generic ingredient count', () => {
     const sum = Object.values(result!.ingredientPercents).reduce((a, b) => a + b, 0);
     expect(sum).toBeCloseTo(100, 6);
   });
+
+  it('a role:glidant ingredient subtracts from filler-by-difference exactly like any other fixed-percent ingredient', () => {
+    const ingredients: IngredientLine[] = [
+      ...nonActiveIngredients().filter((i) => i.id !== 'silicondioxide'),
+      { id: 'silicondioxide', name: 'Silicon Dioxide', role: 'glidant', percentOfBlend: 0.5, calculatedByDifference: false },
+    ];
+    const result = calculateFreshBatch({
+      tabletCount: 10887,
+      targetWeightG: 0.69,
+      apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
+      ingredients,
+      fillerType: 'Emdex',
+    });
+    expect(result).not.toBeNull();
+    expect(result!.ingredientPercents['silicondioxide']).toBeCloseTo(0.5, 6);
+    expect(result!.ingredientGrams['silicondioxide']).toBeCloseTo(7512.03 * 0.005, 2);
+    const sum = Object.values(result!.ingredientPercents).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(100, 6);
+  });
+
+  it('defaultIngredients ships glidant at 0%, so the RR77-PB9 golden totals are unaffected until an operator sets a nonzero %', () => {
+    const result = calculateFreshBatch({
+      tabletCount: 10887,
+      targetWeightG: 0.69,
+      apis: singleApi({ method: 'bulkPercent', percent: 76.4 }, 60),
+      ingredients: nonActiveIngredients(), // now includes the default 0% glidant entry
+      fillerType: 'Emdex',
+    });
+    expect(result!.totalBlendG).toBeCloseTo(7512.03, 6);
+    expect(result!.ingredientGrams['active'] ?? result!.apis[0].gramsPerRun).toBeCloseTo(855.0, 2);
+    expect(result!.ingredientGrams['silicondioxide']).toBeCloseTo(0, 6);
+  });
 });
 
 describe('calculateFreshBatch — multiple APIs (combo product)', () => {
@@ -1332,6 +1364,70 @@ describe('generateFreshBatchSOP — filler sharing a name with an excipient', ()
   it('leaves differently-named ingredients alone', () => {
     const steps = generateFreshBatchSOP(result, ingredients);
     expect(steps.some((s) => s.includes('6,527.8 g PVPP XL'))).toBe(true);
+  });
+});
+
+describe('generateFreshBatchSOP — glidant gets its own step', () => {
+  const ingredientsWithGlidant: IngredientLine[] = [
+    { id: 'pvpp', name: 'PVPP XL', role: 'disintegrant', percentOfBlend: 5, calculatedByDifference: false },
+    { id: 'silicondioxide', name: 'Silicon Dioxide', role: 'glidant', percentOfBlend: 0.5, calculatedByDifference: false },
+    { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 2, calculatedByDifference: false },
+    { id: 'emdex', name: 'ignored', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
+  ];
+  const result = {
+    mode: 'fresh',
+    tabletCount: 10887,
+    targetWeightG: 0.69,
+    targetActiveMgPerTablet: 60,
+    totalBlendG: 7512.03,
+    fillerType: 'Emdex',
+    apis: [{ id: 'active', label: 'API', targetActiveMgPerTablet: 60, effectivePotency: 0.764, percentOfBlend: 11.38, gramsPerRun: 855.0 }],
+    ingredientGrams: { active: 855.0, pvpp: 375.6, silicondioxide: 37.56, magstearate: 150.24, emdex: 6093.63 },
+    ingredientPercents: {},
+    activePercentOfBlend: 11.38,
+  } as unknown as FreshBatchResult;
+
+  it('weighs and adds the glidant in its own step, separate from the main V-mix', () => {
+    const steps = generateFreshBatchSOP(result, ingredientsWithGlidant);
+    expect(steps.some((s) => s === 'Add 37.6 g Silicon Dioxide')).toBe(true);
+  });
+
+  it('does not fold the glidant into the primary "Add ... to V-mix" step', () => {
+    const steps = generateFreshBatchSOP(result, ingredientsWithGlidant);
+    const vmix = steps.find((s) => s.startsWith('Add ') && s.endsWith('to V-mix'))!;
+    expect(vmix).not.toContain('Silicon Dioxide');
+  });
+
+  it('mixes the glidant for 3 minutes, distinct from the 20-minute main mix and 2-minute lubricant mix', () => {
+    const steps = generateFreshBatchSOP(result, ingredientsWithGlidant);
+    const glidantIdx = steps.indexOf('Add 37.6 g Silicon Dioxide');
+    expect(steps[glidantIdx + 1]).toBe('Mix for 3 minutes');
+  });
+
+  it('places the glidant step after the main mix and before the lubricant addition', () => {
+    const steps = generateFreshBatchSOP(result, ingredientsWithGlidant);
+    const mainMixIdx = steps.indexOf('Mix for 20 minutes');
+    const glidantIdx = steps.indexOf('Add 37.6 g Silicon Dioxide');
+    const lubricantIdx = steps.findIndex((s) => s.includes('Magnesium stearate'));
+    expect(mainMixIdx).toBeLessThan(glidantIdx);
+    expect(glidantIdx).toBeLessThan(lubricantIdx);
+  });
+
+  it('omits the glidant mix step entirely when no ingredient has role glidant (e.g. a formulation saved before glidant existed)', () => {
+    const preGlidantIngredients = nonActiveIngredients().filter((i) => i.role !== 'glidant');
+    const steps = generateFreshBatchSOP(result, preGlidantIngredients);
+    expect(steps).not.toContain('Mix for 3 minutes');
+    expect(steps.some((s) => s.includes('Silicon Dioxide'))).toBe(false);
+  });
+
+  it('omits the glidant step at 0g even when a glidant ingredient is defined — the default template ships one at 0% for every product', () => {
+    const zeroGlidantResult = {
+      ...result,
+      ingredientGrams: { ...result.ingredientGrams, silicondioxide: 0 },
+    } as unknown as FreshBatchResult;
+    const steps = generateFreshBatchSOP(zeroGlidantResult, ingredientsWithGlidant);
+    expect(steps).not.toContain('Mix for 3 minutes');
+    expect(steps.some((s) => s.includes('Silicon Dioxide'))).toBe(false);
   });
 });
 
