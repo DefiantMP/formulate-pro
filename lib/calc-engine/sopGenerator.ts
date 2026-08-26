@@ -89,7 +89,7 @@ export function generateFreshBatchSOP(
   const vmixNames = [...result.apis.map((a) => a.label), ...primary.map((i) => i.name)];
   if (vmixNames.length > 0) {
     steps.push(`Add ${vmixNames.join(' + ')} to V-mix`);
-    steps.push('Mix for 15 minutes');
+    steps.push('Mix for 20 minutes');
   }
 
   // The lubricant goes in last and gets a SHORT final mix — over-mixing
@@ -149,7 +149,7 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
     // Bulk calculated filler + the fixed 0.15% EasyTab processing aid are the
     // same material, merged into one weigh/add step rather than two.
     `Add ${fmt(result.fillerAddG + result.easyTabG)} g ${result.fillerIngredientName}`,
-    'Mix for 15 minutes'
+    'Mix for 20 minutes'
   );
   steps.push(
     `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
