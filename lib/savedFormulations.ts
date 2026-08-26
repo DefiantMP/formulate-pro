@@ -80,7 +80,18 @@ export interface SavedFormulationDerived {
   lubricantGramsPerBatch: number | null;
   glidantGramsPerBatch: number | null;
   totalBatchG: number;
+  /**
+   * How far actives + disintegrant + lubricant + glidant sit above 100%,
+   * clamped to 0 when they don't (the normal case). fillerPercent is itself
+   * clamped at 0 (see below), so it silently hides an over-allocated blend —
+   * this is the figure that catches it: fillerPercent === 0 alone doesn't
+   * tell you whether the blend landed on exactly 100% or overshot it.
+   */
+  percentOverflow: number;
 }
+
+/** Rounding tolerance for the sum-to-100% check — matches the tolerance named in the wizard's validation copy. */
+export const PERCENT_SUM_TOLERANCE = 0.1;
 
 /**
  * Derives every display value the library/detail/builder pages need from a
@@ -110,11 +121,13 @@ export function deriveSavedFormulation(f: {
   const fixedPercentSum =
     combinedActivePercent + (f.disintegrantPercent ?? 0) + (f.lubricantPercent ?? 0) + (f.glidantPercent ?? 0);
   const fillerPercent = Math.max(0, 100 - fixedPercentSum);
+  const percentOverflow = Math.max(0, fixedPercentSum - 100);
 
   return {
     actives,
     combinedActivePercent,
     fillerPercent,
+    percentOverflow,
     fillerGramsPerBatch: totalBatchG * (fillerPercent / 100),
     disintegrantGramsPerBatch: f.disintegrantPercent != null ? totalBatchG * (f.disintegrantPercent / 100) : null,
     lubricantGramsPerBatch: f.lubricantPercent != null ? totalBatchG * (f.lubricantPercent / 100) : null,

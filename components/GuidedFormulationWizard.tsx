@@ -1,10 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ActiveDraft } from './FormulationBuilderPage';
-import type { SavedFormulationDerived } from '@/lib/savedFormulations';
+import { PERCENT_SUM_TOLERANCE, type SavedFormulationDerived } from '@/lib/savedFormulations';
 import { findKnownActiveMatch, knownActiveToSuggestion, type FormulationSuggestion } from '@/lib/knownActives';
 import { numOrZero, fmt } from '@/lib/format';
+import {
+  getPreferredWeightUnit,
+  setPreferredWeightUnit,
+  type WeightEntryUnit,
+} from '@/lib/weightUnitPreference';
 
 interface GuidedFormulationWizardProps {
   name: string;
@@ -34,6 +39,10 @@ interface GuidedFormulationWizardProps {
   glidantPercent: string;
   setGlidantPercent: (v: string) => void;
   derived: SavedFormulationDerived;
+  /** False when derived.percentOverflow exceeds tolerance and hasn't been overridden — see FormulationBuilderPage. */
+  percentagesValid: boolean;
+  overflowAcknowledged: boolean;
+  onAcknowledgeOverflow: () => void;
   canSave: boolean;
   saving: boolean;
   onSave: () => void;
@@ -83,13 +92,41 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
     glidantPercent,
     setGlidantPercent,
     derived,
+    percentagesValid,
+    overflowAcknowledged,
+    onAcknowledgeOverflow,
     canSave,
     saving,
     onSave,
   } = props;
 
   const [step, setStep] = useState(0);
-  const [tabletWeightUnit, setTabletWeightUnit] = useState<'g' | 'mg'>('g');
+  // Both unit toggles below default to 'g' on first render — matching what
+  // the server renders, since localStorage isn't available during SSR — and
+  // are corrected to the persisted preference in the effect just after, once
+  // we're definitely client-side. Reading localStorage straight into the
+  // useState initializer would make the client's first render disagree with
+  // the server's and trip a hydration mismatch.
+  const [tabletWeightUnit, setTabletWeightUnit] = useState<WeightEntryUnit>('g');
+  // Per-active dose display unit — local wizard UI state only. Canonical
+  // storage stays mg regardless (ActiveDraft.targetMgPerTablet, matching the
+  // calc engine's mg-canonical dose convention app-wide), same
+  // convert-on-input/convert-for-display-only split as tabletWeightUnit above.
+  const [doseUnit, setDoseUnit] = useState<Record<string, WeightEntryUnit>>({});
+  useEffect(() => {
+    setTabletWeightUnit(getPreferredWeightUnit());
+  }, []);
+  function selectTabletWeightUnit(unit: WeightEntryUnit) {
+    setTabletWeightUnit(unit);
+    setPreferredWeightUnit(unit);
+  }
+  function doseUnitFor(activeId: string): WeightEntryUnit {
+    return doseUnit[activeId] ?? tabletWeightUnit;
+  }
+  function selectDoseUnit(activeId: string, unit: WeightEntryUnit) {
+    setDoseUnit((prev) => ({ ...prev, [activeId]: unit }));
+    setPreferredWeightUnit(unit);
+  }
 
   // Smart suggestions (per active id, keyed off this session's draft ids —
   // never persisted). aiSuggestions holds the AI tier's request state;
@@ -105,7 +142,12 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
     name.trim() !== '' && numOrZero(tabletWeightG) > 0 && numOrZero(referenceBatchTablets) > 0,
     actives.every((a) => a.label.trim() !== '' && numOrZero(a.targetMgPerTablet) > 0 && numOrZero(a.potencyPercent) > 0),
     fillerName.trim() !== '',
-    true,
+    // Blocks leaving Excipients while actives + disintegrant + lubricant +
+    // glidant exceed 100% (filler would have to go negative) — resolved
+    // either by lowering something below, or by the explicit override in
+    // the banner below, which flips percentagesValid true for this specific
+    // overflow amount.
+    percentagesValid,
     canSave,
   ];
 
@@ -126,6 +168,25 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
       setTabletWeightG(raw);
     } else {
       setTabletWeightG(raw === '' ? '' : String(numOrZero(raw) / 1000));
+    }
+  }
+
+  // Dose (target mg/tablet) display/entry conversion — canonical storage is
+  // always mg (ActiveDraft.targetMgPerTablet), so 'g' here is purely a
+  // display convenience for the rare high-dose active where entering grams
+  // is more natural; converts back to mg on every keystroke exactly like
+  // tabletWeightDisplay/handleTabletWeightChange above.
+  function doseDisplay(active: ActiveDraft): string {
+    const unit = doseUnitFor(active.id);
+    if (unit === 'mg') return active.targetMgPerTablet;
+    return active.targetMgPerTablet === '' ? '' : String(numOrZero(active.targetMgPerTablet) / 1000);
+  }
+  function handleDoseChange(activeId: string, raw: string) {
+    const unit = doseUnitFor(activeId);
+    if (unit === 'mg') {
+      updateActive(activeId, { targetMgPerTablet: raw });
+    } else {
+      updateActive(activeId, { targetMgPerTablet: raw === '' ? '' : String(numOrZero(raw) * 1000) });
     }
   }
 
@@ -227,14 +288,14 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                     <button
                       type="button"
                       className={`m-btn${tabletWeightUnit === 'g' ? ' active' : ''}`}
-                      onClick={() => setTabletWeightUnit('g')}
+                      onClick={() => selectTabletWeightUnit('g')}
                     >
                       g
                     </button>
                     <button
                       type="button"
                       className={`m-btn${tabletWeightUnit === 'mg' ? ' active' : ''}`}
-                      onClick={() => setTabletWeightUnit('mg')}
+                      onClick={() => selectTabletWeightUnit('mg')}
                     >
                       mg
                     </button>
@@ -309,17 +370,35 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                     </div>
                     <div className="lot-field-grid">
                       <div className="field" style={{ margin: 0 }}>
-                        <label>Target mg / tablet</label>
-                        <input
-                          type="number"
-                          placeholder="0.00"
-                          step="0.1"
-                          value={a.targetMgPerTablet}
-                          onChange={(e) => updateActive(a.id, { targetMgPerTablet: e.target.value })}
-                        />
+                        <label>Target dose per tablet</label>
+                        <div className="row">
+                          <input
+                            type="number"
+                            placeholder="0.00"
+                            step={doseUnitFor(a.id) === 'mg' ? '0.1' : '0.0001'}
+                            value={doseDisplay(a)}
+                            onChange={(e) => handleDoseChange(a.id, e.target.value)}
+                          />
+                          <div className="mode-toggle" style={{ margin: 0, width: 96 }}>
+                            <button
+                              type="button"
+                              className={`m-btn${doseUnitFor(a.id) === 'mg' ? ' active' : ''}`}
+                              onClick={() => selectDoseUnit(a.id, 'mg')}
+                            >
+                              mg
+                            </button>
+                            <button
+                              type="button"
+                              className={`m-btn${doseUnitFor(a.id) === 'g' ? ' active' : ''}`}
+                              onClick={() => selectDoseUnit(a.id, 'g')}
+                            >
+                              g
+                            </button>
+                          </div>
+                        </div>
                       </div>
                       <div className="field" style={{ margin: 0 }}>
-                        <label>Raw material potency</label>
+                        <label>Raw material potency (% purity)</label>
                         <div className="row">
                           <input
                             type="number"
@@ -382,7 +461,7 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                           </div>
                           <div className="suggestion-cell">
                             <span>Potency</span>
-                            <strong>{suggestion.potencyPercent}%</strong>
+                            <strong>{suggestion.potencyPercent.toFixed(2)}%</strong>
                           </div>
                           <div className="suggestion-cell">
                             <span>Tablet weight</span>
@@ -390,15 +469,15 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                           </div>
                           <div className="suggestion-cell">
                             <span>Disintegrant</span>
-                            <strong>{suggestion.disintegrantPercent}%</strong>
+                            <strong>{suggestion.disintegrantPercent.toFixed(2)}%</strong>
                           </div>
                           <div className="suggestion-cell">
                             <span>Lubricant</span>
-                            <strong>{suggestion.lubricantPercent}%</strong>
+                            <strong>{suggestion.lubricantPercent.toFixed(2)}%</strong>
                           </div>
                           <div className="suggestion-cell">
                             <span>Glidant</span>
-                            <strong>{suggestion.glidantPercent}%</strong>
+                            <strong>{suggestion.glidantPercent.toFixed(2)}%</strong>
                           </div>
                         </div>
                         <div className="suggestion-note">{suggestion.note}</div>
@@ -448,7 +527,7 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                 />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
-                <label>% filler (auto)</label>
+                <label>Filler — % of blend (auto)</label>
                 <div className="row">
                   <input type="number" readOnly value={derived.fillerPercent.toFixed(2)} />
                   <div className="unit">%</div>
@@ -478,7 +557,7 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                   />
                 </div>
                 <div className="field" style={{ margin: 0 }}>
-                  <label>%</label>
+                  <label>% of blend</label>
                   <input
                     type="number"
                     placeholder="0.00"
@@ -499,7 +578,7 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                   />
                 </div>
                 <div className="field" style={{ margin: 0 }}>
-                  <label>%</label>
+                  <label>% of blend</label>
                   <input
                     type="number"
                     placeholder="0.00"
@@ -520,7 +599,7 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                   />
                 </div>
                 <div className="field" style={{ margin: 0 }}>
-                  <label>%</label>
+                  <label>% of blend</label>
                   <input
                     type="number"
                     placeholder="0.00"
@@ -530,6 +609,27 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                   />
                 </div>
               </div>
+
+              {derived.percentOverflow > PERCENT_SUM_TOLERANCE && (
+                <div className="verify-banner" style={{ marginTop: 12 }}>
+                  <i className="ti ti-alert-triangle" />
+                  <div className="verify-banner-body">
+                    <div className="verify-banner-title">
+                      Component percentages exceed 100% by {derived.percentOverflow.toFixed(2)}%
+                    </div>
+                    <div className="verify-banner-notes">
+                      Actives ({derived.combinedActivePercent.toFixed(2)}%) + disintegrant + lubricant + glidant
+                      already add up to more than 100% of the blend, so filler can&apos;t make up the difference —
+                      lower something above, or override to continue anyway.
+                    </div>
+                    {!overflowAcknowledged && (
+                      <button type="button" className="verify-ack-btn" onClick={onAcknowledgeOverflow}>
+                        Reviewed, proceeding
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -552,6 +652,22 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                 </div>
               </div>
 
+              {derived.percentOverflow > PERCENT_SUM_TOLERANCE && (
+                <div className="verify-banner" style={{ marginBottom: 12 }}>
+                  <i className="ti ti-alert-triangle" />
+                  <div className="verify-banner-body">
+                    <div className="verify-banner-title">
+                      Component percentages exceed 100% by {derived.percentOverflow.toFixed(2)}%
+                    </div>
+                    <div className="verify-banner-notes">
+                      {overflowAcknowledged
+                        ? 'Overridden — saving anyway. Go back to Excipients to fix it instead.'
+                        : "This has to be resolved before saving — go back to Excipients to lower something, or override there."}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="add-sub">{name.trim() || 'Untitled formulation'}</div>
               <div className="add-row">
                 <div className="add-lbl">
@@ -564,24 +680,24 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
               </div>
 
               <div className="add-sub" style={{ marginTop: 14 }}>
-                Active ingredients
+                Active ingredients — % of blend
               </div>
               <div>
                 {derived.actives.map((a) => (
                   <div className="add-row key" key={a.label}>
                     <div className="add-lbl">
                       <i className="ti ti-plus" />
-                      {a.label} — {fmt(a.targetMgPerTablet, 1)} mg/tab @ {a.potencyPercent.toFixed(2)}%
+                      {a.label} — {fmt(a.targetMgPerTablet, 1)} mg/tab @ {a.potencyPercent.toFixed(2)}% potency
                     </div>
                     <div className="add-val green">
-                      {a.percentOfBlend.toFixed(3)}% · {fmt(a.gramsPerBatch, 1)} g
+                      {a.percentOfBlend.toFixed(2)}% · {fmt(a.gramsPerBatch, 1)} g
                     </div>
                   </div>
                 ))}
               </div>
 
               <div className="add-sub" style={{ marginTop: 14 }}>
-                Excipients
+                Excipients — % of blend
               </div>
               <div>
                 <div className="add-row">
@@ -628,10 +744,15 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                   </div>
                 )}
               </div>
-              {!canSave && (
+              {!canSave && !percentagesValid && (
+                <div className="field-hint" style={{ marginTop: 10 }}>
+                  Resolve the percentage overflow above before saving.
+                </div>
+              )}
+              {!canSave && percentagesValid && (
                 <div className="field-hint" style={{ marginTop: 10 }}>
                   Go back and fill in every required field (name, tablet weight, batch size, filler, and each
-                  active&apos;s mg/tablet and potency) before saving.
+                  active&apos;s dose and potency) before saving.
                 </div>
               )}
             </>

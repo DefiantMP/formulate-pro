@@ -106,7 +106,7 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
                       <td>{a.label}</td>
                       <td>{fmt(a.targetMgPerTablet, 1)}</td>
                       <td>{a.potencyPercent.toFixed(2)}%</td>
-                      <td>{a.percentOfBlend.toFixed(3)}%</td>
+                      <td>{a.percentOfBlend.toFixed(2)}%</td>
                       <td>{a.source || '—'}</td>
                       <td>{fmt(a.gramsPerBatch, 1)} g</td>
                     </tr>

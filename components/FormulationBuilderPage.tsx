@@ -10,6 +10,7 @@ import GuidedFormulationWizard from './GuidedFormulationWizard';
 import type { RunRecord } from './RunHistoryPanel';
 import {
   deriveSavedFormulation,
+  PERCENT_SUM_TOLERANCE,
   SAVED_FORMULATION_STATUSES,
   savedFormulationStatusLabel,
   type SavedFormulationActive,
@@ -185,13 +186,29 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
     });
   }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent, glidantPercent]);
 
+  // Filler is calculated by difference (100% - everything else), so the
+  // blend sums to 100% by construction UNLESS actives + disintegrant +
+  // lubricant + glidant already exceed 100% on their own — in that case
+  // fillerPercent clamps to 0 rather than going negative, which would
+  // otherwise hide the over-allocation entirely. derived.percentOverflow is
+  // the unclamped excess; overflowAcknowledged is an explicit override,
+  // deliberately re-armed (see the effect below) whenever the overflow
+  // amount changes, so an old acknowledgment can't silently cover a new,
+  // different over-allocation.
+  const [overflowAcknowledged, setOverflowAcknowledged] = useState(false);
+  useEffect(() => {
+    setOverflowAcknowledged(false);
+  }, [derived.percentOverflow]);
+  const percentagesValid = derived.percentOverflow <= PERCENT_SUM_TOLERANCE || overflowAcknowledged;
+
   const canSave =
     !loadingParent &&
     name.trim() !== '' &&
     tabletWeightNum > 0 &&
     referenceBatchNum > 0 &&
     fillerName.trim() !== '' &&
-    actives.every((a) => a.label.trim() !== '' && numOrZero(a.targetMgPerTablet) > 0 && numOrZero(a.potencyPercent) > 0);
+    actives.every((a) => a.label.trim() !== '' && numOrZero(a.targetMgPerTablet) > 0 && numOrZero(a.potencyPercent) > 0) &&
+    percentagesValid;
 
   async function save() {
     if (!canSave) return;
@@ -335,6 +352,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
               glidantPercent={glidantPercent}
               setGlidantPercent={setGlidantPercent}
               derived={derived}
+              percentagesValid={percentagesValid}
+              overflowAcknowledged={overflowAcknowledged}
+              onAcknowledgeOverflow={() => setOverflowAcknowledged(true)}
               canSave={canSave}
               saving={saving}
               onSave={save}
@@ -423,14 +443,17 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                         />
                       </div>
                       <div className="field" style={{ margin: 0 }}>
-                        <label>Raw material potency</label>
-                        <input
-                          type="number"
-                          placeholder="0.00"
-                          step="0.01"
-                          value={a.potencyPercent}
-                          onChange={(e) => updateActive(a.id, { potencyPercent: e.target.value })}
-                        />
+                        <label>Raw material potency (% purity)</label>
+                        <div className="row">
+                          <input
+                            type="number"
+                            placeholder="0.00"
+                            step="0.01"
+                            value={a.potencyPercent}
+                            onChange={(e) => updateActive(a.id, { potencyPercent: e.target.value })}
+                          />
+                          <div className="unit">%</div>
+                        </div>
                       </div>
                     </div>
                     <div className="field" style={{ marginTop: 8, marginBottom: 0 }}>
@@ -460,7 +483,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                   />
                 </div>
                 <div className="field">
-                  <label>% filler (auto)</label>
+                  <label>Filler — % of blend (auto)</label>
                   <div className="row">
                     <input type="number" readOnly value={derived.fillerPercent.toFixed(2)} />
                     <div className="unit">%</div>
@@ -477,7 +500,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                     />
                   </div>
                   <div className="field" style={{ margin: 0 }}>
-                    <label>%</label>
+                    <label>% of blend</label>
                     <input
                       type="number"
                       placeholder="0.00"
@@ -498,7 +521,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                     />
                   </div>
                   <div className="field" style={{ margin: 0 }}>
-                    <label>%</label>
+                    <label>% of blend</label>
                     <input
                       type="number"
                       placeholder="0.00"
@@ -519,7 +542,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                     />
                   </div>
                   <div className="field" style={{ margin: 0 }}>
-                    <label>%</label>
+                    <label>% of blend</label>
                     <input
                       type="number"
                       placeholder="0.00"
@@ -596,23 +619,44 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                   </div>
                 </div>
 
-                <div className="add-sub">Active ingredients</div>
+                {derived.percentOverflow > PERCENT_SUM_TOLERANCE && (
+                  <div className="verify-banner" style={{ marginBottom: 12 }}>
+                    <i className="ti ti-alert-triangle" />
+                    <div className="verify-banner-body">
+                      <div className="verify-banner-title">
+                        Component percentages exceed 100% by {derived.percentOverflow.toFixed(2)}%
+                      </div>
+                      <div className="verify-banner-notes">
+                        Actives + disintegrant + lubricant + glidant already add up to more than 100% of the blend,
+                        so filler can&apos;t make up the difference — reduce something below, or override to save
+                        anyway.
+                      </div>
+                      {!overflowAcknowledged && (
+                        <button type="button" className="verify-ack-btn" onClick={() => setOverflowAcknowledged(true)}>
+                          Reviewed, proceeding
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="add-sub">Active ingredients — % of blend</div>
                 <div>
                   {derived.actives.map((a) => (
                     <div className="add-row key" key={a.label}>
                       <div className="add-lbl">
                         <i className="ti ti-plus" />
-                        {a.label} — {fmt(a.targetMgPerTablet, 1)} mg/tab @ {a.potencyPercent.toFixed(2)}%
+                        {a.label} — {fmt(a.targetMgPerTablet, 1)} mg/tab @ {a.potencyPercent.toFixed(2)}% potency
                       </div>
                       <div className="add-val green">
-                        {a.percentOfBlend.toFixed(3)}% · {fmt(a.gramsPerBatch, 1)} g
+                        {a.percentOfBlend.toFixed(2)}% · {fmt(a.gramsPerBatch, 1)} g
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="add-sub" style={{ marginTop: 14 }}>
-                  Excipients
+                  Excipients — % of blend
                 </div>
                 <div>
                   <div className="add-row">

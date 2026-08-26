@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  deriveSavedFormulation,
   effectiveLineageId,
   buildTroubleshootSystemPrompt,
   findRelevantCrossFormulationNotes,
@@ -51,6 +52,53 @@ function baseCandidate(overrides: Partial<CrossFormulationCandidate> = {}): Cros
     ...overrides,
   };
 }
+
+describe('deriveSavedFormulation percentOverflow', () => {
+  const base = {
+    tabletWeightG: 0.69,
+    referenceBatchTablets: 10887,
+    actives: [{ label: 'API', targetMgPerTablet: 60, potencyPercent: 76.4, source: '' }],
+  };
+
+  it('is 0 when actives + excipients sit at or under 100% (the normal case)', () => {
+    const d = deriveSavedFormulation({ ...base, disintegrantPercent: 5, lubricantPercent: 2, glidantPercent: null });
+    expect(d.percentOverflow).toBe(0);
+    expect(d.fillerPercent).toBeGreaterThan(0);
+  });
+
+  it('reports the true excess when fixed percentages exceed 100%, instead of silently clamping to 0 filler', () => {
+    // A single active whose own %-of-blend is small, but excipients alone push the fixed sum past 100%.
+    const d = deriveSavedFormulation({
+      ...base,
+      disintegrantPercent: 60,
+      lubricantPercent: 30,
+      glidantPercent: 20,
+    });
+    expect(d.fillerPercent).toBe(0); // clamped — this alone doesn't reveal the over-allocation
+    expect(d.percentOverflow).toBeGreaterThan(0); // percentOverflow does
+    const fixedSum = d.combinedActivePercent + 60 + 30 + 20;
+    expect(d.percentOverflow).toBeCloseTo(fixedSum - 100, 5);
+  });
+
+  it('is exactly 0, not negative, right at the 100% boundary', () => {
+    // disintegrant + lubricant sum to exactly enough that fixedSum - combinedActivePercent = 100 - combinedActivePercent
+    const combinedActivePercent = deriveSavedFormulation({
+      ...base,
+      disintegrantPercent: null,
+      lubricantPercent: null,
+      glidantPercent: null,
+    }).combinedActivePercent;
+    const remaining = 100 - combinedActivePercent;
+    const d = deriveSavedFormulation({
+      ...base,
+      disintegrantPercent: remaining,
+      lubricantPercent: null,
+      glidantPercent: null,
+    });
+    expect(d.percentOverflow).toBe(0);
+    expect(d.fillerPercent).toBeCloseTo(0, 5);
+  });
+});
 
 describe('effectiveLineageId', () => {
   it('falls back to the row\'s own id when lineageId is null (a lineage root)', () => {
