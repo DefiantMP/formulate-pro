@@ -270,7 +270,7 @@ const POWDER_WEIGHT_MISMATCH_TOLERANCE_G = 0.01;
  * totalBlendG is unaffected — see calculateRegrind and
  * solveRegrindLotWeight, both of which use this.
  */
-const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.0015;
+export const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.0015;
 
 /**
  * Two fixed processing aids added to every regrind batch to help with
@@ -280,8 +280,8 @@ const REGRIND_LUBRICANT_TOPUP_PERCENT = 0.0015;
  * sourceType, since they're standard processing aids being freshly added
  * every batch, not something assumed already present from a prior press.
  */
-const REGRIND_EASYTAB_PERCENT = 0.0015;
-const REGRIND_SILICON_DIOXIDE_PERCENT = 0.0015;
+export const REGRIND_EASYTAB_PERCENT = 0.0015;
+export const REGRIND_SILICON_DIOXIDE_PERCENT = 0.0015;
 const REGRIND_EASYTAB_INGREDIENT_NAME = 'EasyTab';
 const REGRIND_SILICON_DIOXIDE_INGREDIENT_NAME = 'Silicon Dioxide';
 

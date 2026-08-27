@@ -1,6 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { CalcResult } from '@/lib/calc-engine/types';
 import { evaluateExpression } from '@/lib/arithmetic';
+import {
+  REGRIND_LUBRICANT_TOPUP_PERCENT,
+  REGRIND_EASYTAB_PERCENT,
+  REGRIND_SILICON_DIOXIDE_PERCENT,
+} from '@/lib/calc-engine';
+
+/** e.g. 0.0015 -> "0.15%" — for interpolating a calc-engine percent constant into prompt prose. */
+function pct(fraction: number): string {
+  return `${fraction * 100}%`;
+}
 
 export interface VerifyRequestBody {
   mode: 'fresh' | 'regrind';
@@ -22,7 +32,10 @@ export interface VerifyResult {
   discrepancy: VerifyDiscrepancy | null;
 }
 
-const SYSTEM_PROMPT = `You are a quality-control arithmetic checker for a pharmaceutical tablet formulation calculator used in nutraceutical manufacturing.
+// Exported so lib/aiVerification.test.ts can assert its regrind-percent
+// mentions stay derived from the real calc-engine constants rather than
+// drifting back into a hand-typed, independently-stale copy.
+export const SYSTEM_PROMPT = `You are a quality-control arithmetic checker for a pharmaceutical tablet formulation calculator used in nutraceutical manufacturing.
 
 You will be given the raw operator inputs and the calculator's computed outputs for one calculation — either a "fresh batch" or a "regrind" run. Your job is a narrow, mechanical check, NOT a formulation opinion:
 
@@ -59,8 +72,10 @@ Field meanings:
 - regroundPowderMismatch (regrind only): boolean flag, true when regroundPowderG disagrees with lotWeightSum beyond a small tolerance — this is an expected/valid state, not itself an arithmetic error to flag, unless the reported boolean is wrong given the two numbers
 - effectivePotency (regrind only): the BLENDED fraction (0-1) of the reground powder that is active ingredient — equals activeInOldPowderG ÷ regroundPowderG
 - freshActiveG (regrind only): grams of fresh active ingredient added on top of what's already in the regrind powder
-- lubricantTopUpG (regrind only): grams of a fresh lubricant top-up (e.g. Magnesium stearate), even though most of that ingredient is otherwise assumed already present in the reground powder. Only lots with sourceType "regroundTablets" count toward this — raw/bulk powder lots (sourceType "rawPowder") contribute nothing. Formula: tabletCount × targetWeightG × 0.01 × (sum of weightG for lots where sourceType is "regroundTablets" ÷ lotWeightSum). If every lot is "regroundTablets" the fraction is 1 (the simple 1%-of-blend case); if every lot is "rawPowder" this is exactly 0 and no top-up should be reported at all. This amount is carved OUT of fillerAddG (redistributed, not additive), so totalBlendG = regroundPowderG + freshActiveG + fillerAddG + lubricantTopUpG.
-- fillerAddG (regrind only): grams of filler added to make up the target tablet weight — already net of the 1% lubricantTopUpG above, i.e. filler + lubricant top-up together account for "the rest of the tablet weight" beyond the regrind/fresh active portion
+- lubricantTopUpG (regrind only): grams of a fresh lubricant top-up (e.g. Magnesium stearate), even though most of that ingredient is otherwise assumed already present in the reground powder. Only lots with sourceType "regroundTablets" count toward this — raw/bulk powder lots (sourceType "rawPowder") contribute nothing. Formula: tabletCount × targetWeightG × ${REGRIND_LUBRICANT_TOPUP_PERCENT} × (sum of weightG for lots where sourceType is "regroundTablets" ÷ lotWeightSum). If every lot is "regroundTablets" the fraction is 1 (the simple ${pct(REGRIND_LUBRICANT_TOPUP_PERCENT)}-of-blend case); if every lot is "rawPowder" this is exactly 0 and no top-up should be reported at all. This amount is carved OUT of fillerAddG (redistributed, not additive).
+- easyTabG (regrind only): a fixed processing aid (easyTabIngredientName names it, typically "EasyTab" — informational only, ignore for verification purposes) added to every regrind batch to help with pressing. Unlike lubricantTopUpG, NOT scaled by lot sourceType — applies uniformly regardless of the lot mix. Formula: tabletCount × targetWeightG × ${REGRIND_EASYTAB_PERCENT} (i.e. ${pct(REGRIND_EASYTAB_PERCENT)} of the target tablet weight, per tablet). Also carved OUT of fillerAddG.
+- siliconDioxideG (regrind only): a second fixed processing aid (siliconDioxideIngredientName names it, typically "Silicon Dioxide" — informational only), same treatment as easyTabG but its own constant: tabletCount × targetWeightG × ${REGRIND_SILICON_DIOXIDE_PERCENT} (i.e. ${pct(REGRIND_SILICON_DIOXIDE_PERCENT)} of the target tablet weight, per tablet). Also carved OUT of fillerAddG. Putting all three carve-outs together: totalBlendG = regroundPowderG + freshActiveG + fillerAddG + lubricantTopUpG + easyTabG + siliconDioxideG.
+- fillerAddG (regrind only): grams of filler added to make up the target tablet weight — already net of lubricantTopUpG, easyTabG, AND siliconDioxideG above (all three), i.e. filler plus those three additions together account for "the rest of the tablet weight" beyond the regrind/fresh active portion
 - activeInOldPowderG (regrind only): total grams of active ingredient already present in the reground powder — the SUM of every lot's activeContentG (see above), not a single potency × regroundPowderG multiplication when multiple lots are present
 - actualMgPerTablet (regrind only): the actual verified mg of active per tablet given the above`;
 

@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
-import { runVerification, type AnthropicMessageCreator } from './aiVerification';
+import { runVerification, SYSTEM_PROMPT, type AnthropicMessageCreator } from './aiVerification';
 import { calculateFreshBatch } from './calc-engine/calcEngine';
 import { defaultIngredients } from './calc-engine/defaultFormulation';
+import {
+  REGRIND_LUBRICANT_TOPUP_PERCENT,
+  REGRIND_EASYTAB_PERCENT,
+  REGRIND_SILICON_DIOXIDE_PERCENT,
+} from './calc-engine';
 
 // Real production data (RR77-PB9) — same case used in
 // lib/calc-engine/tests/calcEngine.test.ts. Verified totals: totalBlendG
@@ -144,5 +149,43 @@ describe('runVerification — RR77-PB9 (real production data)', () => {
     if (!outcome.ok) {
       expect(outcome.error).toMatch(/did not call a tool/i);
     }
+  });
+});
+
+describe('SYSTEM_PROMPT — regrind percent figures stay in sync with the calc engine', () => {
+  // Regression coverage for a real bug: this prompt described the regrind
+  // lubricant top-up as a hand-typed "1%"/"0.01" for over a month after
+  // REGRIND_LUBRICANT_TOPUP_PERCENT was changed to 0.15% on 2026-07-20, so
+  // the AI verifier was silently checking every regrind run against the
+  // wrong figure. The fix derives the prompt's numbers directly from the
+  // real constants (see the `pct()` helper and imports in aiVerification.ts)
+  // rather than a second hardcoded copy, so these assertions can't pass by
+  // coincidence — if the constants ever change, the prompt text used here
+  // changes with them, same as the live prompt would.
+
+  it('embeds the live REGRIND_LUBRICANT_TOPUP_PERCENT value, not a stale hand-typed copy', () => {
+    expect(SYSTEM_PROMPT).toContain(`× ${REGRIND_LUBRICANT_TOPUP_PERCENT} ×`);
+    expect(SYSTEM_PROMPT).toContain(`${REGRIND_LUBRICANT_TOPUP_PERCENT * 100}%-of-blend`);
+  });
+
+  it('embeds the live REGRIND_EASYTAB_PERCENT and REGRIND_SILICON_DIOXIDE_PERCENT values', () => {
+    expect(SYSTEM_PROMPT).toContain(`× ${REGRIND_EASYTAB_PERCENT} (i.e. ${REGRIND_EASYTAB_PERCENT * 100}%`);
+    expect(SYSTEM_PROMPT).toContain(`× ${REGRIND_SILICON_DIOXIDE_PERCENT} (i.e. ${REGRIND_SILICON_DIOXIDE_PERCENT * 100}%`);
+  });
+
+  it('does not contain the old wrong 1%/0.01 lubricant top-up figures', () => {
+    expect(SYSTEM_PROMPT).not.toMatch(/×\s*0\.01\s*×/);
+    expect(SYSTEM_PROMPT).not.toMatch(/1%-of-blend/);
+    expect(SYSTEM_PROMPT).not.toMatch(/net of the 1% lubricantTopUpG/);
+  });
+
+  it("fillerAddG's description accounts for all three carve-outs (lubricant top-up, EasyTab, Silicon Dioxide), not just the lubricant top-up", () => {
+    expect(SYSTEM_PROMPT).toMatch(/fillerAddG.*already net of lubricantTopUpG, easyTabG, AND siliconDioxideG/);
+  });
+
+  it('states the complete totalBlendG breakdown including easyTabG and siliconDioxideG', () => {
+    expect(SYSTEM_PROMPT).toContain(
+      'totalBlendG = regroundPowderG + freshActiveG + fillerAddG + lubricantTopUpG + easyTabG + siliconDioxideG'
+    );
   });
 });

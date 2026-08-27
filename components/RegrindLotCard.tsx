@@ -257,7 +257,7 @@ export default function RegrindLotCard({
         </div>
       </div>
 
-      <label className="lot-check-row" title="Reground tablets get a share of the 1% fresh lubricant top-up; raw/bulk powder that was never pressed does not.">
+      <label className="lot-check-row" title="Reground tablets get a share of the 0.15% fresh lubricant top-up; raw/bulk powder that was never pressed does not.">
         <input
           type="checkbox"
           checked={lot.sourceType === 'rawPowder'}

@@ -29,7 +29,7 @@ export default function TipsCard({ mode, usingOptionB }: TipsCardProps) {
         {mode === 'regrind' && (
           <div className="tip">
             <strong>Regrind batches:</strong> PVPP is already in the powder — don&apos;t add fresh.
-            MagSter is mostly already present too; the app automatically adds a small 1% fresh
+            MagSter is mostly already present too; the app automatically adds a small 0.15% fresh
             top-up on top of that, shown in the output — don&apos;t add more than that.
           </div>
         )}
