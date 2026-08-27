@@ -5,6 +5,11 @@ import { effectiveLineageId, SAVED_FORMULATION_STATUSES, type SavedFormulationAc
 
 export async function GET() {
   const formulations = await prisma.savedFormulation.findMany({
+    // deletedAt: null excludes archived formulations by default — see
+    // DELETE /api/saved-formulations/[id]. They're still reachable
+    // directly by id (single GET, version chain, chat context), just not
+    // listed here.
+    where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
   });
   return NextResponse.json(formulations);

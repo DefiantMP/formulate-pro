@@ -52,6 +52,15 @@ model Run {
   passFail           String? // 'pass' | 'fail'
   notes              String?
 
+  // Soft delete — same retiredAt-style pattern as SpecCriterion below.
+  // A hard delete is unsafe here: ScaleVerification.runId is a required,
+  // non-cascading FK (see below), so deleting a run with any scale
+  // verification against it would fail the constraint or, worse, orphan
+  // that verification's audit trail. Null on every run until archived;
+  // GET /api/runs (and /api/products, which reads run.product for
+  // suggestions) filter this out by default.
+  deletedAt DateTime?
+
   scaleVerifications ScaleVerification[]
   // Back-relation for RunLotUsage's FK (see below). Virtual field only —
   // Prisma requires it to declare the relation, but the column and FK both
@@ -142,6 +151,17 @@ model SavedFormulation {
   // SQLite's UNIQUE constraint doesn't apply to NULL, so any number of
   // manually-created rows can coexist with this column left unset.
   sourceRunId String? @unique
+
+  // Soft delete — same retiredAt-style pattern as SpecCriterion below. A
+  // hard delete is unsafe here: this row may be a lineage root or a parent
+  // with children (the self-relation above), and other versions' parentId
+  // would either block the delete or dangle. Null until archived;
+  // GET /api/saved-formulations filters this out by default. The single-row
+  // GET, the version-chain endpoint, and the troubleshooting chat's
+  // cross-formulation search deliberately still return an archived row —
+  // archiving hides it from the library list, not from its own lineage
+  // history or a direct link.
+  deletedAt DateTime?
 }
 
 // Historical manufacturing batches, importable via CSV.

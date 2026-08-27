@@ -44,6 +44,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .btn:hover { background: var(--bg); }
 .btn-p { background: var(--brand); color: #fff; border-color: var(--brand); }
 .btn-p:hover { background: var(--brand-mid); }
+.btn-danger { color: var(--danger-text); border-color: var(--danger-border); }
+.btn-danger:hover { background: var(--danger-bg); }
 
 /* Content layout */
 .content { flex: 1; display: flex; gap: 14px; padding: 14px; overflow: hidden; min-height: 0; }
@@ -308,6 +310,7 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .rh-chevron.open { transform: rotate(90deg); }
 .rh-detail { padding: 6px 14px 20px; display: flex; flex-direction: column; gap: 16px; background: var(--bg); }
 .rh-detail-hdr { font-size: 10px; color: var(--text-3); letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 8px; }
+.rh-danger-row { padding-top: 12px; border-top: 0.5px solid var(--border); }
 .rh-materials { display: flex; flex-wrap: wrap; gap: 6px; }
 .rh-material-chip { font-size: 11px; padding: 4px 9px; border-radius: 20px; background: var(--surface); border: 0.5px solid var(--border-md); color: var(--text); }
 .rh-material-chip b { color: var(--text-2); font-weight: 500; margin-right: 4px; }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
 import VersionHistoryPanel from './VersionHistoryPanel';
@@ -12,7 +13,9 @@ interface FormulationDetailPageProps {
 }
 
 export default function FormulationDetailPage({ id }: FormulationDetailPageProps) {
+  const router = useRouter();
   const [formulation, setFormulation] = useState<SavedFormulationRecord | null | undefined>(undefined);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setFormulation(undefined);
@@ -22,6 +25,24 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
   }, [id]);
 
   const derived = formulation ? deriveSavedFormulation(formulation) : null;
+
+  async function deleteFormulation() {
+    if (!formulation) return;
+    if (!window.confirm(`Delete "${formulation.name}"? This removes it from the Formulations library.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/saved-formulations/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert('Failed to delete formulation.');
+        return;
+      }
+      router.push('/formulations');
+    } catch {
+      alert('Failed to delete formulation.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="app">
@@ -36,6 +57,10 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
           </div>
           {formulation && (
             <div className="topbar-right">
+              <button type="button" className="btn btn-danger" onClick={deleteFormulation} disabled={deleting}>
+                <i className="ti ti-trash" />
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
               <Link href={`/formulations/new?iterateFrom=${id}`} className="btn btn-p">
                 <i className="ti ti-git-branch" /> Iterate
               </Link>

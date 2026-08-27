@@ -11,6 +11,8 @@ import { productsFrom } from '@/lib/productHistory';
  * drift out of step with the runs it claims to describe.
  */
 export async function GET() {
-  const runs = await prisma.run.findMany({ select: { product: true } });
+  // deletedAt: null — an archived run's product name shouldn't keep
+  // surfacing as a suggestion after the run itself is gone from history.
+  const runs = await prisma.run.findMany({ where: { deletedAt: null }, select: { product: true } });
   return NextResponse.json(productsFrom(runs));
 }

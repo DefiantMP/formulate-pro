@@ -7,7 +7,11 @@ import { syncFormulationFromRun } from '@/lib/runFormulationSync';
 export async function GET(request: NextRequest) {
   const product = request.nextUrl.searchParams.get('product');
   const runs = await prisma.run.findMany({
-    where: product ? { product } : {},
+    // deletedAt: null excludes archived runs by default — see DELETE
+    // /api/runs/[id]. No way to include them from this endpoint; they're
+    // still reachable directly (e.g. a PATCH by id still works) but never
+    // listed.
+    where: { deletedAt: null, ...(product ? { product } : {}) },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });

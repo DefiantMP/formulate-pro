@@ -127,6 +127,7 @@ export default function RunHistoryPage() {
   const [drafts, setDrafts] = useState<Record<string, CoaDraft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [justSavedId, setJustSavedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/runs')
@@ -185,6 +186,23 @@ export default function RunHistoryPage() {
       alert('Failed to save COA results.');
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function deleteRun(id: string, label: string) {
+    if (!window.confirm(`Delete "${label}"? This removes it from Run History.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/runs/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert('Failed to delete run.');
+        return;
+      }
+      setRuns((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      alert('Failed to delete run.');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -346,6 +364,18 @@ export default function RunHistoryPage() {
                                 </div>
                               ))
                             )}
+                          </div>
+
+                          <div className="rh-danger-row">
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() => deleteRun(run.id, run.label)}
+                              disabled={deletingId === run.id}
+                            >
+                              <i className="ti ti-trash" />
+                              {deletingId === run.id ? 'Deleting…' : 'Delete run'}
+                            </button>
                           </div>
                         </div>
                       )}

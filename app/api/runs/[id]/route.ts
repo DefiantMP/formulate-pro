@@ -99,3 +99,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Run not found' }, { status: 404 });
   }
 }
+
+/**
+ * Soft delete — sets deletedAt rather than removing the row. A hard delete
+ * risks a FK constraint failure (or, if that constraint were ever relaxed,
+ * silently orphaning) any ScaleVerification or RunLotUsage row that
+ * references this run. Idempotent: archiving an already-archived run just
+ * re-stamps deletedAt, no error.
+ */
+export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    await prisma.run.update({
+      where: { id: params.id },
+      data: { deletedAt: new Date() },
+    });
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: 'Run not found' }, { status: 404 });
+  }
+}
