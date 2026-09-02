@@ -106,3 +106,53 @@ describe('provenance', () => {
     ).toBe('AI-suggested — not validated');
   });
 });
+
+describe('enabled gate', () => {
+  it('treats every shipped entry as enabled', () => {
+    for (const p of KNOWN_ACTIVES) {
+      expect(p.enabled).not.toBe(false);
+      expect(findKnownActiveMatch(p.name)?.id).toBe(p.id);
+    }
+  });
+
+  it('keeps a drafted entry out of the tier-1 lookup entirely', () => {
+    // The point of the flag: an entry can sit in the table awaiting review
+    // without ever reaching an operator under a "reference values" badge.
+    const drafted: (typeof KNOWN_ACTIVES)[number] = {
+      ...KNOWN_ACTIVES[0],
+      id: 'drafted-entry',
+      name: 'Drafted Compound',
+      aliases: ['drafted-alias'],
+      enabled: false,
+      provenance: { kind: 'internal', derivedFromRuns: 1 },
+    };
+    KNOWN_ACTIVES.push(drafted);
+    try {
+      expect(findKnownActiveMatch('Drafted Compound')).toBeNull();
+      expect(findKnownActiveMatch('drafted-alias')).toBeNull();
+      // and an enabled neighbour still resolves, so the filter is not blanket
+      expect(findKnownActiveMatch(KNOWN_ACTIVES[0].name)).not.toBeNull();
+    } finally {
+      KNOWN_ACTIVES.pop();
+    }
+  });
+
+  it('resolves a drafted entry once it is enabled', () => {
+    const enabled: (typeof KNOWN_ACTIVES)[number] = {
+      ...KNOWN_ACTIVES[0],
+      id: 'enabled-entry',
+      name: 'Enabled Compound',
+      aliases: [],
+      enabled: true,
+      provenance: { kind: 'internal', derivedFromRuns: 3 },
+    };
+    KNOWN_ACTIVES.push(enabled);
+    try {
+      const found = findKnownActiveMatch('Enabled Compound');
+      expect(found?.id).toBe('enabled-entry');
+      expect(suggestionProvenanceLabel(knownActiveToSuggestion(found!))).toBe('From your history — 3 runs');
+    } finally {
+      KNOWN_ACTIVES.pop();
+    }
+  });
+});

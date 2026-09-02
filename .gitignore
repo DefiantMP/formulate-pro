@@ -8,3 +8,8 @@ dist
 prisma/dev.db
 prisma/dev.db-journal
 .claude/settings.local.json
+
+# Stray root DB — the real one is prisma/dev.db (DATABASE_URL resolves
+# relative to prisma/schema.prisma). A 0-byte file here once got committed
+# by a prisma command run from the repo root; ignore it so it cannot recur.
+dev.db

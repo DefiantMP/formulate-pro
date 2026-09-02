@@ -44,6 +44,22 @@ export interface KnownActiveProfile {
   id: string;
   name: string;
   provenance: ActiveProvenance;
+  /**
+   * Whether this entry participates in the tier-1 lookup. Omitted means
+   * enabled — every shipped entry is live.
+   *
+   * Set false to park a DRAFTED entry in the table without it reaching
+   * operators: findKnownActiveMatch skips it, so the active keeps falling
+   * through to the AI tier, which is labelled as unvalidated. That is the
+   * safe default for an entry whose figures have not yet been reviewed by
+   * someone who can vouch for them — a wrong number under a "reference
+   * values" badge is worse than no entry at all.
+   *
+   * To add an internally-derived entry later: give it
+   * `provenance: { kind: 'internal', derivedFromRuns: N }`, set
+   * `enabled: false`, have the figures reviewed, then flip to true.
+   */
+  enabled?: boolean;
   aliases: string[];
   targetMgPerTablet: number;
   potencyPercent: number;
@@ -149,7 +165,15 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
 export function findKnownActiveMatch(label: string): KnownActiveProfile | null {
   const q = label.trim().toLowerCase();
   if (!q) return null;
-  return KNOWN_ACTIVES.find((p) => p.name.toLowerCase() === q || p.aliases.some((a) => a.toLowerCase() === q)) ?? null;
+  return (
+    KNOWN_ACTIVES.find(
+      (p) =>
+        // Drafted-but-unreviewed entries are invisible here by design — see
+        // KnownActiveProfile.enabled.
+        p.enabled !== false &&
+        (p.name.toLowerCase() === q || p.aliases.some((a) => a.toLowerCase() === q))
+    ) ?? null
+  );
 }
 
 export function knownActiveToSuggestion(profile: KnownActiveProfile): FormulationSuggestion {
