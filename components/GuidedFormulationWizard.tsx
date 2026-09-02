@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { ActiveDraft } from './FormulationBuilderPage';
 import { PERCENT_SUM_TOLERANCE, type SavedFormulationDerived } from '@/lib/savedFormulations';
-import { findKnownActiveMatch, knownActiveToSuggestion, type FormulationSuggestion } from '@/lib/knownActives';
+import { type FormulationSuggestion } from '@/lib/knownActives';
+import { applySuggestionToFields, resolveSuggestion } from '@/lib/suggestionTiers';
 import { numOrZero, fmt } from '@/lib/format';
 import {
   getPreferredWeightUnit,
@@ -224,15 +225,16 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
   // % into a blank name field pairs it with Silicon Dioxide, overwhelmingly
   // the conventional glidant choice.
   function applySuggestion(activeId: string, label: string, s: FormulationSuggestion) {
-    updateActive(activeId, {
-      targetMgPerTablet: String(s.targetMgPerTablet),
-      potencyPercent: String(s.potencyPercent),
-    });
-    if (tabletWeightG.trim() === '') setTabletWeightG(String(s.tabletWeightG));
-    if (disintegrantPercent.trim() === '') setDisintegrantPercent(String(s.disintegrantPercent));
-    if (lubricantPercent.trim() === '') setLubricantPercent(String(s.lubricantPercent));
-    if (glidantName.trim() === '') setGlidantName('Silicon Dioxide');
-    if (glidantPercent.trim() === '') setGlidantPercent(String(s.glidantPercent));
+    const applied = applySuggestionToFields(
+      { tabletWeightG, disintegrantPercent, lubricantPercent, glidantName, glidantPercent },
+      s
+    );
+    updateActive(activeId, applied.active);
+    setTabletWeightG(applied.fields.tabletWeightG);
+    setDisintegrantPercent(applied.fields.disintegrantPercent);
+    setLubricantPercent(applied.fields.lubricantPercent);
+    setGlidantName(applied.fields.glidantName);
+    setGlidantPercent(applied.fields.glidantPercent);
     setResolvedFor((prev) => ({ ...prev, [activeId]: label }));
   }
 
@@ -330,20 +332,21 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
               </div>
               {actives.map((a, index) => {
                 const trimmedLabel = a.label.trim();
-                const knownMatch = findKnownActiveMatch(trimmedLabel);
                 const aiState = aiSuggestions[a.id];
                 const dismissedForCurrentLabel = resolvedFor[a.id] === trimmedLabel;
 
-                const suggestion: FormulationSuggestion | null = knownMatch
-                  ? knownActiveToSuggestion(knownMatch)
-                  : aiState?.status === 'done' && aiState.result
-                    ? aiState.result
-                    : null;
+                // Tier choice lives in lib/suggestionTiers.ts so it can be
+                // tested without a DOM; needsAi is false for a known active,
+                // which is what keeps the table tier from ever calling the API.
+                const { suggestion, needsAi } = resolveSuggestion(
+                  trimmedLabel,
+                  aiState?.status === 'done' ? aiState.result : null
+                );
 
                 const showSuggestionPanel = !!suggestion && !dismissedForCurrentLabel;
-                const showAiTrigger = !knownMatch && trimmedLabel.length >= 3 && !dismissedForCurrentLabel && !aiState;
-                const showAiLoading = !knownMatch && aiState?.status === 'loading';
-                const showAiError = !knownMatch && aiState?.status === 'error' && !dismissedForCurrentLabel;
+                const showAiTrigger = needsAi && trimmedLabel.length >= 3 && !dismissedForCurrentLabel && !aiState;
+                const showAiLoading = needsAi && aiState?.status === 'loading';
+                const showAiError = needsAi && aiState?.status === 'error' && !dismissedForCurrentLabel;
 
                 return (
                   <div className="lot-card" key={a.id}>
