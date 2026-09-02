@@ -47,6 +47,15 @@ model Run {
   // COA (Certificate of Analysis) results, entered on the Run History page
   // after the batch is physically made and lab-tested. All nullable/additive
   // — absent on every run until an operator records them.
+  // Batch-level QC sign-off — the Part 111 batch production record review.
+  // Distinct from ScaleVerification.status, which approves ONE weighing — this
+  // is a reviewer accepting the batch as a whole. Null means never reviewed,
+  // which for a run predating GMP mode is "grandfathered", not "pending" —
+  // that distinction is drawn from the toggle log, not from this column.
+  reviewStatus  String?   // 'pending' | 'approved' | 'rejected'
+  reviewerName  String?
+  reviewedAt    DateTime?
+  reviewNotes   String?   // required when reviewStatus is 'rejected'
   actualMgPerTablet  Float?
   actualTabletWeight Float?
   passFail           String? // 'pass' | 'fail'
@@ -62,6 +71,7 @@ model Run {
   deletedAt DateTime?
 
   scaleVerifications ScaleVerification[]
+  deviations         RunDeviation[]
   // Back-relation for RunLotUsage's FK (see below). Virtual field only —
   // Prisma requires it to declare the relation, but the column and FK both
   // live on RunLotUsage, so this adds no column to Run and no table rebuild.
@@ -136,6 +146,15 @@ model SavedFormulation {
   // 'untested' | 'passed' | 'failed' | 'issue' — drafting-stage outcome
   // tracking, independent of Run's production-lab COA fields above.
   status       String   @default("untested")
+  // Review sign-off, deliberately separate from `status` above: that one
+  // records how the formulation PERFORMED (untested/passed/failed/issue),
+  // this one records whether a reviewer has approved it for use as a master
+  // record. A formulation can be approved but untested, or tested and
+  // unapproved; collapsing them would lose one of the two.
+  reviewStatus String?  // 'pending' | 'approved' | 'rejected'
+  reviewerName String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
   outcomeNotes String?
   // Physical/mechanical context (press, tooling size, fill cam behavior,
   // hopper type, …) that formulation-percentage data alone can't capture.
@@ -228,6 +247,13 @@ model ScaleVerification {
   // separate file-serving route needed) — nulled out, not the row, on
   // manager approval. Everything else on the record is kept permanently.
   photoDataUrl    String?
+  // Two-person verification. status/approvedAt already existed and record
+  // THAT a second check happened; these record WHO did each half, which is
+  // the actual Part 111 requirement — a status flip attributes nothing.
+  // Both free-text: there is no auth system (see known gaps).
+  weighedByName  String?
+  verifiedByName String?
+  verifiedAt     DateTime?
   status          String   @default("pending") // 'pending' | 'approved'
   createdAt       DateTime @default(now())
   approvedAt      DateTime?
@@ -449,4 +475,87 @@ model RunLotUsage {
 
   @@index([runId])
   @@index([lotId])
+}
+
+// ---------------------------------------------------------------------------
+// GMP mode (21 CFR Part 111 scaffolding).
+//
+// A single account-level switch plus its own audit trail. Everything the GMP
+// features enforce is gated on this; nothing they DISPLAY is — data stays
+// visible with the mode off, only the blocking goes away. That split is
+// deliberate: hiding records based on a settings flag would make the app's
+// history depend on current configuration, which is the opposite of what an
+// audit needs.
+// ---------------------------------------------------------------------------
+
+// Singleton — one row, fixed id, same get-or-create shape as the default
+// Formulation. A dedicated model rather than a key-value bag because the
+// settings are typed and few, and because the lot-status fork below needs a
+// real enum-ish column rather than a stringly-typed value.
+model GmpSettings {
+  id      String  @id @default("singleton")
+  enabled Boolean @default(false)
+  // What happens when a run consumes a lot whose spec status is fail/pending.
+  // 'warn'  — surface it, let the operator proceed (default)
+  // 'block' — refuse the run
+  // Configurable because CLAUDE.md's Open Flags records that hardcoding
+  // either behavior would be wrong for half of users.
+  lotStatusEnforcement String @default("warn")
+  updatedAt DateTime @updatedAt
+}
+
+// Append-only. Every state change writes one row; nothing updates or deletes
+// them, and there is no endpoint that can. THIS LOG is the compliance
+// artifact — the toggle itself is deliberately not locked, because a lock
+// that can be lifted proves nothing while a complete record of who changed
+// what and when does.
+//
+// It also answers "was GMP mode ever on before this record was created",
+// which is how grandfathering is decided: the earliest row with
+// newState = true is the moment enforcement began. Storing that as its own
+// column would be a second source of truth that could disagree with the log.
+model GmpModeToggleLog {
+  id            String   @id @default(cuid())
+  // Free-text name/initials. There is no auth system — see the known-gaps
+  // note in the summary; this is NOT verified identity.
+  actorName     String
+  previousState Boolean
+  newState      Boolean
+  note          String?
+  changedAt     DateTime @default(now())
+
+  @@index([changedAt])
+}
+
+// A deviation raised against one batch.
+//
+// Kept as its own model rather than folded into OosInvestigation even though
+// the two rhyme: an OOS investigation is scoped to a failing LAB RESULT on a
+// received lot, this is scoped to a BATCH whose finished output fell outside
+// its target. Sharing one table would mean every query for one concept has to
+// remember to exclude the other, and the two have genuinely different
+// dispositions — a lot can be rejected, a batch can be reworked.
+model RunDeviation {
+  id    String @id @default(cuid())
+  runId String
+  run   Run    @relation(fields: [runId], references: [id])
+
+  // What was observed, and what the investigation concluded. Structured
+  // rather than one free-text blob so a reviewer can tell an unexplained
+  // deviation from an explained one without reading prose.
+  description           String
+  investigationFindings String?
+  // 'pending' | 'accept_with_justification' | 'reject' | 'rework'
+  disposition           String  @default("pending")
+  // Required by the API when disposition is accept_with_justification —
+  // accepting out-of-spec material without a recorded reason is precisely
+  // the thing a deviation record exists to prevent.
+  justification         String?
+
+  openedBy  String
+  openedAt  DateTime  @default(now())
+  closedBy  String?
+  closedAt  DateTime?
+
+  @@index([runId])
 }

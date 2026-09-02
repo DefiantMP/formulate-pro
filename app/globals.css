@@ -570,3 +570,19 @@ textarea.rm-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px r
 .prior-run-list b { color: var(--text); font-weight: 600; }
 .prior-run-coa { font-size: 11px; color: var(--brand); margin-top: 6px; }
 .prior-run-notes { font-size: 11px; color: var(--text-3); margin-top: 4px; line-height: 1.5; }
+
+/* GMP mode */
+.gmp-badge { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px; padding: 6px 10px; border-radius: 6px; background: var(--brand); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; }
+.gmp-badge i { font-size: 14px; }
+.gmp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 0.5px solid var(--border); }
+.gmp-row:last-child { border-bottom: none; }
+.gmp-row-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.gmp-row-desc { font-size: 11px; color: var(--text-2); line-height: 1.5; margin-top: 2px; max-width: 60ch; }
+.gmp-switch { flex-shrink: 0; height: 30px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--border-md); background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer; }
+.gmp-switch.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.gmp-log-row { display: grid; grid-template-columns: 1fr 1.2fr 1.4fr; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 11px; color: var(--text-2); }
+.gmp-log-row:last-child { border-bottom: none; }
+.gmp-log-row b { color: var(--text); font-weight: 600; }
+.gmp-transition { font-weight: 600; }
+.gmp-transition.on { color: var(--brand); }
+.gmp-transition.off { color: var(--text-3); }

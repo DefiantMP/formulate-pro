@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import GmpModeBadge from './GmpModeBadge';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -70,10 +71,11 @@ export default function Sidebar() {
         <button className="nav-btn">
           <i className="ti ti-building-factory-2" /> Products
         </button>
-        <button className="nav-btn">
+        <Link href="/settings" className={`nav-btn${pathname.startsWith('/settings') ? ' active' : ''}`}>
           <i className="ti ti-settings" /> Settings
-        </button>
+        </Link>
       </nav>
+      <GmpModeBadge />
       <div className="sidebar-foot">
         <div className="user-row">
           <div className="av">JD</div>
