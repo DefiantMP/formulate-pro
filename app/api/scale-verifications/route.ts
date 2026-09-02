@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@/lib/db';
+import { getGmpSettings } from '@/lib/gmpSettings';
+import { weighVerificationError } from '@/lib/gmp';
 import { currentOrganizationId } from '@/lib/organization';
 import { computePassFail, runScaleReading, DEFAULT_TOLERANCE_PERCENT } from '@/lib/scaleVerification';
 import { findRunIngredientWeight } from '@/lib/runIngredientBreakdown';
@@ -27,7 +29,7 @@ export async function POST(request: NextRequest) {
   if (!body) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
   }
-  const { runId, ingredientLabel, photoDataUrl } = body;
+  const { runId, ingredientLabel, photoDataUrl, weighedByName, verifiedByName } = body;
 
   if (typeof runId !== 'string' || !runId.trim()) {
     return NextResponse.json({ error: 'runId is required' }, { status: 400 });
@@ -67,6 +69,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: outcome.error }, { status: outcome.status });
   }
 
+  // Two-person weighing. Gated on GMP mode: with the mode off this returns
+  // null and single-person weighing works exactly as it always has.
+  const gmp = await getGmpSettings();
+  const weighProblem = weighVerificationError(
+    { weighedByName, verifiedByName },
+    gmp
+  );
+  if (weighProblem) {
+    return NextResponse.json({ error: weighProblem }, { status: 400 });
+  }
+
   const toleranceType = 'percent' as const;
   const toleranceValue = DEFAULT_TOLERANCE_PERCENT;
   const passFail = computePassFail(expectedWeightG, toleranceType, toleranceValue, outcome.result.weightGrams);
@@ -85,6 +98,11 @@ export async function POST(request: NextRequest) {
       confident: outcome.result.confident,
       modelNotes: outcome.result.reasoning,
       photoDataUrl,
+      weighedByName: typeof weighedByName === 'string' && weighedByName.trim() ? weighedByName.trim() : null,
+      verifiedByName: typeof verifiedByName === 'string' && verifiedByName.trim() ? verifiedByName.trim() : null,
+      // verifiedAt records when the SECOND person signed, which only happens
+      // when a verifier is actually named — not when the row is created.
+      verifiedAt: typeof verifiedByName === 'string' && verifiedByName.trim() ? new Date() : null,
       status: 'pending',
     },
     include: { run: { select: { label: true } } },

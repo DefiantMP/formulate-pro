@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { hasIdentitySpec } from '@/lib/gmp';
 import { RAW_MATERIAL_CATEGORIES, isRawMaterialCategory } from '@/lib/rawMaterials';
 
 /** ?category= filters by category; ?q= substring-matches the name. */
@@ -21,11 +22,22 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { name: 'asc' },
     include: {
-      spec: { select: { id: true, name: true } },
+      spec: {
+        select: {
+          id: true,
+          name: true,
+          // Enough to compute identity-spec completeness for the list badge.
+          // Retired criteria are included so hasIdentitySpec can discount
+          // them rather than counting a spec line nobody maintains.
+          criteria: { select: { testType: true, retiredAt: true } },
+        },
+      },
       _count: { select: { lots: true } },
     },
   });
-  return NextResponse.json(materials);
+  return NextResponse.json(
+    materials.map((m) => ({ ...m, hasIdentitySpec: hasIdentitySpec(m) }))
+  );
 }
 
 export async function POST(request: NextRequest) {

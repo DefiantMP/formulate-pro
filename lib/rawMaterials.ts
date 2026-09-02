@@ -85,6 +85,13 @@ export interface RawMaterialListItem {
   createdAt: string;
   spec: { id: string; name: string } | null;
   _count: { lots: number };
+  /**
+   * Whether an active qualitative identity criterion is on file. Computed
+   * server-side so the list and any enforcement agree — a missing identity
+   * spec is the most-cited Part 111 observation, and it is what GMP mode
+   * blocks new usage on.
+   */
+  hasIdentitySpec?: boolean;
 }
 
 export interface SpecCriterionRecord {

@@ -190,10 +190,17 @@ export default function RawMaterialsPage() {
                           m.category}
                       </div>
                       <div className="rh-cell">
-                        {m.spec ? (
-                          m.spec.name
-                        ) : (
+                        {!m.spec ? (
                           <span style={{ color: 'var(--warning-text)' }}>No spec</span>
+                        ) : m.hasIdentitySpec === false ? (
+                          /* Identity is the most-cited Part 111 observation, so a
+                             spec that lacks one is called out specifically rather
+                             than reading as simply "has a spec". */
+                          <span style={{ color: 'var(--warning-text)' }} title="No qualitative identity criterion on file">
+                            No identity spec
+                          </span>
+                        ) : (
+                          m.spec.name
                         )}
                       </div>
                       <div className="rh-cell">{m._count.lots}</div>

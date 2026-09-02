@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { isReviewStatus, reviewSubmissionError } from '@/lib/gmp';
 import { syncFormulationFromRun } from '@/lib/runFormulationSync';
 
 /**
@@ -23,6 +24,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     notes,
     label,
     product,
+    reviewStatus,
+    reviewerName,
+    reviewNotes,
     mode,
     inputs,
     result,
@@ -61,7 +65,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'product must be a string or null' }, { status: 400 });
   }
 
+  // QC review sign-off. Validated even with GMP mode off: if a reviewer is
+  // recording a decision at all, an unexplained rejection is not a record —
+  // the mode governs whether review is REQUIRED, not whether a submitted one
+  // may be incoherent.
+  if (reviewStatus !== undefined) {
+    if (!isReviewStatus(reviewStatus)) {
+      return NextResponse.json(
+        { error: "reviewStatus must be 'pending', 'approved' or 'rejected'" },
+        { status: 400 }
+      );
+    }
+    const problem = reviewSubmissionError(reviewStatus, String(reviewerName ?? ''), reviewNotes);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  }
+
   const data: Record<string, unknown> = {};
+  if (reviewStatus !== undefined) {
+    data.reviewStatus = reviewStatus;
+    data.reviewerName = String(reviewerName).trim();
+    data.reviewNotes = typeof reviewNotes === 'string' && reviewNotes.trim() ? reviewNotes.trim() : null;
+    data.reviewedAt = new Date();
+  }
   if ('product' in body) {
     data.product = typeof product === 'string' && product.trim() ? product.trim() : null;
   }
