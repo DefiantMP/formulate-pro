@@ -7,8 +7,28 @@
  * lib/activeSuggestion.ts). Both are equally overridable in the UI — this
  * type carries no notion of "applied" or "trusted".
  */
+/**
+ * Where a reference entry's numbers come from.
+ *
+ * 'pharmacopeial' entries are general tableting-practice figures for
+ * well-documented actives. 'internal' entries are derived from this
+ * operator's OWN production history, and carry the number of records behind
+ * them — one run is a single data point, not a norm, and the operator has to
+ * be able to see the difference before trusting either.
+ *
+ * The distinction is surfaced in the wizard rather than kept internal: both
+ * render under a "reference values" badge, and without it a generic textbook
+ * figure is indistinguishable from a figure derived from the operator's own
+ * floor.
+ */
+export type ActiveProvenance =
+  | { kind: 'pharmacopeial' }
+  | { kind: 'internal'; derivedFromRuns: number };
+
 export interface FormulationSuggestion {
   source: 'known' | 'ai';
+  /** Present only on 'known' suggestions — the AI tier has no provenance. */
+  provenance?: ActiveProvenance;
   /** The known-table entry's canonical name, or the AI query's own active label. */
   matchedLabel: string;
   targetMgPerTablet: number;
@@ -23,6 +43,7 @@ export interface FormulationSuggestion {
 export interface KnownActiveProfile {
   id: string;
   name: string;
+  provenance: ActiveProvenance;
   aliases: string[];
   targetMgPerTablet: number;
   potencyPercent: number;
@@ -47,6 +68,7 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
   {
     id: 'acetaminophen',
     name: 'Acetaminophen',
+    provenance: { kind: 'pharmacopeial' },
     aliases: ['paracetamol', 'tylenol'],
     targetMgPerTablet: 500,
     potencyPercent: 99,
@@ -59,6 +81,7 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
   {
     id: 'ibuprofen',
     name: 'Ibuprofen',
+    provenance: { kind: 'pharmacopeial' },
     aliases: ['advil', 'motrin'],
     targetMgPerTablet: 200,
     potencyPercent: 99,
@@ -71,6 +94,7 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
   {
     id: 'metformin',
     name: 'Metformin HCl',
+    provenance: { kind: 'pharmacopeial' },
     aliases: ['metformin', 'metformin hydrochloride'],
     targetMgPerTablet: 500,
     potencyPercent: 99,
@@ -83,6 +107,7 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
   {
     id: 'aspirin',
     name: 'Aspirin',
+    provenance: { kind: 'pharmacopeial' },
     aliases: ['acetylsalicylic acid', 'asa'],
     targetMgPerTablet: 325,
     potencyPercent: 99,
@@ -95,6 +120,7 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
   {
     id: 'ascorbic-acid',
     name: 'Ascorbic acid (Vitamin C)',
+    provenance: { kind: 'pharmacopeial' },
     aliases: ['vitamin c'],
     targetMgPerTablet: 500,
     potencyPercent: 99,
@@ -107,6 +133,7 @@ export const KNOWN_ACTIVES: KnownActiveProfile[] = [
   {
     id: 'calcium-carbonate',
     name: 'Calcium carbonate',
+    provenance: { kind: 'pharmacopeial' },
     aliases: ['caco3'],
     targetMgPerTablet: 600,
     potencyPercent: 100,
@@ -128,6 +155,7 @@ export function findKnownActiveMatch(label: string): KnownActiveProfile | null {
 export function knownActiveToSuggestion(profile: KnownActiveProfile): FormulationSuggestion {
   return {
     source: 'known',
+    provenance: profile.provenance,
     matchedLabel: profile.name,
     targetMgPerTablet: profile.targetMgPerTablet,
     potencyPercent: profile.potencyPercent,
@@ -137,4 +165,22 @@ export function knownActiveToSuggestion(profile: KnownActiveProfile): Formulatio
     glidantPercent: profile.glidantPercent,
     note: profile.note,
   };
+}
+
+/**
+ * Badge text for a suggestion, naming where its numbers came from.
+ *
+ * Kept next to the provenance type so the copy cannot drift from the meaning
+ * — the same reason OOS_DISPOSITION_EFFECTS sits beside
+ * isInvalidatingInvestigation rather than in a component.
+ */
+export function suggestionProvenanceLabel(suggestion: FormulationSuggestion): string {
+  if (suggestion.source === 'ai') return 'AI-suggested — not validated';
+  const p = suggestion.provenance;
+  if (p?.kind === 'internal') {
+    return p.derivedFromRuns === 1
+      ? 'From your history — 1 run only'
+      : `From your history — ${p.derivedFromRuns} runs`;
+  }
+  return 'Reference values — pharmacopeial';
 }

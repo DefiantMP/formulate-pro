@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { ActiveDraft } from './FormulationBuilderPage';
 import { PERCENT_SUM_TOLERANCE, type SavedFormulationDerived } from '@/lib/savedFormulations';
-import { type FormulationSuggestion } from '@/lib/knownActives';
+import { suggestionProvenanceLabel, type FormulationSuggestion } from '@/lib/knownActives';
 import { applySuggestionToFields, resolveSuggestion } from '@/lib/suggestionTiers';
 import { numOrZero, fmt } from '@/lib/format';
 import {
@@ -452,8 +452,12 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
                     {showSuggestionPanel && suggestion && (
                       <div className="suggestion-panel">
                         <div className="suggestion-panel-hdr">
+                          {/* Names the provenance, not just the tier: a
+                              generic pharmacopeial figure and one derived
+                              from this operator's own runs both arrive as
+                              'known', and they warrant different trust. */}
                           <span className={`suggestion-badge ${suggestion.source}`}>
-                            {suggestion.source === 'known' ? 'Reference values' : 'AI-suggested — not validated'}
+                            {suggestionProvenanceLabel(suggestion)}
                           </span>
                           <span className="suggestion-title">Suggested values for {suggestion.matchedLabel}</span>
                         </div>
