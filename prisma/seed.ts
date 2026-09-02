@@ -31,6 +31,14 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 
 const prisma = new PrismaClient();
 
+/**
+ * Sample data must stay GENERIC. This seed runs on any empty database — it is
+ * Prisma's configured seed hook, so `prisma migrate dev` and `migrate reset`
+ * both fire it — which means it is the first thing a NEW deployment for a
+ * different company sees. Labels and figures here are deliberately round and
+ * anonymous illustrations, not any operator's real product codes, potencies
+ * or batch sizes. Do not paste production values in.
+ */
 async function main() {
   const ingredients = defaultIngredients();
   const formulation = await getOrCreateDefaultFormulation();
@@ -48,10 +56,10 @@ async function main() {
       if (i.id === 'pvpp') return { ...i, percentOfBlend: 5 };
       return i; // any other excipient (e.g. EZTAB) keeps its formulation default
     });
-  const freshApis = singleApi({ method: 'bulkPercent', percent: 55.5 }, 35);
+  const freshApis = singleApi({ method: 'bulkPercent', percent: 60 }, 50);
   const freshResult = calculateFreshBatch({
-    tabletCount: 133623,
-    targetWeightG: 0.69,
+    tabletCount: 100000,
+    targetWeightG: 0.7,
     apis: freshApis,
     ingredients: freshIngredients,
     fillerType: 'Emdex',
@@ -70,25 +78,25 @@ async function main() {
 
   const regrindBPotency: PotencyInput = {
     method: 'mgPerTablet',
-    mgPerOldTablet: 20.1,
-    oldTabletWeightG: 0.27,
+    mgPerOldTablet: 20,
+    oldTabletWeightG: 0.3,
   };
   const regrindBResult = calculateRegrind({
-    lots: singleLot(regrindBPotency, 14500),
-    regroundPowderG: 14500,
-    targetActiveMgPerTablet: 35,
+    lots: singleLot(regrindBPotency, 15000),
+    regroundPowderG: 15000,
+    targetActiveMgPerTablet: 50,
     targetWeightG: 0.8,
     fillerIngredientName: 'Emdex',
     alreadyPresentIngredientNames: ['PVPP XL'],
     lubricantTopUpIngredientName: 'Magnesium stearate',
   });
 
-  const regrindAPotency: PotencyInput = { method: 'bulkPercent', percent: 55.5 };
+  const regrindAPotency: PotencyInput = { method: 'bulkPercent', percent: 60 };
   const regrindAResult = calculateRegrind({
-    lots: singleLot(regrindAPotency, 8000),
-    regroundPowderG: 8000,
+    lots: singleLot(regrindAPotency, 10000),
+    regroundPowderG: 10000,
     targetActiveMgPerTablet: 60,
-    targetWeightG: 1.15,
+    targetWeightG: 1.0,
     fillerIngredientName: 'Emdex',
     alreadyPresentIngredientNames: ['PVPP XL'],
     lubricantTopUpIngredientName: 'Magnesium stearate',
@@ -103,22 +111,22 @@ async function main() {
   await prisma.run.createMany({
     data: [
       {
-        label: 'PB21RW35D',
+        label: 'Sample regrind batch',
         mode: 'regrind',
         formulationId: formulation.id,
-        inputs: asJson({ opt: 'b', bMg: '20.1', bWt: '0.270', rgPwd: '14500', rgTmg: '35', rgTwt: '0.800' }),
+        inputs: asJson({ opt: 'b', bMg: '20', bWt: '0.300', rgPwd: '15000', rgTmg: '50', rgTwt: '0.800' }),
         result: asJson(regrindBResult),
         createdAt: new Date(now),
       },
       {
-        label: 'RR35 PB3',
+        label: 'Sample fresh batch',
         mode: 'fresh',
         formulationId: formulation.id,
         inputs: asJson({
           apis: freshApis,
           potencyMethod: 'bulkPercent',
-          fTwt: '0.69',
-          fTabs: '133623',
+          fTwt: '0.7',
+          fTabs: '100000',
           excipients: freshExcipients,
           fillerType: 'Emdex',
         }),
@@ -126,10 +134,10 @@ async function main() {
         createdAt: new Date(now - 60_000),
       },
       {
-        label: 'RG-60 Test',
+        label: 'Sample regrind batch (bulk potency)',
         mode: 'regrind',
         formulationId: formulation.id,
-        inputs: asJson({ opt: 'a', aPot: '55.5', rgPwd: '8000', rgTmg: '60', rgTwt: '1.15' }),
+        inputs: asJson({ opt: 'a', aPot: '60', rgPwd: '10000', rgTmg: '60', rgTwt: '1.000' }),
         result: asJson(regrindAResult),
         createdAt: new Date(now - 120_000),
       },

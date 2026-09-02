@@ -46,7 +46,7 @@ export default function NewRunModal({ mode, onSubmit }: NewRunModalProps) {
             id="run-product"
             type="text"
             list="known-products"
-            placeholder="e.g. OGS"
+            placeholder="e.g. Product A"
             value={product}
             onChange={(e) => setProduct(e.target.value)}
           />
@@ -65,7 +65,7 @@ export default function NewRunModal({ mode, onSubmit }: NewRunModalProps) {
             id="run-name"
             type="text"
             autoFocus
-            placeholder="e.g. RR77-PB9 batch 3"
+            placeholder="e.g. Batch 3"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />

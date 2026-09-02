@@ -374,7 +374,7 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                   <label>Formulation name</label>
                   <input
                     type="text"
-                    placeholder="e.g. RR8"
+                    placeholder="e.g. Base formulation A"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />

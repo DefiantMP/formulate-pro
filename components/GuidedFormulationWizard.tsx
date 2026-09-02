@@ -274,7 +274,7 @@ export default function GuidedFormulationWizard(props: GuidedFormulationWizardPr
               </div>
               <div className="field">
                 <label>Formulation name</label>
-                <input type="text" placeholder="e.g. RR8" value={name} onChange={(e) => setName(e.target.value)} />
+                <input type="text" placeholder="e.g. Base formulation A" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="field">
                 <label>Target tablet weight</label>
