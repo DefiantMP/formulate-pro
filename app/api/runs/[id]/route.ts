@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isReviewStatus, reviewSubmissionError } from '@/lib/gmp';
+import { getGmpSettings } from '@/lib/gmpSettings';
+import { getCurrentUser } from '@/lib/session';
+import { canReview } from '@/lib/auth';
 import { syncFormulationFromRun } from '@/lib/runFormulationSync';
 
 /**
@@ -25,7 +28,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     label,
     product,
     reviewStatus,
-    reviewerName,
     reviewNotes,
     mode,
     inputs,
@@ -69,6 +71,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   // recording a decision at all, an unexplained rejection is not a record —
   // the mode governs whether review is REQUIRED, not whether a submitted one
   // may be incoherent.
+  let reviewer: { id: string; name: string; role: string } | null = null;
   if (reviewStatus !== undefined) {
     if (!isReviewStatus(reviewStatus)) {
       return NextResponse.json(
@@ -76,14 +79,32 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         { status: 400 }
       );
     }
-    const problem = reviewSubmissionError(reviewStatus, String(reviewerName ?? ''), reviewNotes);
+    reviewer = await getCurrentUser();
+    const gmp = await getGmpSettings();
+    if (gmp.enabled) {
+      if (!reviewer) {
+        return NextResponse.json(
+          { error: 'GMP mode: sign in to review a batch — the sign-off is recorded against your account.' },
+          { status: 401 }
+        );
+      }
+      // An operator running batches should not also be signing them off; that
+      // separation is the reason the review step exists.
+      if (!canReview(reviewer.role)) {
+        return NextResponse.json(
+          { error: 'GMP mode: your account does not have the reviewer role.' },
+          { status: 403 }
+        );
+      }
+    }
+    const problem = reviewSubmissionError(reviewStatus, reviewer?.name ?? 'unauthenticated', reviewNotes);
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
   }
 
   const data: Record<string, unknown> = {};
   if (reviewStatus !== undefined) {
     data.reviewStatus = reviewStatus;
-    data.reviewerName = String(reviewerName).trim();
+    data.reviewerId = reviewer?.id ?? null;
     data.reviewNotes = typeof reviewNotes === 'string' && reviewNotes.trim() ? reviewNotes.trim() : null;
     data.reviewedAt = new Date();
   }

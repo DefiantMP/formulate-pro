@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getGmpSettings } from '@/lib/gmpSettings';
 import { isLotStatusEnforcement } from '@/lib/gmp';
 import { GMP_SETTINGS_ID } from '@/lib/gmpSettings';
+import { getCurrentUser } from '@/lib/session';
 
 /** Current settings plus the full toggle history — the log is the compliance
  *  artifact, so it is served alongside rather than behind a second call. */
@@ -24,7 +25,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
-  const { enabled, lotStatusEnforcement, actorName, note } = body;
+  const { enabled, lotStatusEnforcement, note } = body;
 
   if (enabled !== undefined && typeof enabled !== 'boolean') {
     return NextResponse.json({ error: 'enabled must be a boolean' }, { status: 400 });
@@ -44,11 +45,14 @@ export async function PATCH(request: NextRequest) {
 
   const changingMode = enabled !== undefined && enabled !== current.enabled;
   // Only a real state change needs an actor: adjusting the enforcement fork is
-  // a configuration tweak, flipping the mode is the audit event.
-  if (changingMode && (typeof actorName !== 'string' || !actorName.trim())) {
+  // a configuration tweak, flipping the mode is the audit event. It must be
+  // attributable to an account — a typed name proves nothing, which was the
+  // whole point of adding auth.
+  const actor = changingMode ? await getCurrentUser() : null;
+  if (changingMode && !actor) {
     return NextResponse.json(
-      { error: 'actorName is required to change GMP mode — it is recorded in the audit log.' },
-      { status: 400 }
+      { error: 'Sign in to change GMP mode — the change is recorded against your account.' },
+      { status: 401 }
     );
   }
 
@@ -64,7 +68,7 @@ export async function PATCH(request: NextRequest) {
     if (changingMode) {
       await tx.gmpModeToggleLog.create({
         data: {
-          actorName: (actorName as string).trim(),
+          actorId: actor!.id,
           previousState: current.enabled,
           newState: enabled as boolean,
           note: typeof note === 'string' && note.trim() ? note.trim() : null,

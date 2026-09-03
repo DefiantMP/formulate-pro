@@ -586,3 +586,10 @@ textarea.rm-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px r
 .gmp-transition { font-weight: 600; }
 .gmp-transition.on { color: var(--brand); }
 .gmp-transition.off { color: var(--text-3); }
+
+/* Auth */
+.auth-page { height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 20px; }
+.auth-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
+.auth-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.auth-signout { background: none; border: none; color: var(--text-3); font-size: 10px; cursor: pointer; padding: 2px 4px; }
+.auth-signout:hover { color: var(--danger-text); }

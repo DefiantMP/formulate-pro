@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import GmpModeBadge from './GmpModeBadge';
+import SessionFooter from './SessionFooter';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -76,15 +77,7 @@ export default function Sidebar() {
         </Link>
       </nav>
       <GmpModeBadge />
-      <div className="sidebar-foot">
-        <div className="user-row">
-          <div className="av">JD</div>
-          <div>
-            <div className="user-name">J. Doe</div>
-            <div className="user-plan">Pro plan</div>
-          </div>
-        </div>
-      </div>
+      <SessionFooter />
     </aside>
   );
 }

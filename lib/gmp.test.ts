@@ -89,20 +89,28 @@ describe('section 1 — batch review gating', () => {
 
 describe('section 2 — two-person weighing', () => {
   it('does not interfere with single-person weighing when off', () => {
-    expect(weighVerificationError({ weighedByName: 'A', verifiedByName: null }, OFF)).toBeNull();
+    expect(weighVerificationError({ weighedById: 'u1', verifiedById: null }, OFF)).toBeNull();
     expect(weighVerificationError({}, OFF)).toBeNull();
   });
 
-  it('requires both names when on', () => {
-    expect(weighVerificationError({}, ON)).toMatch(/who weighed/i);
-    expect(weighVerificationError({ weighedByName: 'A. Chen' }, ON)).toMatch(/second person/i);
-    expect(weighVerificationError({ weighedByName: 'A. Chen', verifiedByName: 'R. Diaz' }, ON)).toBeNull();
+  it('requires both accounts when on', () => {
+    expect(weighVerificationError({}, ON)).toMatch(/sign in/i);
+    expect(weighVerificationError({ weighedById: 'u1' }, ON)).toMatch(/second person/i);
+    expect(weighVerificationError({ weighedById: 'u1', verifiedById: 'u2' }, ON)).toBeNull();
   });
 
-  it('rejects one person signing both halves', () => {
-    // Otherwise the control is decorative.
-    expect(weighVerificationError({ weighedByName: 'A. Chen', verifiedByName: 'a. chen' }, ON))
-      .toMatch(/different person/i);
+  it('rejects one ACCOUNT signing both halves', () => {
+    // The original loophole: string comparison let one person type two names.
+    // Identity is now an account id, which only comes from an authenticated
+    // session or a verified credential check.
+    expect(weighVerificationError({ weighedById: 'u1', verifiedById: 'u1' }, ON))
+      .toMatch(/different account/i);
+  });
+
+  it('is not fooled by differing display names on one account', () => {
+    // Two people genuinely differ only if their ids differ.
+    expect(weighVerificationError({ weighedById: 'user-abc', verifiedById: 'user-abc' }, ON)).not.toBeNull();
+    expect(weighVerificationError({ weighedById: 'user-abc', verifiedById: 'user-xyz' }, ON)).toBeNull();
   });
 });
 

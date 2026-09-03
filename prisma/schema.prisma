@@ -53,7 +53,14 @@ model Run {
   // which for a run predating GMP mode is "grandfathered", not "pending" —
   // that distinction is drawn from the toggle log, not from this column.
   reviewStatus  String?   // 'pending' | 'approved' | 'rejected'
-  reviewerName  String?
+  // Free-text name captured before accounts existed. @map keeps the original
+  // column, so renaming the field costs no data movement — the old values stay
+  // exactly where they were and stay readable. Never auto-matched to a User by
+  // name similarity: guessing which account an old string meant would put a
+  // signature on a batch record that nobody actually gave.
+  legacyReviewerName String? @map("reviewerName")
+  reviewerId    String?
+  reviewer      User?     @relation("RunReviewer", fields: [reviewerId], references: [id])
   reviewedAt    DateTime?
   reviewNotes   String?   // required when reviewStatus is 'rejected'
   actualMgPerTablet  Float?
@@ -152,7 +159,9 @@ model SavedFormulation {
   // record. A formulation can be approved but untested, or tested and
   // unapproved; collapsing them would lose one of the two.
   reviewStatus String?  // 'pending' | 'approved' | 'rejected'
-  reviewerName String?
+  legacyReviewerName String? @map("reviewerName")
+  reviewerId   String?
+  reviewer     User?    @relation("SavedFormulationReviewer", fields: [reviewerId], references: [id])
   reviewedAt   DateTime?
   reviewNotes  String?
   outcomeNotes String?
@@ -251,8 +260,12 @@ model ScaleVerification {
   // THAT a second check happened; these record WHO did each half, which is
   // the actual Part 111 requirement — a status flip attributes nothing.
   // Both free-text: there is no auth system (see known gaps).
-  weighedByName  String?
-  verifiedByName String?
+  legacyWeighedByName  String? @map("weighedByName")
+  legacyVerifiedByName String? @map("verifiedByName")
+  weighedById    String?
+  weighedBy      User?   @relation("WeighedBy", fields: [weighedById], references: [id])
+  verifiedById   String?
+  verifiedBy     User?   @relation("VerifiedBy", fields: [verifiedById], references: [id])
   verifiedAt     DateTime?
   status          String   @default("pending") // 'pending' | 'approved'
   createdAt       DateTime @default(now())
@@ -518,7 +531,9 @@ model GmpModeToggleLog {
   id            String   @id @default(cuid())
   // Free-text name/initials. There is no auth system — see the known-gaps
   // note in the summary; this is NOT verified identity.
-  actorName     String
+  legacyActorName String? @map("actorName")
+  actorId       String?
+  actor         User?    @relation(fields: [actorId], references: [id])
   previousState Boolean
   newState      Boolean
   note          String?
@@ -552,10 +567,51 @@ model RunDeviation {
   // the thing a deviation record exists to prevent.
   justification         String?
 
-  openedBy  String
-  openedAt  DateTime  @default(now())
-  closedBy  String?
-  closedAt  DateTime?
+  // Was required free text; now optional, because new records carry a real
+  // openedById instead. Existing rows keep their original column and value.
+  legacyOpenedBy String?  @map("openedBy")
+  openedById     String?
+  openedByUser   User?    @relation("DeviationOpenedBy", fields: [openedById], references: [id])
+  openedAt       DateTime @default(now())
+  legacyClosedBy String?  @map("closedBy")
+  closedById     String?
+  closedByUser   User?    @relation("DeviationClosedBy", fields: [closedById], references: [id])
+  closedAt       DateTime?
 
   @@index([runId])
+}
+
+
+// ---------------------------------------------------------------------------
+// Accounts.
+//
+// Added to close the gap the GMP work shipped with: every identity was a
+// free-text string, so nothing stopped one person typing two names to satisfy
+// a two-person check. Signatures now resolve to a real account.
+// ---------------------------------------------------------------------------
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  // bcrypt hash. Never a plaintext password, and never a hand-rolled digest.
+  passwordHash String
+  // 'operator' | 'reviewer' | 'admin'. Intentionally a coarse starting point,
+  // not a permissions system: it exists so a GMP reviewer sign-off can require
+  // someone entitled to give it, which is the one distinction Part 111 needs
+  // today.
+  role         String   @default("operator")
+  createdAt    DateTime @default(now())
+  // Soft delete, same reason as Run/SavedFormulation: a user who signed a
+  // batch record cannot be erased without orphaning that signature.
+  deletedAt    DateTime?
+
+  reviewedRuns         Run[]               @relation("RunReviewer")
+  reviewedFormulations SavedFormulation[]  @relation("SavedFormulationReviewer")
+  weighed              ScaleVerification[] @relation("WeighedBy")
+  verified             ScaleVerification[] @relation("VerifiedBy")
+  openedDeviations     RunDeviation[]      @relation("DeviationOpenedBy")
+  closedDeviations     RunDeviation[]      @relation("DeviationClosedBy")
+  gmpToggles           GmpModeToggleLog[]
+
+  @@index([email])
 }

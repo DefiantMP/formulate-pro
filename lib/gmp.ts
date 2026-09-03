@@ -139,27 +139,31 @@ export function reviewSubmissionError(
  * ------------------------------------------------------------------ */
 
 export interface WeighRecord {
-  weighedByName?: string | null;
-  verifiedByName?: string | null;
+  weighedById?: string | null;
+  verifiedById?: string | null;
 }
 
 /**
  * Whether a weighing still needs its second person.
  *
- * The two names must also differ: one person entering their own name twice is
- * not a two-person check, and accepting it would make the control decorative.
+ * Compares ACCOUNT IDS, not names. The original version compared strings,
+ * which meant one person could satisfy a two-person check by typing two
+ * different names — the loophole that made the control decorative. An id can
+ * only come from an authenticated session or a verified credential check, so
+ * "a different person" now means a different account rather than different
+ * typing.
  */
 export function weighVerificationError(
   record: WeighRecord,
   settings: GmpSettingsShape
 ): string | null {
   if (!settings.enabled) return null;
-  const weighed = (record.weighedByName ?? '').trim();
-  const verified = (record.verifiedByName ?? '').trim();
-  if (!weighed) return 'GMP mode: record who weighed this component.';
+  const weighed = (record.weighedById ?? '').trim();
+  const verified = (record.verifiedById ?? '').trim();
+  if (!weighed) return 'GMP mode: sign in — the person weighing must be recorded.';
   if (!verified) return 'GMP mode: a second person must verify this weighing.';
-  if (weighed.toLowerCase() === verified.toLowerCase()) {
-    return 'GMP mode: the verifier must be a different person from the weigher.';
+  if (weighed === verified) {
+    return 'GMP mode: the verifier must be a different account from the weigher.';
   }
   return null;
 }
