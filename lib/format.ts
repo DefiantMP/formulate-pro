@@ -15,6 +15,20 @@ export function fmtK(n: number): string {
 }
 
 /**
+ * A signed quantity, for values that are legitimately negative.
+ *
+ * fmt() above clamps anything <= 0 to '0' — correct for weights, which cannot
+ * be negative, and load-bearing wherever an unset field must not read as a
+ * real figure. That clamp silently turned a -50g stock adjustment into "0 g",
+ * so deltas need their own formatter rather than a change to fmt().
+ */
+export function fmtSigned(n: number, dec = 2): string {
+  if (!isFinite(n)) return '0';
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  return sign + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+/**
  * <input type="date"> round-trips, deliberately done in LOCAL time.
  *
  * `new Date('2026-08-13')` parses as UTC midnight, which then renders as the

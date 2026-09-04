@@ -325,6 +325,7 @@ model Lot {
 
   specTests LotSpecTest[]
   runUsages RunLotUsage[]
+  adjustments LotAdjustment[]
   // Back-relation for OosInvestigation's FK — virtual, no column here.
   oosInvestigations OosInvestigation[]
 
@@ -612,6 +613,35 @@ model User {
   openedDeviations     RunDeviation[]      @relation("DeviationOpenedBy")
   closedDeviations     RunDeviation[]      @relation("DeviationClosedBy")
   gmpToggles           GmpModeToggleLog[]
+  lotAdjustments       LotAdjustment[]
 
   @@index([email])
+}
+
+// A signed correction to a lot's remaining quantity.
+//
+// Append-only, and deliberately NOT an editable quantity field. An audit wants
+// to see that 250g was recorded and then corrected by -50g with a stated
+// reason — not a number that silently reads 200g with no trace of the
+// correction. Lot.quantityRemainingG stays the running figure so every read
+// path is unchanged; this table is the record of WHY it moved outside of a
+// run.
+//
+// Covers the cases CLAUDE.md flagged as having nowhere to go: physical
+// recounts, spillage, QC sampling losses, and mis-entered draw-downs.
+model LotAdjustment {
+  id     String @id @default(cuid())
+  lotId  String
+  lot    Lot    @relation(fields: [lotId], references: [id])
+  // Signed grams. Negative removes stock (spillage, sampling), positive
+  // returns it (a reversal, or a recount that found more than recorded).
+  deltaG Float
+  reason String
+  // Nullable for the same reason as the other GMP identity FKs: with GMP mode
+  // off an adjustment may be anonymous, and pre-auth rows have no account.
+  adjustedById String?
+  adjustedBy   User?   @relation(fields: [adjustedById], references: [id])
+  adjustedAt   DateTime @default(now())
+
+  @@index([lotId])
 }

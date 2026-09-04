@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
 import LogSpecTestForm from './LogSpecTestForm';
+import LotAdjustmentPanel from './LotAdjustmentPanel';
 import OosInvestigationPanel from './OosInvestigationPanel';
 import { criterionLimits } from './SpecEditor';
 import {
@@ -303,6 +304,11 @@ function LotDetailBody({ lot, onChanged }: { lot: LotDetailRecord; onChanged: ()
             </div>
           </div>
         </div>
+        <LotAdjustmentPanel
+          lotId={lot.id}
+          quantityRemainingG={lot.quantityRemainingG}
+          onChanged={onChanged}
+        />
         {lot.notes && (
           <>
             <div className="add-sub" style={{ marginTop: 14 }}>
