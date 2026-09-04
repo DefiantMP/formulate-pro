@@ -26,6 +26,7 @@ import Topbar, { type AutosaveStatus } from './Topbar';
 import InputsPanel from './InputsPanel';
 import NewRunModal from './NewRunModal';
 import PriorRunsPanel from './PriorRunsPanel';
+import RunLotPicker, { type RunLotUsageDraft } from './RunLotPicker';
 import OutputPanel, { type AddRowData, type StatsData, type TabKey, type LotBreakdownRow } from './OutputPanel';
 import RunHistoryPanel, { type RunRecord } from './RunHistoryPanel';
 import TipsCard from './TipsCard';
@@ -152,6 +153,10 @@ export default function FormulateApp() {
   const [runName, setRunName] = useState('');
   // Which product this run is of — drives the prior-run suggestions panel.
   const [runProduct, setRunProduct] = useState('');
+  // Lots this batch consumes. Sent on save, where the server writes the
+  // RunLotUsage rows and draws stock down; both GMP gates fire there too.
+  const [lotUsages, setLotUsages] = useState<RunLotUsageDraft[]>([]);
+  const [usageWarnings, setUsageWarnings] = useState<string[]>([]);
   const [showNamePrompt, setShowNamePrompt] = useState(true);
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
 
@@ -1032,6 +1037,11 @@ export default function FormulateApp() {
       const payload = {
         label: runName,
         product: runProduct.trim() || null,
+        // Only complete entries are sent — a half-filled row is a draft, not
+        // a consumption anyone meant to record.
+        lotUsages: lotUsages
+          .filter((u) => u.lotId && Number(u.amountUsedG) > 0)
+          .map((u) => ({ lotId: u.lotId, amountUsedG: Number(u.amountUsedG), roleInRun: u.roleInRun })),
         mode,
         inputs: buildRunInputs(),
         result,
@@ -1052,7 +1062,8 @@ export default function FormulateApp() {
         setAutosaveStatus('error');
         return;
       }
-      const saved: RunRecord = await res.json();
+      const saved: RunRecord & { usageWarnings?: string[] } = await res.json();
+      setUsageWarnings(saved.usageWarnings ?? []);
       setRuns((prev) =>
         prev.some((r) => r.id === saved.id) ? prev.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...prev]
       );
@@ -1145,6 +1156,8 @@ export default function FormulateApp() {
     setLoadedRun(null);
     setRunName('');
     setRunProduct('');
+    setLotUsages([]);
+    setUsageWarnings([]);
     setShowNamePrompt(true);
     setAutosaveStatus('idle');
     savingInFlightRef.current = false;
@@ -1254,6 +1267,21 @@ export default function FormulateApp() {
           </div>
 
           <div className="col-right">
+            {!showNamePrompt && (
+              <RunLotPicker usages={lotUsages} onChange={setLotUsages} disabled={showNamePrompt} />
+            )}
+            {!showNamePrompt && usageWarnings.length > 0 && (
+              /* Surfaced after the save that produced them: with GMP mode set
+                 to warn, consuming a non-passing lot is allowed but must not
+                 pass silently. */
+              <div className="card card-body" style={{ flexShrink: 0 }}>
+                {usageWarnings.map((w) => (
+                  <div className="warn-row" key={w}>
+                    <i className="ti ti-alert-triangle" /> {w}
+                  </div>
+                ))}
+              </div>
+            )}
             {!showNamePrompt && runProduct.trim() && (
               <PriorRunsPanel product={runProduct} currentRunId={loadedRun} onApply={applyPriorRun} />
             )}
