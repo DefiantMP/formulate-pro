@@ -15,6 +15,7 @@ import {
   type RawMaterialDetail,
 } from '@/lib/rawMaterials';
 import { fmt, fmtDate } from '@/lib/format';
+import LotStatusBadge from './LotStatusBadge';
 
 interface RawMaterialDetailPageProps {
   id: string;
@@ -231,7 +232,7 @@ export default function RawMaterialDetailPage({ id }: RawMaterialDetailPageProps
                   <>
                     <div className="rm-lot-hdr">
                       <div>Lot number</div>
-                      <div>Received</div>
+                      <div>QC status</div>
                       <div>Remaining</div>
                       <div>Source</div>
                       <div />
@@ -239,8 +240,21 @@ export default function RawMaterialDetailPage({ id }: RawMaterialDetailPageProps
                     {lots.map((lot) => (
                       <div className="rh-row" key={lot.id}>
                         <Link href={`/lots/${lot.id}`} className="rm-lot-summary">
-                          <div className="rh-cell-name">{lot.lotLabel}</div>
-                          <div className="rh-cell">{fmtDate(lot.receivedDate)}</div>
+                          <div className="rh-cell-name">
+                            {lot.lotLabel}
+                            <div className="rh-cell" style={{ fontSize: 10 }}>
+                              {fmtDate(lot.receivedDate)}
+                            </div>
+                          </div>
+                          <div className="rh-cell">
+                            {/* The server rollup, same figure as the lot page —
+                                never derived from resolveLatestTests. */}
+                            {lot.specStatus ? (
+                              <LotStatusBadge status={lot.specStatus} />
+                            ) : (
+                              <span style={{ color: 'var(--text-3)' }}>—</span>
+                            )}
+                          </div>
                           <div className="rh-cell">
                             {fmt(lot.quantityRemainingG, 1)} / {fmt(lot.quantityReceivedG, 1)} g
                           </div>
@@ -252,17 +266,6 @@ export default function RawMaterialDetailPage({ id }: RawMaterialDetailPageProps
                         </Link>
                       </div>
                     ))}
-                    <div className="card-body" style={{ paddingTop: 0 }}>
-                      <div className="rule-note" style={{ marginBottom: 0, marginTop: 12 }}>
-                        <i className="ti ti-info-circle" />
-                        <div>
-                          QC status isn’t shown in this list on purpose. A lot’s verdict is computed
-                          from its material’s current criteria plus its whole test history, which
-                          this list doesn’t load — showing anything here would mean deriving a
-                          status some other way. Open a lot to see its verdict.
-                        </div>
-                      </div>
-                    </div>
                   </>
                 )}
               </div>

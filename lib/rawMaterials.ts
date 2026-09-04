@@ -137,6 +137,13 @@ export interface LotListItem {
   notes: string | null;
   createdAt: string;
   rawMaterial?: { id: string; name: string; category: string };
+  /**
+   * QC verdict, computed server-side by the same rollup GET /api/lots/[id]
+   * uses. Present on the list as of 2026-09-04 — it was previously omitted,
+   * which is what blocked the run lot-picker. Still the ONLY thing any UI may
+   * render as a lot's pass/fail; never derive one from resolveLatestTests.
+   */
+  specStatus?: 'pass' | 'fail' | 'pending';
 }
 
 export interface OosInvestigationRecord {

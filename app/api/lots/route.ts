@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { lotSpecStatus, lotSpecStatusInclude } from '@/lib/lotSpecStatus';
 import { LOT_SOURCE_TYPES, isLotSourceType } from '@/lib/rawMaterials';
 
 /**
@@ -35,14 +36,39 @@ export async function GET(request: NextRequest) {
         : {}),
     },
     orderBy: { receivedDate: 'desc' },
-    include: { rawMaterial: { select: { id: true, name: true, category: true } } },
+    // The list now carries a QC verdict. This used to be omitted, which made
+    // the whole feature unusable at list level — a lot picker that cannot show
+    // whether a lot passed is not a lot picker.
+    //
+    // Computed with ONE batched query using the same lotSpecStatusInclude and
+    // the same rollup as GET /api/lots/[id], rather than a denormalized
+    // cached column. A cached column would need invalidating on every spec
+    // revision, every test, and every OOS approval, and any missed
+    // invalidation shows up as a lot reporting the wrong QC verdict — the
+    // exact failure this system exists to prevent. One join is cheaper than
+    // that class of bug.
+    include: {
+      ...lotSpecStatusInclude,
+      rawMaterial: {
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          spec: { select: { criteria: { where: { retiredAt: null } } } },
+        },
+      },
+    },
   });
 
-  // Deliberately no spec status on the list: computing it needs each lot's
-  // full test history plus its material's criteria, which would be a large
-  // per-row join on a page that's mostly used for finding a lot. Fetch the
-  // individual lot for its status.
-  return NextResponse.json(lots);
+  return NextResponse.json(
+    lots.map(({ specTests, ...lot }) => ({
+      ...lot,
+      // specTests are dropped from the payload: they are fetched only to
+      // compute the verdict, and shipping every test of every lot to a
+      // picker would dwarf the rest of the response.
+      specStatus: lotSpecStatus({ rawMaterial: lot.rawMaterial, specTests }),
+    }))
+  );
 }
 
 /** Receive a lot — the physical-arrival record. */
