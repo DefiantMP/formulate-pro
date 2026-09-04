@@ -15,6 +15,14 @@ export interface RunRecord {
   actualMgPerTablet?: number | null;
   actualTabletWeight?: number | null;
   passFail?: 'pass' | 'fail' | null;
+  /* GMP batch review. Null on runs that predate GMP mode — grandfathered,
+     not "pending". */
+  reviewStatus?: 'pending' | 'approved' | 'rejected' | null;
+  reviewer?: { name: string } | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
+  /** Free-text reviewer captured before accounts existed; display-only. */
+  legacyReviewerName?: string | null;
   notes?: string | null;
 }
 

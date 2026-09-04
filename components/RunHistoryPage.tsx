@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import { defaultIngredients } from '@/lib/calc-engine';
 import { fmt } from '@/lib/format';
+import RunReviewPanel from './RunReviewPanel';
+import { gmpFirstEnabledAt, isGrandfathered } from '@/lib/gmp';
 import type { RunRecord } from './RunHistoryPanel';
 
 function targetPotencyPercent(run: RunRecord): number {
@@ -121,6 +123,20 @@ function draftFromRun(run: RunRecord): CoaDraft {
 }
 
 export default function RunHistoryPage() {
+  // GMP state drives whether review is presented as required and where the
+  // grandfathering boundary sits. Loaded once for the page rather than per row.
+  const [gmpEnabled, setGmpEnabled] = useState(false);
+  const [gmpFirstEnabled, setGmpFirstEnabled] = useState<Date | null>(null);
+  useEffect(() => {
+    fetch('/api/gmp')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setGmpEnabled(!!d.enabled);
+        setGmpFirstEnabled(gmpFirstEnabledAt(d.log ?? []));
+      })
+      .catch(() => {});
+  }, []);
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -129,17 +145,26 @@ export default function RunHistoryPage() {
   const [justSavedId, setJustSavedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/runs')
+  // Extracted so a review or deviation write can refresh the list in place —
+  // the drafts map is rebuilt from the reloaded rows so an in-progress COA
+  // edit is not clobbered by a stale one.
+  const loadRuns = useCallback(() => {
+    return fetch('/api/runs')
       .then((res) => (res.ok ? res.json() : []))
       .then((data: RunRecord[]) => {
         setRuns(data);
-        const initialDrafts: Record<string, CoaDraft> = {};
-        for (const run of data) initialDrafts[run.id] = draftFromRun(run);
-        setDrafts(initialDrafts);
+        setDrafts((prev) => {
+          const next: Record<string, CoaDraft> = {};
+          for (const run of data) next[run.id] = prev[run.id] ?? draftFromRun(run);
+          return next;
+        });
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadRuns();
+  }, [loadRuns]);
 
   useEffect(() => {
     if (!justSavedId) return;
@@ -352,6 +377,12 @@ export default function RunHistoryPage() {
                           </div>
 
                           <div>
+                            <RunReviewPanel
+                              run={run}
+                              grandfathered={isGrandfathered(run.createdAt, gmpFirstEnabled)}
+                              gmpEnabled={gmpEnabled}
+                              onChanged={loadRuns}
+                            />
                             <div className="rh-detail-hdr">Calculated vs. actual</div>
                             {varianceLines(run, draft).length === 0 ? (
                               <div className="rh-variance-row neutral">

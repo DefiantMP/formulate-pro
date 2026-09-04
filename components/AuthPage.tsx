@@ -2,15 +2,15 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { USER_ROLES, USER_ROLE_LABELS, type UserRole } from '@/lib/auth';
 
 /**
  * Sign in / create account.
  *
- * Self-serve signup with no invite or email verification — this is a
- * single-company internal tool, and gating account creation behind an email
- * round-trip on a shared floor terminal would be worse than useless. Flagged
- * as something a multi-tenant deployment must replace.
+ * Self-serve signup with no invite or email verification — a single-company
+ * internal tool, and an email round-trip on a shared floor terminal would be
+ * worse than useless. No role picker: the server assigns operator to every
+ * account but the first, so signing up cannot grant the entitlement to sign
+ * off batches.
  */
 export default function AuthPage() {
   const router = useRouter();
@@ -18,7 +18,6 @@ export default function AuthPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('operator');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +30,7 @@ export default function AuthPage() {
         const res = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password, role }),
+          body: JSON.stringify({ name, email, password }),
         });
         if (!res.ok) {
           setError((await res.json().catch(() => null))?.error || 'Could not create the account.');
@@ -85,16 +84,9 @@ export default function AuthPage() {
               <label htmlFor="auth-name">Name</label>
               <input id="auth-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name or initials" />
             </div>
-            <div className="field">
-              <label htmlFor="auth-role">Role</label>
-              <select id="auth-role" value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
-                {USER_ROLES.map((r) => (
-                  <option key={r} value={r}>{USER_ROLE_LABELS[r]}</option>
-                ))}
-              </select>
-              <div className="field-hint">
-                Only a reviewer or admin can sign off a batch in GMP mode.
-              </div>
+            <div className="field-hint">
+              New accounts are operators. Only an admin can grant the reviewer role —
+              otherwise anyone could sign off their own batches.
             </div>
           </>
         )}
