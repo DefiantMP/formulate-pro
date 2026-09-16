@@ -30,6 +30,41 @@ function joinNatural(items: string[]): string {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
+interface PremixBreakdown {
+  apiLabel: string;
+  apiGrams: number;
+  diluentName: string;
+  /** Grams of diluent added at each doubling step, in order. */
+  additions: number[];
+  /** apiGrams + sum(additions) — the finished premix, ready to go into the V-mixer. */
+  finalWeightG: number;
+  /** finalWeightG - apiGrams — how much of the diluent's total weigh-out this premix consumes. */
+  diluentUsedG: number;
+}
+
+/**
+ * Classic geometric dilution: an equal part of diluent first, then each
+ * further addition doubles the premix built so far (1x, 2x, 4x, ...), so
+ * after `dilutionSteps` steps the premix totals apiGrams * 2^dilutionSteps.
+ * Deliberately standalone arithmetic over an already-computed gram figure —
+ * does not touch calculateFreshBatch or any of its outputs.
+ */
+function computePremix(
+  apiLabel: string,
+  apiGrams: number,
+  diluentName: string,
+  dilutionSteps: number
+): PremixBreakdown {
+  const steps = Math.max(1, Math.floor(dilutionSteps));
+  const additions: number[] = [];
+  let running = apiGrams;
+  for (let i = 0; i < steps; i++) {
+    additions.push(running);
+    running += running;
+  }
+  return { apiLabel, apiGrams, diluentName, additions, finalWeightG: running, diluentUsedG: running - apiGrams };
+}
+
 /**
  * Generic across any ingredient count: every ingredient gets a weigh + V-mix
  * step (even at 0g, so a zero amount is visible rather than silently
@@ -93,10 +128,68 @@ export function generateFreshBatchSOP(
       `Weigh ${joinNatural(primary.map((i) => `${fmt(i.grams)} g ${i.name}`))}`
     );
   }
+
+  // Premix (geometric dilution) — operator-flagged per API, never triggered
+  // automatically by dose or potency (see FreshApiPremix). The diluent is
+  // always the batch's own filler: it's already the "make up the rest of
+  // the blend" ingredient, and using a second material here would need its
+  // own weigh-out line nothing above accounts for.
+  const premixApis = result.apis.filter((a) => a.premix && a.premix.dilutionSteps > 0);
+  const fillerItem = primary.find((p) => p.name.trim().toLowerCase() === result.fillerType.trim().toLowerCase());
+  const premixBreakdowns: PremixBreakdown[] = premixApis.map((api) =>
+    computePremix(api.label, result.ingredientGrams[api.id] ?? 0, result.fillerType, api.premix!.dilutionSteps)
+  );
+
+  for (const p of premixBreakdowns) {
+    steps.push(
+      `Create an API premix using ${p.apiLabel} and ${p.diluentName}: combine ${fmt(p.apiGrams)} g ${p.apiLabel} ` +
+        `with ${fmt(p.additions[0])} g ${p.diluentName} and mix thoroughly`
+    );
+    for (let i = 1; i < p.additions.length; i++) {
+      steps.push(`Add ${fmt(p.additions[i])} g ${p.diluentName} to the ${p.apiLabel} premix and mix again`);
+    }
+    steps.push(`Confirm final ${p.apiLabel} premix weight — ${fmt(p.finalWeightG)} g`);
+  }
+
   const vmixNames = [...result.apis.map((a) => a.label), ...primary.map((i) => i.name)];
-  if (vmixNames.length > 0) {
+  if (premixBreakdowns.length > 0) {
+    // The diluent's own weigh-out (in the "Weigh ..." step above) already
+    // covers everything, including what just went into the premix — it is
+    // split here into a before/after V-mixer pour around the premix rather
+    // than dumped in all at once, so the premix isn't buried under a full
+    // load of diluent before it can disperse (the classic segregation risk
+    // geometric dilution exists to avoid).
+    const diluentUsedTotalG = premixBreakdowns.reduce((sum, p) => sum + p.diluentUsedG, 0);
+    const remainingDiluentG = fillerItem ? Math.max(0, fillerItem.grams - diluentUsedTotalG) : 0;
+    const halfRemainingDiluentG = remainingDiluentG / 2;
+    const nonPremixApiLabels = result.apis.filter((a) => !premixApis.includes(a)).map((a) => a.label);
+    const otherPrimaryNames = primary.filter((p) => p !== fillerItem).map((p) => p.name);
+    const otherNames = [...nonPremixApiLabels, ...otherPrimaryNames];
+
+    if (fillerItem && remainingDiluentG > 0.005) {
+      steps.push(`Add approximately half the remaining ${fillerItem.name} (${fmt(halfRemainingDiluentG)} g) to the V-mixer`);
+    }
+    for (const p of premixBreakdowns) {
+      steps.push(`Add the entire ${fmt(p.finalWeightG)} g ${p.apiLabel} premix evenly into the V-mixer`);
+    }
+    if (otherNames.length > 0) {
+      steps.push(`Add ${otherNames.join(' + ')} to the V-mixer`);
+    }
+    if (fillerItem && remainingDiluentG > 0.005) {
+      steps.push(`Add the remainder of the ${fillerItem.name} (${fmt(halfRemainingDiluentG)} g)`);
+    }
+    steps.push('Mix for 20 minutes');
+  } else if (vmixNames.length > 0) {
     steps.push(`Add ${vmixNames.join(' + ')} to V-mix`);
     steps.push('Mix for 20 minutes');
+  }
+
+  // Uniformity is the entire reason a premix exists — sampling the finished
+  // blend before lubricant goes in is what confirms the geometric dilution
+  // actually distributed the API evenly, rather than leaving it a matter of
+  // faith. Only shown when a premix was actually used this run.
+  if (premixBreakdowns.length > 0) {
+    steps.push('Take representative blend-uniformity samples before lubrication');
   }
 
   // Glidant goes in on its own after the main blend, with a moderate mix —

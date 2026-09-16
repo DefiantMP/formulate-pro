@@ -120,6 +120,9 @@ export function calculateFreshBatch(input: FreshBatchInput): FreshBatchResult | 
       effectivePotency: potencyFraction,
       percentOfBlend,
       gramsPerRun: grams,
+      // Echoed through untouched — never read by any calculation above; only
+      // generateFreshBatchSOP acts on it.
+      premix: api.premix,
     };
   });
 

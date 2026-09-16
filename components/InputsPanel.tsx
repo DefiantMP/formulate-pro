@@ -143,6 +143,7 @@ export default function InputsPanel(props: InputsPanelProps) {
                 canRemove={props.apis.length > 1}
                 potencyMethod={props.potencyMethod}
                 solveMode={props.freshSolveMode}
+                fillerType={props.fillerType}
                 onChange={props.onUpdateApi}
                 onRemove={props.onRemoveApi}
               />

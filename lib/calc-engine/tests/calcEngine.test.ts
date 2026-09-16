@@ -1431,6 +1431,83 @@ describe('generateFreshBatchSOP — glidant gets its own step', () => {
   });
 });
 
+describe('generateFreshBatchSOP — API premix (geometric dilution)', () => {
+  // Operator-flagged per API (see FreshApiPremix) — never automatic. Round
+  // numbers throughout so the geometric progression is easy to hand-check:
+  // 1,000g API + 1,000g Emdex = 2,000g; +2,000g = 4,000g; +4,000g = 8,000g.
+  const ingredients: IngredientLine[] = [
+    { id: 'pvpp', name: 'PVPP XL', role: 'other', percentOfBlend: 5, calculatedByDifference: false },
+    { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 1, calculatedByDifference: false },
+    { id: 'emdex', name: 'ignored', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
+  ];
+  const result = {
+    mode: 'fresh',
+    tabletCount: 100000,
+    targetWeightG: 0.533,
+    targetActiveMgPerTablet: 10,
+    totalBlendG: 53300,
+    fillerType: 'Emdex',
+    apis: [
+      {
+        id: 'active',
+        label: 'API-X',
+        targetActiveMgPerTablet: 10,
+        effectivePotency: 0.99,
+        percentOfBlend: 1.876,
+        gramsPerRun: 1000,
+        premix: { dilutionSteps: 3 },
+      },
+    ],
+    ingredientGrams: { active: 1000, pvpp: 2000, magstearate: 300, emdex: 50000 },
+    ingredientPercents: {},
+    activePercentOfBlend: 1.876,
+  } as unknown as FreshBatchResult;
+
+  it('builds the premix with each addition doubling the running total', () => {
+    const steps = generateFreshBatchSOP(result, ingredients);
+    expect(steps).toContain(
+      'Create an API premix using API-X and Emdex: combine 1,000.0 g API-X with 1,000.0 g Emdex and mix thoroughly'
+    );
+    expect(steps).toContain('Add 2,000.0 g Emdex to the API-X premix and mix again');
+    expect(steps).toContain('Add 4,000.0 g Emdex to the API-X premix and mix again');
+    expect(steps).toContain('Confirm final API-X premix weight — 8,000.0 g');
+  });
+
+  it('splits the remaining diluent before and after the premix goes into the V-mixer', () => {
+    const steps = generateFreshBatchSOP(result, ingredients);
+    // 50,000g total Emdex - 7,000g used in the premix = 43,000g remaining, split in half.
+    expect(steps).toContain('Add approximately half the remaining Emdex (21,500.0 g) to the V-mixer');
+    expect(steps).toContain('Add the entire 8,000.0 g API-X premix evenly into the V-mixer');
+    expect(steps).toContain('Add the remainder of the Emdex (21,500.0 g)');
+  });
+
+  it('adds the other primary ingredients between the premix and the diluent remainder', () => {
+    const steps = generateFreshBatchSOP(result, ingredients);
+    expect(steps).toContain('Add PVPP XL to the V-mixer');
+  });
+
+  it('takes blend-uniformity samples after the main mix and before lubrication', () => {
+    const steps = generateFreshBatchSOP(result, ingredients);
+    const mixIdx = steps.indexOf('Mix for 20 minutes');
+    const samplesIdx = steps.indexOf('Take representative blend-uniformity samples before lubrication');
+    const lubeIdx = steps.findIndex((s) => s.includes('Magnesium stearate'));
+    expect(mixIdx).toBeGreaterThan(-1);
+    expect(samplesIdx).toBe(mixIdx + 1);
+    expect(lubeIdx).toBeGreaterThan(samplesIdx);
+  });
+
+  it('never fires the premix path when no API requests one — byte-identical to the pre-premix SOP', () => {
+    const noPremixResult = {
+      ...result,
+      apis: [{ ...result.apis[0], premix: undefined }],
+    } as unknown as FreshBatchResult;
+    const steps = generateFreshBatchSOP(noPremixResult, ingredients);
+    expect(steps.some((s) => s.includes('premix'))).toBe(false);
+    expect(steps.some((s) => s.includes('blend-uniformity'))).toBe(false);
+    expect(steps).toContain('Add API-X + PVPP XL + Emdex to V-mix');
+  });
+});
+
 describe('SOP weigh steps — potency shown alongside the assay amount', () => {
   // The SOP sheet previously printed only the gram amount to weigh, so an
   // operator had no way to retrace those grams back to the potency and

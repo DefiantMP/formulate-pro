@@ -112,6 +112,10 @@ export interface FreshApiState {
   potUnitWeightG: string;
   /** Solve-mode only: how much raw material is on hand, in grams. Ignored outside solve mode. */
   availableStockG: string;
+  /** Operator-flagged, never derived from dose/potency — see FreshApiPremix. */
+  needsPremix: boolean;
+  /** Only read when needsPremix is true; blank/invalid falls back to 3 (see freshApiEntries). */
+  premixDilutionSteps: string;
 }
 
 let apiIdCounter = 0;
@@ -130,6 +134,8 @@ function blankApi(label: string, id: string = makeApiId()): FreshApiState {
     potMgPerUnit: '',
     potUnitWeightG: '',
     availableStockG: '',
+    needsPremix: false,
+    premixDilutionSteps: '3',
   };
 }
 
@@ -323,6 +329,7 @@ export default function FormulateApp() {
         label: api.label.trim() || (index === 0 ? 'API' : `API ${index + 1}`),
         targetActiveMgPerTablet: numOrZero(api.targetMg),
         potency: apiStateToPotency(fPotMethod, api),
+        premix: api.needsPremix ? { dilutionSteps: numOrZero(api.premixDilutionSteps) || 3 } : undefined,
       })),
     [apis, fPotMethod]
   );
@@ -589,23 +596,37 @@ export default function FormulateApp() {
         result.mode === 'regrind' && result.totalBlendG > 0
           ? ((result.activeInOldPowderG / result.totalBlendG) * 100).toFixed(3) + '%'
           : undefined,
+      // The active's raw-material potency as entered, echoed into the output.
+      // One figure per API, joined when a run has more than one. Regrind's
+      // `potency` above ("Reground powder potency") already is this figure.
+      activePotency:
+        result.mode === 'fresh'
+          ? result.apis.map((api) => (api.effectivePotency * 100).toFixed(3) + '%').join(' · ')
+          : undefined,
       mgPerTab: mgPerTab.toFixed(result.mode === 'regrind' ? 3 : 1) + ' mg',
     };
   }, [result]);
 
   const addRows: AddRowData[] = useMemo(() => {
     if (!result) return [];
+    // Each row's share of the total blend — display-only, grams / totalBlendG.
+    const pctOfMix = (grams: number) =>
+      result.totalBlendG > 0 ? (grams / result.totalBlendG) * 100 : undefined;
     if (result.mode === 'fresh') {
       // One row per API (always, even at 0g — see below), then one row per
       // non-API ingredient with a defined role. An untouched or zero
       // excipient should be visibly 0, never silently absent, so it can't
       // be mistaken for "not part of this formulation."
-      const apiRows: AddRowData[] = result.apis.map((api) => ({
-        label: `${api.label} active`,
-        value: `${fmt(result.ingredientGrams[api.id] ?? 0, 2)} g`,
-        icon: 'plus',
-        key: true,
-      }));
+      const apiRows: AddRowData[] = result.apis.map((api) => {
+        const grams = result.ingredientGrams[api.id] ?? 0;
+        return {
+          label: `${api.label} active`,
+          value: `${fmt(grams, 2)} g`,
+          icon: 'plus',
+          key: true,
+          percentOfMix: pctOfMix(grams),
+        };
+      });
       // The filler is named freely, so it can be the SAME physical material as
       // a fixed excipient (e.g. filler "EZTAB" alongside the EZTAB excipient).
       // When that happens the two are merged into one line carrying the summed
@@ -632,6 +653,7 @@ export default function FormulateApp() {
             value: `${fmt(grams, 2)} g`,
             icon: isFiller ? 'cube' : 'circle-plus',
             key: isFiller,
+            percentOfMix: pctOfMix(grams),
           };
         });
       return [...apiRows, ...otherRows];
@@ -648,12 +670,19 @@ export default function FormulateApp() {
       : [];
     return [
       ...solvedRow,
-      { label: 'Reground powder', value: `${fmt(result.regroundPowderG, 0)} g`, icon: 'reload', key: false },
+      {
+        label: 'Reground powder',
+        value: `${fmt(result.regroundPowderG, 0)} g`,
+        icon: 'reload',
+        key: false,
+        percentOfMix: pctOfMix(result.regroundPowderG),
+      },
       {
         label: `Fresh ${activeIngredient.name} to add`,
         value: result.freshActiveG > 0 ? `${fmt(result.freshActiveG)} g` : 'Not needed',
         icon: 'plus',
         key: result.freshActiveG > 0,
+        percentOfMix: result.freshActiveG > 0 ? pctOfMix(result.freshActiveG) : undefined,
       },
       {
         // Bulk calculated filler + the fixed 0.15% EasyTab processing aid are
@@ -662,6 +691,7 @@ export default function FormulateApp() {
         value: `${fmt(result.fillerAddG + result.easyTabG)} g`,
         icon: 'cube',
         key: true,
+        percentOfMix: pctOfMix(result.fillerAddG + result.easyTabG),
       },
       // Only shown when at least one lot is marked reground-tablets — a
       // batch made entirely of raw/bulk powder gets no top-up at all.
@@ -672,6 +702,7 @@ export default function FormulateApp() {
               value: `${fmt(result.lubricantTopUpG, 2)} g`,
               icon: 'droplet',
               key: false,
+              percentOfMix: pctOfMix(result.lubricantTopUpG),
             },
           ]
         : []),
@@ -684,6 +715,7 @@ export default function FormulateApp() {
         value: `${fmt(result.siliconDioxideG, 2)} g`,
         icon: 'circle-plus',
         key: false,
+        percentOfMix: pctOfMix(result.siliconDioxideG),
       },
     ];
   }, [result, activeIngredient, freshIngredients, solvedLotDisplay]);
@@ -943,6 +975,9 @@ export default function FormulateApp() {
               potMgPerUnit: potency?.method === 'mgPerUnit' ? String(potency.mgPerUnit) : '',
               potUnitWeightG: potency?.method === 'mgPerUnit' ? String(potency.unitWeightG) : '',
               availableStockG: '',
+              // Absent on any run saved before premix support — restores as "off".
+              needsPremix: !!a.premix,
+              premixDilutionSteps: a.premix?.dilutionSteps != null ? String(a.premix.dilutionSteps) : '3',
             };
           })
         );
@@ -959,6 +994,8 @@ export default function FormulateApp() {
             potMgPerUnit: '',
             potUnitWeightG: '',
             availableStockG: '',
+            needsPremix: false,
+            premixDilutionSteps: '3',
           },
         ]);
       }
@@ -1335,6 +1372,12 @@ export default function FormulateApp() {
               <span>{stats.potencyLabel}</span>
               <strong>{stats.potency}</strong>
             </div>
+            {stats.activePotency && (
+              <div>
+                <span>Active potency (raw material)</span>
+                <strong>{stats.activePotency}</strong>
+              </div>
+            )}
             {stats.finalBlendPotency && (
               <div>
                 <span>% of API in batch total</span>
@@ -1354,6 +1397,7 @@ export default function FormulateApp() {
                 <tr key={row.label}>
                   <td>{row.label}</td>
                   <td>{row.value}</td>
+                  <td>{row.percentOfMix != null ? `${row.percentOfMix.toFixed(1)}% of mix` : ''}</td>
                 </tr>
               ))}
             </tbody>

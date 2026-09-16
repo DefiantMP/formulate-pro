@@ -9,6 +9,8 @@ interface FreshApiCardProps {
   potencyMethod: FreshPotencyMethod;
   /** Solve-for-max-tablets mode — shows an "Available stock" field instead of relying on a manual tablet count. */
   solveMode: boolean;
+  /** Named in the premix helper text — the premix diluent is always the batch's own filler. */
+  fillerType: string;
   onChange: (id: string, patch: Partial<FreshApiState>) => void;
   onRemove: (id: string) => void;
 }
@@ -19,6 +21,7 @@ export default function FreshApiCard({
   canRemove,
   potencyMethod,
   solveMode,
+  fillerType,
   onChange,
   onRemove,
 }: FreshApiCardProps) {
@@ -111,6 +114,39 @@ export default function FreshApiCard({
               onChange={(e) => onChange(api.id, { availableStockG: e.target.value })}
             />
             <div className="unit">g</div>
+          </div>
+        </div>
+      )}
+
+      {/* Whether an API needs a premix is a floor judgment call (segregation
+          risk, particle size, prior uniformity data) this app can't make —
+          so it's an operator flag here, never an automatic threshold on
+          dose or potency. */}
+      <label className="lot-check-row" style={{ marginTop: 8 }}>
+        <input
+          type="checkbox"
+          checked={api.needsPremix}
+          onChange={(e) => onChange(api.id, { needsPremix: e.target.checked })}
+        />
+        Needs a premix (geometric dilution)
+      </label>
+      {api.needsPremix && (
+        <div className="field" style={{ marginTop: 8, marginBottom: 0 }}>
+          <label>Dilution steps</label>
+          <div className="row">
+            <input
+              type="number"
+              placeholder="3"
+              step="1"
+              min="1"
+              value={api.premixDilutionSteps}
+              onChange={(e) => onChange(api.id, { premixDilutionSteps: e.target.value })}
+            />
+            <div className="unit">steps</div>
+          </div>
+          <div className="opt-desc">
+            Each step doubles the premix built so far, starting from an equal part of {fillerType || 'filler'} — 3
+            steps (the default) ends at 8x the API&apos;s weight.
           </div>
         </div>
       )}

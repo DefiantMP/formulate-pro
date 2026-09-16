@@ -8,6 +8,12 @@ export interface AddRowData {
   value: string;
   icon: string;
   key: boolean;
+  /**
+   * This row's weight as a percentage of the total blend — display-only,
+   * grams / totalBlendG. Undefined for rows with no meaningful share of the
+   * mix (e.g. a "Not needed" fresh-active row, or a solved lot input weight).
+   */
+  percentOfMix?: number;
 }
 
 export interface StatsData {
@@ -41,6 +47,14 @@ export interface StatsData {
    * `potency` above is how much raw powder is in it.
    */
   activeInBlendPercent?: string;
+  /**
+   * The active's own potency as entered on the input side (raw-material
+   * purity), echoed here so it's visible alongside the output and on the
+   * printed sheet. Fresh: each API's effectivePotency; joined with " · "
+   * when there is more than one API. Regrind already surfaces this as
+   * `potency` ("Reground powder potency"), so it's left undefined there.
+   */
+  activePotency?: string;
   mgPerTab: string;
 }
 
@@ -141,6 +155,13 @@ export default function OutputPanel({
                   <div className="stat-val">{stats.potency}</div>
                   <div className="stat-unit">{stats.finalBlendPotency ? 'of powder' : 'of blend'}</div>
                 </div>
+                {stats.activePotency && (
+                  <div className="stat">
+                    <div className="stat-lbl">Active potency</div>
+                    <div className="stat-val">{stats.activePotency}</div>
+                    <div className="stat-unit">raw material, as entered</div>
+                  </div>
+                )}
                 {stats.finalBlendPotency && (
                   <div className="stat">
                     <div className="stat-lbl">% of API in batch total</div>
@@ -180,7 +201,12 @@ export default function OutputPanel({
                       <i className={`ti ti-${row.icon}`} />
                       {row.label}
                     </div>
-                    <div className={`add-val${row.key ? ' green' : ''}`}>{row.value}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className={`add-val${row.key ? ' green' : ''}`}>{row.value}</div>
+                      {row.percentOfMix != null && (
+                        <div className="add-val dim">{row.percentOfMix.toFixed(1)}% of mix</div>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {warnRows.map((warning) => (

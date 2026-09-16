@@ -59,6 +59,25 @@ export type FreshApiPotency =
   | { method: 'mgPerUnit'; mgPerUnit: number; unitWeightG: number };
 
 /**
+ * Geometric-dilution premix instructions for a low-dose API, generated into
+ * the SOP only — calculateFreshBatch never reads this, and it has no effect
+ * on any blend math or grams figure. Whether an API needs a premix at all
+ * (segregation risk, particle size, historical uniformity data) is a floor
+ * judgment call this app has no way to make, so it is operator-flagged per
+ * API rather than triggered by a potency or dose threshold.
+ */
+export interface FreshApiPremix {
+  /**
+   * Number of geometric-dilution doubling steps: starting from an equal
+   * part of diluent combined with the API, each subsequent addition equals
+   * the running premix total so far (1x, then 2x, then 4x, ...), so after
+   * `dilutionSteps` steps the premix totals apiGrams * 2^dilutionSteps.
+   * 3 steps (the conventional default) yields an 8x premix.
+   */
+  dilutionSteps: number;
+}
+
+/**
  * One active ingredient within a fresh-batch run. Combo products dose
  * multiple actives independently in the same tablet — each gets its own
  * label, target mg/tablet, and potency value, though the potency *method*
@@ -70,6 +89,8 @@ export interface FreshApiEntry {
   label: string;
   targetActiveMgPerTablet: number;
   potency: FreshApiPotency;
+  /** Absent/undefined means no premix step is generated — the common case. */
+  premix?: FreshApiPremix;
 }
 
 export interface FreshApiResult {
@@ -82,6 +103,8 @@ export interface FreshApiResult {
   percentOfBlend: number;
   /** Grams of this API's raw material to weigh per run. */
   gramsPerRun: number;
+  /** Echoed straight through from FreshApiEntry — see FreshApiPremix. */
+  premix?: FreshApiPremix;
 }
 
 /** Extensible list rather than a hardcoded boolean — more filler options are expected later. */
