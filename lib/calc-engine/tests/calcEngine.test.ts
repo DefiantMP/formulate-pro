@@ -1367,6 +1367,70 @@ describe('generateFreshBatchSOP — filler sharing a name with an excipient', ()
   });
 });
 
+describe('SOP omits ingredients weighed at 0 g', () => {
+  const ingredients: IngredientLine[] = [
+    { id: 'emdex', name: 'ignored', role: 'diluent', percentOfBlend: null, calculatedByDifference: true },
+    { id: 'pvpp', name: 'PVPP XL', role: 'other', percentOfBlend: 0, calculatedByDifference: false },
+    { id: 'eztab', name: 'EZTAB', role: 'other', percentOfBlend: 10, calculatedByDifference: false },
+    { id: 'magstearate', name: 'Magnesium stearate', role: 'lubricant', percentOfBlend: 0, calculatedByDifference: false },
+  ];
+  const result = {
+    mode: 'fresh',
+    tabletCount: 10000,
+    targetWeightG: 0.5,
+    totalBlendG: 5000,
+    fillerType: 'Emdex',
+    apis: [
+      { id: 'a1', label: 'API One', targetActiveMgPerTablet: 50, effectivePotency: 1, percentOfBlend: 10, gramsPerRun: 500 },
+      { id: 'a2', label: 'API Two', targetActiveMgPerTablet: 0, effectivePotency: 1, percentOfBlend: 0, gramsPerRun: 0 },
+    ],
+    ingredientGrams: { a1: 500, a2: 0, emdex: 4000, pvpp: 0, eztab: 500, magstearate: 0 },
+    ingredientPercents: {},
+    activePercentOfBlend: 10,
+  } as unknown as FreshBatchResult;
+  const steps = generateFreshBatchSOP(result, ingredients);
+
+  it('never mentions a 0 g excipient, API, or lubricant anywhere', () => {
+    for (const name of ['PVPP XL', 'API Two', 'Magnesium stearate']) {
+      expect(steps.some((s) => s.includes(name))).toBe(false);
+    }
+    // A bare "0 g", not the tail of "4,000.0 g".
+    expect(steps.some((s) => /(^|[^\d.,])0 g\b/.test(s))).toBe(false);
+  });
+
+  it('drops the lubricant mix step when there is no lubricant to add', () => {
+    expect(steps).not.toContain('Mix for 2 minutes');
+  });
+
+  it('still lists the non-zero ingredients', () => {
+    expect(steps).toContain('Weigh 4,000.0 g Emdex and 500.0 g EZTAB');
+    expect(steps).toContain('Add API One + Emdex + EZTAB to V-mix');
+  });
+
+  it('keeps a filler line whose name matches a 0% excipient', () => {
+    const shared = generateFreshBatchSOP(
+      { ...result, fillerType: 'PVPP XL' } as unknown as FreshBatchResult,
+      ingredients
+    );
+    expect(shared.some((s) => s.includes('4,000.0 g PVPP XL'))).toBe(true);
+  });
+
+  it('omits the regrind Silicon Dioxide step and its mix at 0 g', () => {
+    const regrind = calculateRegrind({
+      lots: singleLot({ method: 'bulkPercent', percent: 55.5 }, 8000),
+      regroundPowderG: 8000,
+      targetActiveMgPerTablet: 60,
+      targetWeightG: 1.15,
+      fillerIngredientName: 'Emdex',
+      alreadyPresentIngredientNames: ['PVPP XL'],
+      lubricantTopUpIngredientName: 'Magnesium stearate',
+    })!;
+    const regrindSteps = generateRegrindSOP({ ...regrind, siliconDioxideG: 0 });
+    expect(regrindSteps.some((s) => s.includes(regrind.siliconDioxideIngredientName))).toBe(false);
+    expect(regrindSteps).not.toContain('Mix for 3 minutes');
+  });
+});
+
 describe('generateFreshBatchSOP — glidant gets its own step', () => {
   const ingredientsWithGlidant: IngredientLine[] = [
     { id: 'pvpp', name: 'PVPP XL', role: 'disintegrant', percentOfBlend: 5, calculatedByDifference: false },

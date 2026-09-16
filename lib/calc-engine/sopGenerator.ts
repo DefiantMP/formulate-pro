@@ -66,9 +66,11 @@ function computePremix(
 }
 
 /**
- * Generic across any ingredient count: every ingredient gets a weigh + V-mix
- * step (even at 0g, so a zero amount is visible rather than silently
- * omitted), in the order it appears in `ingredients`. Lubricants are added
+ * Generic across any ingredient count: every ingredient with a non-zero amount
+ * gets a weigh + V-mix step, in the order it appears in `ingredients`. A 0 g
+ * ingredient is left out of the SOP entirely — it is still visible at 0 g in
+ * the ingredient table, and a "Weigh 0 g PVPP XL" line on the floor sheet
+ * reads as an instruction rather than an absence. Lubricants are added
  * last (and mixed briefly after), since over-mixing lubricant is a real
  * capping/hardness risk — everything else (active, filler, disintegrant, or
  * any other role) goes into the initial V-mix together.
@@ -83,10 +85,12 @@ export function generateFreshBatchSOP(
   result: FreshBatchResult,
   ingredients: IngredientLine[]
 ): string[] {
-  // Every ingredient gets a step, even at 0g — omitting a zero/untouched
-  // ingredient here would silently hide it from the SOP instead of making
-  // the zero visible.
-  const lubricants = ingredients.filter((i) => i.role === 'lubricant');
+  // Nothing weighed at 0 g gets a step (see the doc comment above). Compared
+  // against the raw grams, not the rounded display figure, so a tiny but real
+  // amount is never dropped.
+  const hasGrams = (id: string) => (result.ingredientGrams[id] ?? 0) > 0;
+  const apis = result.apis.filter((a) => hasGrams(a.id));
+  const lubricants = ingredients.filter((i) => i.role === 'lubricant' && hasGrams(i.id));
   // Glidant (e.g. Silicon Dioxide) gets its own addition + moderate mix,
   // separate from the main blend and from the lubricant's short final mix —
   // same convention regrind mode already uses for its own fixed Silicon
@@ -111,21 +115,24 @@ export function generateFreshBatchSOP(
     if (existing) existing.grams += grams;
     else primary.push({ name, grams });
   }
+  // Filtered after merging, so a filler sharing a name with a 0% excipient
+  // still keeps its combined line.
+  const primaryToAdd = primary.filter((p) => p.grams > 0);
 
   const steps: string[] = [];
 
   // The potency and target dose ride along with the weight: the gram figure
   // alone is unverifiable on the floor, while grams x potency / tablet count
   // reproduces the mg/tab an operator can check against the batch record.
-  for (const api of result.apis) {
+  for (const api of apis) {
     steps.push(
       `Weigh ${fmt(result.ingredientGrams[api.id])} g of ${api.label} ` +
         `(${fmtPotencyPct(api.effectivePotency)}% potency, ${trim(api.targetActiveMgPerTablet, 3)} mg/tab target)`
     );
   }
-  if (primary.length > 0) {
+  if (primaryToAdd.length > 0) {
     steps.push(
-      `Weigh ${joinNatural(primary.map((i) => `${fmt(i.grams)} g ${i.name}`))}`
+      `Weigh ${joinNatural(primaryToAdd.map((i) => `${fmt(i.grams)} g ${i.name}`))}`
     );
   }
 
@@ -134,8 +141,8 @@ export function generateFreshBatchSOP(
   // always the batch's own filler: it's already the "make up the rest of
   // the blend" ingredient, and using a second material here would need its
   // own weigh-out line nothing above accounts for.
-  const premixApis = result.apis.filter((a) => a.premix && a.premix.dilutionSteps > 0);
-  const fillerItem = primary.find((p) => p.name.trim().toLowerCase() === result.fillerType.trim().toLowerCase());
+  const premixApis = apis.filter((a) => a.premix && a.premix.dilutionSteps > 0);
+  const fillerItem = primaryToAdd.find((p) => p.name.trim().toLowerCase() === result.fillerType.trim().toLowerCase());
   const premixBreakdowns: PremixBreakdown[] = premixApis.map((api) =>
     computePremix(api.label, result.ingredientGrams[api.id] ?? 0, result.fillerType, api.premix!.dilutionSteps)
   );
@@ -151,7 +158,7 @@ export function generateFreshBatchSOP(
     steps.push(`Confirm final ${p.apiLabel} premix weight — ${fmt(p.finalWeightG)} g`);
   }
 
-  const vmixNames = [...result.apis.map((a) => a.label), ...primary.map((i) => i.name)];
+  const vmixNames = [...apis.map((a) => a.label), ...primaryToAdd.map((i) => i.name)];
   if (premixBreakdowns.length > 0) {
     // The diluent's own weigh-out (in the "Weigh ..." step above) already
     // covers everything, including what just went into the premix — it is
@@ -162,8 +169,8 @@ export function generateFreshBatchSOP(
     const diluentUsedTotalG = premixBreakdowns.reduce((sum, p) => sum + p.diluentUsedG, 0);
     const remainingDiluentG = fillerItem ? Math.max(0, fillerItem.grams - diluentUsedTotalG) : 0;
     const halfRemainingDiluentG = remainingDiluentG / 2;
-    const nonPremixApiLabels = result.apis.filter((a) => !premixApis.includes(a)).map((a) => a.label);
-    const otherPrimaryNames = primary.filter((p) => p !== fillerItem).map((p) => p.name);
+    const nonPremixApiLabels = apis.filter((a) => !premixApis.includes(a)).map((a) => a.label);
+    const otherPrimaryNames = primaryToAdd.filter((p) => p !== fillerItem).map((p) => p.name);
     const otherNames = [...nonPremixApiLabels, ...otherPrimaryNames];
 
     if (fillerItem && remainingDiluentG > 0.005) {
@@ -198,16 +205,9 @@ export function generateFreshBatchSOP(
   // line above, since it needs its own mix step rather than sharing the
   // 20-minute main mix.
   //
-  // Gated on grams > 0, unlike the always-show-even-at-0g primary/lubricant
-  // steps above: those are ingredients the operator explicitly defined as
-  // part of THIS product's recipe, where a 0 is a meaningful "deliberately
-  // none this run." Glidant now ships as part of the default ingredient
-  // template for every product (see defaultFormulation.ts), so an untouched
-  // 0% here means "this formula was never given one," not "zeroed out" —
-  // showing a 0g weigh-and-mix step on every single fresh-batch SOP,
-  // including every formula that never used a glidant, would be actively
-  // misleading rather than informative. Same reasoning as regrind's
-  // lubricant top-up, which is omitted entirely rather than shown at 0g.
+  // Gated on grams > 0 like every other step here — glidant ships in the
+  // default ingredient template at 0% for every product, so it is the most
+  // common case of an ingredient that is defined but not used.
   const glidantsToAdd = glidants.filter((g) => (result.ingredientGrams[g.id] ?? 0) > 0);
   for (const glidant of glidantsToAdd) {
     steps.push(`Add ${fmt(result.ingredientGrams[glidant.id])} g ${glidant.name}`);
@@ -272,13 +272,18 @@ export function generateRegrindSOP(result: RegrindResult): string[] {
       : 'No fresh API needed — regrind covers the full batch',
     // Bulk calculated filler + the fixed 0.15% EasyTab processing aid are the
     // same material, merged into one weigh/add step rather than two.
-    `Add ${fmt(result.fillerAddG + result.easyTabG)} g ${result.fillerIngredientName}`,
+    ...(result.fillerAddG + result.easyTabG > 0
+      ? [`Add ${fmt(result.fillerAddG + result.easyTabG)} g ${result.fillerIngredientName}`]
+      : []),
     'Mix for 20 minutes'
   );
-  steps.push(
-    `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
-    'Mix for 3 minutes'
-  );
+  // Omitted at 0 g, same as every fresh-batch step.
+  if (result.siliconDioxideG > 0) {
+    steps.push(
+      `Add ${fmt(result.siliconDioxideG, 2)} g ${result.siliconDioxideIngredientName}`,
+      'Mix for 3 minutes'
+    );
+  }
   // Magnesium stearate is always the LAST ingredient added, after Silicon
   // Dioxide — lubricants risk over-mixing/capping tablets if added earlier,
   // so it gets its own short final mix. Only relevant when at least one lot
