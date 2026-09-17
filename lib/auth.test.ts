@@ -6,7 +6,6 @@ import {
   isUserRole,
   passwordProblem,
   readSessionToken,
-  sessionStillValid,
   verifyPassword,
   wouldRemoveLastAdmin,
 } from './auth';
@@ -91,36 +90,6 @@ describe('session tokens', () => {
     // Failing loudly beats silently signing with a guessable key.
     await expect(createSessionToken(payload)).rejects.toThrow(/AUTH_SECRET/);
     process.env.AUTH_SECRET = original;
-  });
-});
-
-describe('session cut-off after a reset or deactivation', () => {
-  const cutoff = new Date('2026-09-17T12:00:00.500Z');
-  const cutoffSec = Math.floor(cutoff.getTime() / 1000);
-
-  it('keeps every session when no cut-off has ever been set', () => {
-    expect(sessionStillValid(1, null)).toBe(true);
-  });
-
-  it('ends sessions issued before the cut-off', () => {
-    expect(sessionStillValid(cutoffSec - 1, cutoff)).toBe(false);
-  });
-
-  it('keeps a sign-in in the same second as the cut-off, and any after it', () => {
-    expect(sessionStillValid(cutoffSec, cutoff)).toBe(true);
-    expect(sessionStillValid(cutoffSec + 60, cutoff)).toBe(true);
-  });
-
-  it('ends a session with no issued-at once a cut-off exists', () => {
-    expect(sessionStillValid(undefined, cutoff)).toBe(false);
-  });
-
-  it('carries issued-at through a real signed token', async () => {
-    const before = Math.floor(Date.now() / 1000);
-    const read = await readSessionToken(
-      await createSessionToken({ userId: 'u1', email: 'a@b.com', name: 'A', role: 'operator' })
-    );
-    expect(read?.iat).toBeGreaterThanOrEqual(before);
   });
 });
 

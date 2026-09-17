@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, verifyPassword } from '@/lib/auth';
+import { createSessionToken, SESSION_COOKIE, SESSION_IDLE_SECONDS, verifyPassword } from '@/lib/auth';
 import { lockedMessage, lockMinutesRemaining, normaliseEmail, stateAfterFailure } from '@/lib/loginThrottle';
 
 export async function POST(request: NextRequest) {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: SESSION_IDLE_SECONDS,
   });
   return res;
 }

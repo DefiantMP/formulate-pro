@@ -26,7 +26,7 @@ export async function getCurrentUser() {
     where: { id: payload.userId, deletedAt: null },
     select: { id: true, name: true, email: true, role: true, sessionsValidFrom: true },
   });
-  if (!user || !sessionStillValid(payload.iat, user.sessionsValidFrom)) return null;
+  if (!user || !sessionStillValid(payload, user.sessionsValidFrom)) return null;
   const { sessionsValidFrom: _cutoff, ...rest } = user;
   return rest;
 }

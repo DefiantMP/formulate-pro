@@ -10,6 +10,7 @@ interface Account {
   email: string;
   role: string;
   createdAt: string;
+  deletedAt: string | null;
 }
 
 interface IssuedLink {
@@ -36,7 +37,7 @@ export default function AccountsCard({ meId }: { meId: string | null }) {
   const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch('/api/users')
+    fetch('/api/users?include=deactivated')
       .then(async (res) => {
         if (res.status === 401) return setBlocked('Sign in as an admin to manage accounts.');
         if (res.status === 403) return setBlocked('Only admins can manage accounts.');
@@ -90,6 +91,11 @@ export default function AccountsCard({ meId }: { meId: string | null }) {
       if (link?.userId === a.id) setLink(null);
       load();
     }
+  }
+
+  async function reactivate(a: Account) {
+    const d = await call(a.id, `/api/users/${a.id}/reactivate`, { method: 'POST' }, 'Could not reactivate the account.');
+    if (d) load();
   }
 
   async function copyLink() {
@@ -153,7 +159,7 @@ export default function AccountsCard({ meId }: { meId: string | null }) {
               <div>Role</div>
               <div />
             </div>
-            {accounts.map((a) => {
+            {accounts.filter((a) => !a.deletedAt).map((a) => {
               const isMe = a.id === meId;
               const busy = busyId === a.id;
               return (
@@ -198,7 +204,7 @@ export default function AccountsCard({ meId }: { meId: string | null }) {
                       <div className="field-hint" style={{ marginBottom: 8 }}>
                         Deactivate <b>{a.email}</b>? They are signed out immediately and cannot sign
                         in again. Batches, weighings and log entries they signed keep their name.
-                        There is no reactivate button yet.
+                        An admin can reactivate them later.
                       </div>
                       <div className="row">
                         <button type="button" className="btn btn-p" disabled={busy} onClick={() => deactivate(a)}>
@@ -213,6 +219,35 @@ export default function AccountsCard({ meId }: { meId: string | null }) {
                 </div>
               );
             })}
+
+            {accounts.some((a) => a.deletedAt) && (
+              <>
+                <div className="sub-lbl" style={{ marginTop: 16 }}>Deactivated</div>
+                <div className="field-hint" style={{ marginBottom: 4 }}>
+                  Cannot sign in. Reactivating restores the role shown; they sign in again with
+                  their existing password, or you can give them a reset link afterwards.
+                </div>
+                {accounts
+                  .filter((a) => a.deletedAt)
+                  .map((a) => (
+                    <div className="acct-row acct-row-off" key={a.id}>
+                      <div>
+                        <b>{a.name}</b>
+                        <div>{a.email}</div>
+                      </div>
+                      <div>
+                        {USER_ROLE_LABELS[a.role as UserRole] ?? a.role}
+                        <div>since {fmtDateTime(a.deletedAt!)}</div>
+                      </div>
+                      <div className="acct-actions">
+                        <button type="button" className="btn" disabled={busyId === a.id} onClick={() => reactivate(a)}>
+                          <i className="ti ti-user-check" /> {busyId === a.id ? 'Working…' : 'Reactivate'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
           </>
         )}
         {error && <div className="rm-inline-err">{error}</div>}

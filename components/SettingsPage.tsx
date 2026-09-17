@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import AccountsCard from './AccountsCard';
+import YourAccountCard from './YourAccountCard';
 import { fmtDateTime } from '@/lib/format';
 import type { LotStatusEnforcement } from '@/lib/gmp';
 
@@ -257,6 +258,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {me && <YourAccountCard />}
           <AccountsCard meId={me?.id ?? null} />
         </div>
       </div>
