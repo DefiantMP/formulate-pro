@@ -359,25 +359,26 @@ export default function InputsPanel(props: InputsPanelProps) {
           open={confirmClear}
           onClose={() => setConfirmClear(false)}
           prefer="above"
-          label="Clear the values on this run?"
+          width={236}
+          label="Reset the values on this run?"
         >
-          <div className="newrun-confirm-desc" style={{ marginBottom: 8 }}>
-            Clear every value entered above and start this run&apos;s numbers again? The run keeps
-            its name — use <b>New run</b> at the top to start a different batch.
+          <div className="popover-title">Reset values?</div>
+          <div className="popover-desc">
+            Clears the numbers only. This run keeps its name.
           </div>
-          <div className="row">
+          <div className="popover-actions">
+            <button type="button" className="btn btn-sm" onClick={() => setConfirmClear(false)}>
+              Cancel
+            </button>
             <button
               type="button"
-              className="btn btn-p"
+              className="btn btn-sm btn-p"
               onClick={() => {
                 setConfirmClear(false);
                 props.onClearValues();
               }}
             >
-              <i className="ti ti-refresh" /> Clear values
-            </button>
-            <button type="button" className="btn" onClick={() => setConfirmClear(false)}>
-              Cancel
+              Reset
             </button>
           </div>
         </Popover>

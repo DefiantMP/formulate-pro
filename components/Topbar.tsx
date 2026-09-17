@@ -82,30 +82,32 @@ export default function Topbar({
             anchorRef={newRunRef}
             open={confirming}
             onClose={() => setConfirming(false)}
+            width={252}
             label="Start another run?"
           >
-            <div className="newrun-confirm-title">Start another run?</div>
-            <div className="newrun-confirm-desc">
+            <div className="popover-title">Start another run?</div>
+            <div className="popover-desc">
               {autosaveStatus === 'error' ? (
                 <>
-                  <b>{runName || 'This run'} has not saved.</b> Autosave failed, so clearing the
-                  form now loses what is on screen. Check Run history first.
+                  <b>Not saved.</b> Autosave failed, so this run would be lost. Check Run history
+                  first.
                 </>
               ) : autosaveStatus === 'saving' ? (
-                <>Still saving {runName || 'this run'} — give it a moment, then start the next one.</>
+                <>Still saving — give it a moment.</>
               ) : (
-                <>
-                  <b>{runName || 'This run'}</b> is saved in Run history and stays there. You are
-                  only clearing the form to enter the next batch.
-                </>
+                <>{runName || 'This run'} stays saved in Run history.</>
               )}
             </div>
-            <div className="row">
-              <button className="btn btn-p" onClick={confirm} disabled={autosaveStatus === 'saving'}>
-                <i className="ti ti-plus" /> Start new run
-              </button>
-              <button className="btn" onClick={() => setConfirming(false)}>
+            <div className="popover-actions">
+              <button className="btn btn-sm" onClick={() => setConfirming(false)}>
                 Cancel
+              </button>
+              <button
+                className="btn btn-sm btn-p"
+                onClick={confirm}
+                disabled={autosaveStatus === 'saving'}
+              >
+                Start new run
               </button>
             </div>
           </Popover>
