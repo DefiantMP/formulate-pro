@@ -13,6 +13,7 @@ import {
   reviewSubmissionError,
   weighVerificationError,
   type GmpSettingsShape,
+  gmpActorLabel,
 } from './gmp';
 
 const OFF: GmpSettingsShape = { enabled: false, lotStatusEnforcement: 'warn' };
@@ -209,5 +210,23 @@ describe('section 5 — consuming a non-passing lot', () => {
 
   it('never raises an issue for a passing lot', () => {
     expect(lotConsumptionIssues([lots[0]], ON_BLOCK)).toEqual([]);
+  });
+});
+
+describe('gmpActorLabel', () => {
+  it('names the account, and says when it has since been deactivated', () => {
+    expect(gmpActorLabel({ name: 'A. Chen', email: 'a@x.com', deletedAt: null }, null, 'u1')).toBe('A. Chen (a@x.com)');
+    expect(gmpActorLabel({ name: 'A. Chen', email: 'a@x.com', deletedAt: new Date() }, null, 'u1')).toBe(
+      'A. Chen (a@x.com) — deactivated'
+    );
+  });
+
+  it('marks a pre-auth typed name as unverified', () => {
+    expect(gmpActorLabel(null, 'R. Adeyemi (QA)', null)).toBe('R. Adeyemi (QA) (typed name, not verified)');
+  });
+
+  it('never renders a row blank', () => {
+    expect(gmpActorLabel(null, null, 'gone')).toMatch(/no longer exists/);
+    expect(gmpActorLabel(null, '  ', null)).toBe('Not recorded');
   });
 });

@@ -4,12 +4,25 @@ import { getGmpSettings } from '@/lib/gmpSettings';
 import { isLotStatusEnforcement } from '@/lib/gmp';
 import { GMP_SETTINGS_ID } from '@/lib/gmpSettings';
 import { getCurrentUser } from '@/lib/session';
+import { gmpActorLabel } from '@/lib/gmp';
 
 /** Current settings plus the full toggle history — the log is the compliance
  *  artifact, so it is served alongside rather than behind a second call. */
 export async function GET() {
   const settings = await getGmpSettings();
-  const log = await prisma.gmpModeToggleLog.findMany({ orderBy: { changedAt: 'desc' }, take: 200 });
+  const rows = await prisma.gmpModeToggleLog.findMany({
+    orderBy: { changedAt: 'desc' },
+    take: 200,
+    include: { actor: { select: { name: true, email: true, deletedAt: true } } },
+  });
+  // The page reads `actorName`. Returning the raw rows left it blank for every
+  // entry: account-attributed rows only carry actorId, and pre-auth rows carry
+  // their typed name under legacyActorName. Resolved here so the audit log
+  // names who made each change.
+  const log = rows.map(({ actor, legacyActorName, ...row }) => ({
+    ...row,
+    actorName: gmpActorLabel(actor, legacyActorName, row.actorId),
+  }));
   return NextResponse.json({ ...settings, log });
 }
 

@@ -306,3 +306,24 @@ export function lotConsumptionIssues(
           : `Lot ${l.lotLabel} has not completed QC testing.`,
     }));
 }
+
+/**
+ * Who made a GMP mode change, for the audit log display.
+ *
+ * Three shapes exist: rows attributed to an account; pre-auth rows holding a
+ * typed name, which is self-reported and labelled as such; and a row whose
+ * account no longer exists. That last one can only come from a direct
+ * database delete (the app soft-deletes accounts) — it is shown as exactly
+ * that rather than blank, because a blank "by" on a compliance log reads as
+ * nobody having made the change.
+ */
+export function gmpActorLabel(
+  actor: { name: string; email: string; deletedAt: Date | null } | null,
+  legacyActorName: string | null,
+  actorId: string | null
+): string {
+  if (actor) return `${actor.name} (${actor.email})${actor.deletedAt ? ' — deactivated' : ''}`;
+  if (legacyActorName?.trim()) return `${legacyActorName.trim()} (typed name, not verified)`;
+  if (actorId) return 'Account no longer exists (removed from the database directly)';
+  return 'Not recorded';
+}
