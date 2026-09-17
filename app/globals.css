@@ -298,7 +298,6 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
   /* Deliberately smaller than the weigh table and SOP: this is supporting
      explanation for whoever reads the sheet later, never a working
      instruction, and it must not compete with the numbers. */
-  .print-rationale-note { font-size: 8.5pt; font-style: italic; margin-bottom: 6px; }
   .print-rationale-list { margin: 0; padding-left: 16px; font-size: 8.5pt; line-height: 1.45; }
   .print-rationale-list li { margin-bottom: 4px; break-inside: avoid; }
 

@@ -1557,12 +1557,6 @@ export default function FormulateApp() {
       {blendRationale && blendRationale.items.length > 0 && (
         <section className="print-section">
           <h2>Why this blend</h2>
-          <div className="print-rationale-note">
-            What each excipient is doing and whether its level is typical. General
-            direct-compression reference points, not a product spec — a level outside a typical
-            range is unusual, not wrong. Materials the reference table does not recognise are
-            listed without a verdict.
-          </div>
           <ul className="print-rationale-list">
             {blendRationale.items.map((item) => (
               <li key={item.name}>
