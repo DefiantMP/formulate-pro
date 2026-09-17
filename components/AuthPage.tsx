@@ -84,9 +84,8 @@ export default function AuthPage() {
               <label htmlFor="auth-name">Name</label>
               <input id="auth-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name or initials" />
             </div>
-            <div className="field-hint">
-              New accounts are operators. Only an admin can grant the reviewer role —
-              otherwise anyone could sign off their own batches.
+            <div className="field-hint" style={{ marginBottom: 10 }}>
+              New accounts are for operators only. Only an admin can grant the reviewer role.
             </div>
           </>
         )}
