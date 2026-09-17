@@ -43,13 +43,18 @@ export default function Popover({
     const panel = panelRef.current;
     if (!anchor || !panel) return;
     const a = anchor.getBoundingClientRect();
+    // scrollHeight, not offsetHeight: the panel may already be capped by a
+    // previous pass, and measuring the capped height would ratchet it down.
+    // It excludes the border, though, while max-height under border-box
+    // includes it — so the border is added back. Without it the cap came out
+    // ~2px short of what the box needs and the squeeze landed on the bottom
+    // padding, leaving the buttons looking stuck to the edge.
+    const borders = panel.offsetHeight - panel.clientHeight;
     setPlacement(
       placePopover({
         anchor: { left: a.left, top: a.top, width: a.width, height: a.height },
         desiredWidth: width,
-        // scrollHeight, not offsetHeight: the panel may already be capped by a
-        // previous pass, and measuring the capped height would ratchet it down.
-        contentHeight: panel.scrollHeight,
+        contentHeight: Math.ceil(panel.scrollHeight + borders),
         viewport: { width: window.innerWidth, height: window.innerHeight },
       })
     );
