@@ -609,6 +609,11 @@ model User {
   // sessionStillValid). Set on password reset and on deactivation, so a
   // reset actually ends whatever session prompted it. Null means never set.
   sessionsValidFrom DateTime?
+  // One-time recovery code for a forgotten password (lib/recoveryCode.ts),
+  // bcrypt-hashed like the password. Null until the account creates one —
+  // accounts made before recovery codes existed have none.
+  recoveryCodeHash      String?
+  recoveryCodeCreatedAt DateTime?
 
   reviewedRuns         Run[]               @relation("RunReviewer")
   reviewedFormulations SavedFormulation[]  @relation("SavedFormulationReviewer")

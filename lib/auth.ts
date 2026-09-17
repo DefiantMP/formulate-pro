@@ -57,6 +57,20 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
+// A real bcrypt hash of a string nobody uses, at the same cost as real ones.
+const TIMING_DUMMY_HASH = '$2b$12$ujtW1mYbiAPFwZQJDKHuAeofXdDfDPQIzX0p2wf5iGE/1dHB2./G2';
+
+/**
+ * Compare against `hash`, or — when there is no account or no stored hash —
+ * against a dummy, and return false. Skipping bcrypt for an unknown email
+ * answered in ~4 ms instead of ~250 ms, which told anyone timing the sign-in
+ * form which emails have accounts, however identical the error message was.
+ */
+export async function verifyOrDummy(plain: string, hash: string | null | undefined): Promise<boolean> {
+  const ok = await bcrypt.compare(plain, hash ?? TIMING_DUMMY_HASH);
+  return !!hash && ok;
+}
+
 /**
  * Basic password policy. Deliberately minimal — length is the property that
  * actually matters, and a thicket of composition rules pushes people toward

@@ -41,6 +41,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .autosave-status.error { color: var(--danger-text); }
 .topbar-right { display: flex; gap: 6px; }
 .btn { height: 30px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 500; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background 0.1s; text-decoration: none; }
+/* Disabled buttons must read as disabled — without this every .btn looked
+   clickable while doing nothing (e.g. "Continue" before saving a recovery code). */
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn:hover { background: var(--bg); }
 .btn-p { background: var(--brand); color: #fff; border-color: var(--brand); }
 .btn-p:hover { background: var(--brand-mid); }
@@ -593,6 +596,19 @@ textarea.rm-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px r
 .auth-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .auth-signout { background: none; border: none; color: var(--text-3); font-size: 10px; cursor: pointer; padding: 2px 4px; }
 .auth-signout:hover { color: var(--danger-text); }
+.auth-link { display: block; margin: 10px auto 0; background: none; border: none; color: var(--brand); font-size: 12px; cursor: pointer; padding: 2px 4px; }
+.auth-link:hover { text-decoration: underline; }
+.recovery-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 600; letter-spacing: 1px; text-align: center; padding: 14px 8px; margin-bottom: 10px; border: 1px dashed var(--border-md); border-radius: 8px; background: var(--bg); color: var(--text); user-select: all; white-space: nowrap; }
+.recovery-ack { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text); cursor: pointer; }
+.recovery-ack input { width: 14px; height: 14px; accent-color: var(--brand); }
+.recovery-warn { border-color: var(--warning-text); }
+/* Print just the code screen, so "Print" produces a slip, not the whole page. */
+@media print {
+  body * { visibility: hidden; }
+  .recovery-reveal, .recovery-reveal * { visibility: visible; }
+  .recovery-reveal { position: absolute; left: 0; top: 0; width: 100%; }
+  .recovery-reveal button, .recovery-ack { display: none !important; }
+}
 
 /* Accounts (Settings) */
 .acct-row { display: grid; grid-template-columns: 1.6fr 0.8fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 11px; color: var(--text-2); }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createSessionToken, SESSION_COOKIE, SESSION_IDLE_SECONDS, verifyPassword } from '@/lib/auth';
+import { createSessionToken, SESSION_COOKIE, SESSION_IDLE_SECONDS, verifyOrDummy } from '@/lib/auth';
 import { lockedMessage, lockMinutesRemaining, normaliseEmail, stateAfterFailure } from '@/lib/loginThrottle';
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
   });
   // One message for both "no such account" and "wrong password" — saying
   // which would let anyone enumerate who has an account here.
-  const ok = user ? await verifyPassword(password, user.passwordHash) : false;
+  // verifyOrDummy runs bcrypt either way, so response time does not reveal it.
+  const ok = await verifyOrDummy(password, user?.passwordHash);
   if (!user || !ok) {
     const next = stateAfterFailure(throttle, now);
     await prisma.loginThrottle.upsert({

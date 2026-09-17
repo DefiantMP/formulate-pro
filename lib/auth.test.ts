@@ -6,6 +6,7 @@ import {
   isUserRole,
   passwordProblem,
   readSessionToken,
+  verifyOrDummy,
   verifyPassword,
   wouldRemoveLastAdmin,
 } from './auth';
@@ -103,5 +104,31 @@ describe('last-admin guard', () => {
     expect(wouldRemoveLastAdmin('admin', 2)).toBe(false);
     expect(wouldRemoveLastAdmin('reviewer', 1)).toBe(false);
     expect(wouldRemoveLastAdmin('operator', 0)).toBe(false);
+  });
+});
+
+describe('verifyOrDummy', () => {
+  it('matches a real hash and rejects a wrong password', async () => {
+    const hash = await hashPassword('the-real-password');
+    expect(await verifyOrDummy('the-real-password', hash)).toBe(true);
+    expect(await verifyOrDummy('not-it-at-all', hash)).toBe(false);
+  });
+
+  it('is false with no hash, even for the dummy string itself', async () => {
+    expect(await verifyOrDummy('formulate-pro-timing-dummy-never-a-real-password', null)).toBe(false);
+    expect(await verifyOrDummy('anything', undefined)).toBe(false);
+  });
+
+  // Regression: skipping bcrypt for an unknown email answered ~60x faster,
+  // revealing which emails have accounts.
+  it('takes bcrypt time even when there is no account', async () => {
+    const hash = await hashPassword('the-real-password');
+    const t0 = performance.now();
+    await verifyOrDummy('guess', hash);
+    const withAccount = performance.now() - t0;
+    const t1 = performance.now();
+    await verifyOrDummy('guess', null);
+    const withoutAccount = performance.now() - t1;
+    expect(withoutAccount).toBeGreaterThan(withAccount * 0.5);
   });
 });

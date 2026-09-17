@@ -2,13 +2,21 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import RecoveryCodeReveal from './RecoveryCodeReveal';
+import { fmtDateTime } from '@/lib/format';
 
 /**
  * The signed-in person's own account: change password, and sign out of every
  * session. Changing the password ends other sessions but keeps this one;
  * signing out everywhere ends this one too.
  */
-export default function YourAccountCard() {
+export default function YourAccountCard({
+  recoveryCodeCreatedAt,
+  onRecoveryCodeCreated,
+}: {
+  recoveryCodeCreatedAt: string | null;
+  onRecoveryCodeCreated: (at: string) => void;
+}) {
   const router = useRouter();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -17,6 +25,40 @@ export default function YourAccountCard() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(!recoveryCodeCreatedAt);
+  const [codePassword, setCodePassword] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [newCode, setNewCode] = useState<string | null>(null);
+
+  async function createCode(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setCodeError(null);
+    try {
+      const res = await fetch('/api/auth/recovery-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: codePassword }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        setCodeError(d?.error || 'Could not create a recovery code.');
+        return;
+      }
+      setCodePassword('');
+      setNewCode(d.recoveryCode);
+    } catch {
+      setCodeError('Could not reach the server.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function finishCode() {
+    setNewCode(null);
+    setCodeOpen(false);
+    onRecoveryCodeCreated(new Date().toISOString());
+  }
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +120,60 @@ export default function YourAccountCard() {
         <div className="field-hint" style={{ marginBottom: 10 }}>
           You are signed out after an hour without using the app, and eight hours after signing
           in regardless.
+        </div>
+
+        <div className={`rm-crit-row${recoveryCodeCreatedAt ? '' : ' recovery-warn'}`} style={{ marginBottom: 12 }}>
+          {newCode ? (
+            <RecoveryCodeReveal code={newCode} heading="Your new recovery code" onContinue={finishCode} continueLabel="Done" />
+          ) : (
+            <>
+              <div className="gmp-row" style={{ padding: 0, borderBottom: 'none' }}>
+                <div>
+                  <div className="gmp-row-title">
+                    {recoveryCodeCreatedAt ? 'Recovery code' : 'You have no recovery code'}
+                  </div>
+                  <div className="gmp-row-desc">
+                    {recoveryCodeCreatedAt ? (
+                      <>
+                        Created {fmtDateTime(recoveryCodeCreatedAt)}. Lets you reset a forgotten
+                        password from the sign-in page. Create a new one if you lost it or someone
+                        saw it — the old one stops working.
+                      </>
+                    ) : (
+                      <>
+                        Without one, a forgotten password means waiting for an admin — and if you
+                        are the only admin, nobody can let you back in. Create one now.
+                      </>
+                    )}
+                  </div>
+                </div>
+                {!codeOpen && (
+                  <button type="button" className="btn" style={{ flexShrink: 0 }} onClick={() => setCodeOpen(true)}>
+                    <i className="ti ti-refresh" /> New code
+                  </button>
+                )}
+              </div>
+              {codeOpen && (
+                <form onSubmit={createCode} style={{ marginTop: 10 }}>
+                  <div className="field">
+                    <label htmlFor="code-password">Confirm with your current password</label>
+                    <input id="code-password" type="password" value={codePassword} onChange={(e) => setCodePassword(e.target.value)} autoComplete="current-password" />
+                  </div>
+                  <div className="row">
+                    <button type="submit" className="btn btn-p" disabled={busy || !codePassword}>
+                      <i className="ti ti-key" /> {busy ? 'Working…' : recoveryCodeCreatedAt ? 'Replace recovery code' : 'Create recovery code'}
+                    </button>
+                    {recoveryCodeCreatedAt && (
+                      <button type="button" className="btn" onClick={() => setCodeOpen(false)}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  {codeError && <div className="rm-inline-err">{codeError}</div>}
+                </form>
+              )}
+            </>
+          )}
         </div>
 
         <form className="acct-pw" onSubmit={changePassword}>

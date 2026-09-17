@@ -22,7 +22,9 @@ export default function SettingsPage() {
   const [log, setLog] = useState<ToggleLogEntry[] | null>(null);
   // The toggle is recorded against the signed-in account server-side, so the
   // page only needs to know who that is — to say so, and to block when nobody is.
-  const [me, setMe] = useState<{ id: string; name: string } | null | undefined>(undefined);
+  const [me, setMe] = useState<{ id: string; name: string; recoveryCodeCreatedAt: string | null } | null | undefined>(
+    undefined
+  );
   const [note, setNote] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -258,7 +260,12 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {me && <YourAccountCard />}
+          {me && (
+            <YourAccountCard
+              recoveryCodeCreatedAt={me.recoveryCodeCreatedAt}
+              onRecoveryCodeCreated={(at) => setMe({ ...me, recoveryCodeCreatedAt: at })}
+            />
+          )}
           <AccountsCard meId={me?.id ?? null} />
         </div>
       </div>

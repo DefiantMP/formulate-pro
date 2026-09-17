@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "reset-password": "tsx scripts/reset-password.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

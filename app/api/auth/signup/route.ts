@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword, passwordProblem } from '@/lib/auth';
+import { generateRecoveryCode, normaliseRecoveryCode } from '@/lib/recoveryCode';
 
 /**
  * Self-serve signup — a single-company internal tool, so no invite flow or
@@ -31,6 +32,10 @@ export async function POST(request: NextRequest) {
   if (pwProblem) return NextResponse.json({ error: pwProblem }, { status: 400 });
 
   const passwordHash = await hashPassword(password);
+  // Every new account gets its recovery code at creation. It is in this
+  // response and nowhere else — the sign-up screen shows it once.
+  const recoveryCode = generateRecoveryCode();
+  const recoveryCodeHash = await hashPassword(normaliseRecoveryCode(recoveryCode));
   // Bootstrap: an instance with no active admin needs one, or nobody could
   // ever grant a role. This used to count every user including deactivated
   // ones, which left an instance whose accounts were all non-admins (or all
@@ -45,10 +50,12 @@ export async function POST(request: NextRequest) {
         email: email.trim().toLowerCase(),
         passwordHash,
         role: isFirstAccount ? 'admin' : 'operator',
+        recoveryCodeHash,
+        recoveryCodeCreatedAt: new Date(),
       },
       select: { id: true, name: true, email: true, role: true },
     });
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json({ ...user, recoveryCode }, { status: 201 });
   } catch {
     // email is @unique — the realistic failure.
     return NextResponse.json({ error: 'An account with that email already exists' }, { status: 409 });
