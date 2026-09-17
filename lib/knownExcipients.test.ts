@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   KNOWN_EXCIPIENTS,
   assessExcipient,
+  buildBlendRationale,
   lookupExcipient,
 } from './knownExcipients';
 
@@ -117,5 +118,98 @@ describe('KNOWN_EXCIPIENTS table integrity', () => {
         expect(lookupExcipient(alias)?.id).toBe(e.id);
       }
     }
+  });
+});
+
+describe('buildBlendRationale', () => {
+  const blend = () => [
+    { name: '7OH extract', percentOfBlend: 3, isActive: true },
+    { name: 'Emdex', percentOfBlend: 85 },
+    { name: 'PVPP XL', percentOfBlend: 5 },
+    { name: 'Magnesium stearate', percentOfBlend: 1 },
+  ];
+
+  it('explains each excipient and leaves actives out', () => {
+    const r = buildBlendRationale(blend());
+    expect(r.items.map((i) => i.name)).toEqual(['Emdex', 'PVPP XL', 'Magnesium stearate']);
+    expect(r.items.every((i) => i.message.length > 0)).toBe(true);
+    expect(r.gaps).toEqual([]);
+    expect(r.unknownNames).toEqual([]);
+  });
+
+  it('drops ingredients at 0% — they are not in the blend', () => {
+    const r = buildBlendRationale([...blend(), { name: 'Silicon dioxide', percentOfBlend: 0 }]);
+    expect(r.items.some((i) => i.name === 'Silicon dioxide')).toBe(false);
+  });
+
+  it('flags a missing lubricant and a missing disintegrant, but never a missing glidant', () => {
+    const r = buildBlendRationale([{ name: 'Emdex', percentOfBlend: 97 }]);
+    expect(r.gaps.map((g) => g.role)).toEqual(['lubricant', 'disintegrant']);
+    const withBoth = buildBlendRationale(blend());
+    expect(withBoth.gaps).toEqual([]);
+  });
+
+  it('stays quiet about gaps when something in the blend is unrecognised', () => {
+    // That material may BE the lubricant — claiming there is none would be wrong.
+    const r = buildBlendRationale([
+      { name: 'Emdex', percentOfBlend: 90 },
+      { name: 'Proprietary Blend X', percentOfBlend: 10 },
+    ]);
+    expect(r.gaps).toEqual([]);
+    expect(r.unknownNames).toEqual(['Proprietary Blend X']);
+  });
+
+  it('carries the assessment verdict for an unusual level', () => {
+    const r = buildBlendRationale([{ name: 'Magnesium stearate', percentOfBlend: 6 }]);
+    expect(r.items[0].verdict).toBe('above-typical');
+    expect(r.items[0].message).toMatch(/above the usual/);
+  });
+});
+
+describe('percentages in messages', () => {
+  it('rounds to two decimals rather than printing a raw float', () => {
+    // A filler-by-difference lands on figures like 71.61825631686773.
+    const a = assessExcipient('Emdex', 71.61825631686773);
+    expect(a.message).toContain('71.62%');
+    expect(a.message).not.toContain('71.618');
+    // The unrounded figure is still available to callers.
+    expect(a.percentOfBlend).toBe(71.61825631686773);
+  });
+
+  it('leaves a clean figure clean', () => {
+    expect(assessExcipient('Magnesium stearate', 2).message).toContain('2% sits within');
+    expect(assessExcipient('Unheard-of material', 1.5).message).toContain('1.5%');
+  });
+});
+
+describe('blends that carry material in (regrind)', () => {
+  const regrind = () => [
+    { name: 'Reground powder', percentOfBlend: 60, isActive: true },
+    { name: 'EasyTab', percentOfBlend: 39.7 },
+    { name: 'Silicon dioxide', percentOfBlend: 0.15 },
+    { name: 'Magnesium stearate', percentOfBlend: 0.15, freshTopUp: true },
+  ];
+
+  it('explains a fresh top-up instead of calling a correct 0.15% below typical', () => {
+    const plain = buildBlendRationale([{ name: 'Magnesium stearate', percentOfBlend: 0.15 }]);
+    expect(plain.items[0].verdict).toBe('below-typical');
+
+    const topUp = buildBlendRationale(regrind());
+    const lube = topUp.items.find((i) => i.name === 'Magnesium stearate')!;
+    expect(lube.verdict).toBe('top-up');
+    expect(lube.message).toMatch(/already present/);
+    expect(lube.message).toMatch(/0.15%/);
+  });
+
+  it('does not report a role as missing when it is carried in', () => {
+    expect(buildBlendRationale(regrind()).gaps.map((g) => g.role)).toEqual(['disintegrant']);
+    expect(
+      buildBlendRationale(regrind(), { rolesCarriedIn: ['disintegrant', 'lubricant'] }).gaps
+    ).toEqual([]);
+  });
+
+  it('leaves an unrecognised top-up alone rather than inventing a verdict', () => {
+    const r = buildBlendRationale([{ name: 'House lube blend', percentOfBlend: 0.2, freshTopUp: true }]);
+    expect(r.items[0].verdict).toBe('unknown');
   });
 });

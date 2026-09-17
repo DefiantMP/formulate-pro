@@ -280,7 +280,7 @@ export function lookupExcipient(name: string): KnownExcipient | null {
   );
 }
 
-export type AmountVerdict = 'typical' | 'below-typical' | 'above-typical' | 'unknown';
+export type AmountVerdict = 'typical' | 'below-typical' | 'above-typical' | 'unknown' | 'top-up';
 
 export interface ExcipientAssessment {
   name: string;
@@ -299,6 +299,12 @@ export interface ExcipientAssessment {
  * because a formulator has reasons this table cannot see, and a tool that
  * says "wrong" about a legitimate formulation trains people to ignore it.
  */
+/** Two decimals at most, trailing zeros dropped: 71.61825631686773 -> "71.62",
+ *  5 -> "5". The raw figure stays on the assessment for callers that want it. */
+function pct(n: number): string {
+  return String(parseFloat(n.toFixed(2)));
+}
+
 export function assessExcipient(name: string, percentOfBlend: number): ExcipientAssessment {
   const profile = lookupExcipient(name);
   if (!profile) {
@@ -307,7 +313,7 @@ export function assessExcipient(name: string, percentOfBlend: number): Excipient
       percentOfBlend,
       profile: null,
       verdict: 'unknown',
-      message: `Not in the reference table, so there is no typical range to compare ${percentOfBlend}% against.`,
+      message: `Not in the reference table, so there is no typical range to compare ${pct(percentOfBlend)}% against.`,
     };
   }
 
@@ -320,7 +326,7 @@ export function assessExcipient(name: string, percentOfBlend: number): Excipient
       percentOfBlend,
       profile,
       verdict: 'below-typical',
-      message: `${percentOfBlend}% is below the usual ${range} for a ${EXCIPIENT_ROLE_LABELS[profile.role].toLowerCase()}. ${profile.caution}`,
+      message: `${pct(percentOfBlend)}% is below the usual ${range} for a ${EXCIPIENT_ROLE_LABELS[profile.role].toLowerCase()}. ${profile.caution}`,
     };
   }
   if (max !== null && percentOfBlend > max) {
@@ -329,7 +335,7 @@ export function assessExcipient(name: string, percentOfBlend: number): Excipient
       percentOfBlend,
       profile,
       verdict: 'above-typical',
-      message: `${percentOfBlend}% is above the usual ${range}. ${profile.caution}`,
+      message: `${pct(percentOfBlend)}% is above the usual ${range}. ${profile.caution}`,
     };
   }
   return {
@@ -337,6 +343,105 @@ export function assessExcipient(name: string, percentOfBlend: number): Excipient
     percentOfBlend,
     profile,
     verdict: 'typical',
-    message: `${percentOfBlend}% sits within the usual ${range}. ${profile.amountRationale}`,
+    message: `${pct(percentOfBlend)}% sits within the usual ${range}. ${profile.amountRationale}`,
+  };
+}
+
+/* ------------------------------------------------------------------------
+ * Blend-level rationale — the panel under the New run output.
+ * ---------------------------------------------------------------------- */
+
+export interface BlendItem {
+  name: string;
+  percentOfBlend: number;
+  /** Actives are listed for context but never assessed: their level comes
+   *  from the dose, not from a typical excipient range. */
+  isActive?: boolean;
+  /**
+   * A small fresh addition on top of what the blend already contains — the
+   * regrind lubricant top-up. Comparing it against a full formulation's
+   * typical range would call a correct 0.15% "below typical", so it is
+   * explained instead of assessed.
+   */
+  freshTopUp?: boolean;
+}
+
+export interface BlendRationaleOptions {
+  /**
+   * Roles already filled by material carried into the blend rather than
+   * weighed out — in regrind, the disintegrant and lubricant already in the
+   * reground powder. Never reported as gaps: the job is being done, just not
+   * by a line on the weigh sheet.
+   */
+  rolesCarriedIn?: ExcipientRole[];
+}
+
+export interface BlendGap {
+  role: ExcipientRole;
+  message: string;
+}
+
+export interface BlendRationale {
+  /** One per excipient, in the order given. Actives are excluded. */
+  items: ExcipientAssessment[];
+  /** Jobs nothing in the blend is doing. Advisory — a formulation can be
+   *  fine without them (a fast-dissolving blend may need no disintegrant). */
+  gaps: BlendGap[];
+  /** Excipients absent from the table, for the AI tier to explain. */
+  unknownNames: string[];
+}
+
+/** Roles worth pointing out when nothing in the blend fills them. Glidant is
+ *  deliberately absent: plenty of blends flow fine without one, so flagging
+ *  it would be noise on most runs. */
+const EXPECTED_ROLES: { role: ExcipientRole; message: string }[] = [
+  {
+    role: 'lubricant',
+    message:
+      'Nothing in this blend is lubricating it. Without a lubricant the blend tends to stick to the punches and dies, and tablets are harder to eject. Deliberate for some direct-compression blends with self-lubricating fillers — worth confirming.',
+  },
+  {
+    role: 'disintegrant',
+    message:
+      'Nothing in this blend is acting as a disintegrant, so the tablet relies on the filler alone to break up. Fine for a chewable or a slowly-released product, and worth confirming otherwise.',
+  },
+];
+
+/**
+ * Explains a whole blend: what each excipient is doing, whether its level is
+ * typical, and which jobs nothing is doing.
+ *
+ * Ingredients at 0% are dropped — they are not in the blend, and explaining
+ * the purpose of something nobody is weighing out reads as an instruction to
+ * add it (the same reasoning that keeps 0 g lines out of the SOP).
+ */
+export function buildBlendRationale(
+  items: BlendItem[],
+  options: BlendRationaleOptions = {}
+): BlendRationale {
+  const excipients = items.filter((i) => !i.isActive && i.percentOfBlend > 0 && i.name.trim() !== '');
+  const assessments = excipients.map((i) => {
+    const assessment = assessExcipient(i.name.trim(), i.percentOfBlend);
+    if (!i.freshTopUp || !assessment.profile) return assessment;
+    return {
+      ...assessment,
+      verdict: 'top-up' as const,
+      message: `${pct(i.percentOfBlend)}% is a fresh top-up, not the whole amount in the blend — most of it is already present in the material being reworked, so this is not comparable with the usual range.`,
+    };
+  });
+  const rolesPresent = new Set([
+    ...assessments.map((a) => a.profile?.role).filter((r): r is ExcipientRole => !!r),
+    ...(options.rolesCarriedIn ?? []),
+  ]);
+
+  return {
+    items: assessments,
+    // Only claimed when every excipient was recognised: an unrecognised
+    // material may well be the missing lubricant, and "you have no lubricant"
+    // next to a material the table simply does not know is worse than silence.
+    gaps: assessments.every((a) => a.profile)
+      ? EXPECTED_ROLES.filter((r) => !rolesPresent.has(r.role))
+      : [],
+    unknownNames: assessments.filter((a) => !a.profile).map((a) => a.name),
   };
 }

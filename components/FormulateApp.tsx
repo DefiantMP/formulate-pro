@@ -21,6 +21,7 @@ import type {
   FreshApiStockEntry,
 } from '@/lib/calc-engine/types';
 import { fmt, fmtK, numOrZero } from '@/lib/format';
+import { buildBlendRationale, lookupExcipient, type ExcipientRole } from '@/lib/knownExcipients';
 import Sidebar from './Sidebar';
 import Topbar, { type AutosaveStatus } from './Topbar';
 import InputsPanel from './InputsPanel';
@@ -606,6 +607,75 @@ export default function FormulateApp() {
       mgPerTab: mgPerTab.toFixed(result.mode === 'regrind' ? 3 : 1) + ' mg',
     };
   }, [result]);
+
+  /**
+   * What each excipient in the finished blend is doing, for the Why tab.
+   *
+   * Built from the same merged figures the Output rows use — percentages are
+   * grams / totalBlendG, so the panel can never disagree with the amounts
+   * above it. Actives are passed through marked as such: their level comes
+   * from the dose, not from a typical excipient range.
+   */
+  const blendRationale = useMemo(() => {
+    if (!result) return null;
+    const pct = (grams: number) => (result.totalBlendG > 0 ? (grams / result.totalBlendG) * 100 : 0);
+
+    if (result.mode === 'fresh') {
+      const fillerLabel = result.fillerType.trim();
+      const mergesIntoFiller = (ing: { name: string; calculatedByDifference: boolean }) =>
+        !ing.calculatedByDifference &&
+        fillerLabel !== '' &&
+        ing.name.trim().toLowerCase() === fillerLabel.toLowerCase();
+      const mergedIntoFillerG = freshIngredients
+        .filter(mergesIntoFiller)
+        .reduce((sum, ing) => sum + (result.ingredientGrams[ing.id] ?? 0), 0);
+
+      return buildBlendRationale([
+        ...result.apis.map((api) => ({
+          name: api.label,
+          percentOfBlend: pct(result.ingredientGrams[api.id] ?? 0),
+          isActive: true,
+        })),
+        ...freshIngredients
+          .filter((ing) => !mergesIntoFiller(ing))
+          .map((ing) => ({
+            name: ing.calculatedByDifference ? fillerLabel : ing.name,
+            percentOfBlend: pct(
+              (result.ingredientGrams[ing.id] ?? 0) + (ing.calculatedByDifference ? mergedIntoFillerG : 0)
+            ),
+          })),
+      ]);
+    }
+
+    // Regrind: the reground powder is marked active — it already contains the
+    // previous blend's own excipients, so assessing it against a typical
+    // range for a single material would be meaningless.
+    return buildBlendRationale(
+      [
+        { name: 'Reground powder', percentOfBlend: pct(result.regroundPowderG), isActive: true },
+        { name: activeIngredient.name, percentOfBlend: pct(result.freshActiveG), isActive: true },
+        { name: result.fillerIngredientName, percentOfBlend: pct(result.fillerAddG + result.easyTabG) },
+        { name: result.siliconDioxideIngredientName, percentOfBlend: pct(result.siliconDioxideG) },
+        {
+          name: result.lubricantTopUpIngredientName,
+          percentOfBlend: pct(result.lubricantTopUpG),
+          freshTopUp: true,
+        },
+      ],
+      {
+        // The reground powder carries the previous blend's own disintegrant
+        // and lubricant, which is why the SOP adds no fresh disintegrant and
+        // only a small lubricant top-up. Without this the panel would report
+        // both as missing from a perfectly normal regrind.
+        rolesCarriedIn: [
+          'lubricant',
+          ...result.alreadyPresentIngredientNames
+            .map((n) => lookupExcipient(n)?.role)
+            .filter((r): r is ExcipientRole => !!r),
+        ],
+      }
+    );
+  }, [result, freshIngredients, activeIngredient]);
 
   const addRows: AddRowData[] = useMemo(() => {
     if (!result) return [];
@@ -1299,6 +1369,7 @@ export default function FormulateApp() {
               apiStockBreakdown={apiStockBreakdown}
               varianceRows={varianceRows}
               sopSteps={sopSteps}
+              rationale={blendRationale}
               emptyMessage={mode === 'regrind' ? regrindSolveError : freshSolveError}
             />
           </div>

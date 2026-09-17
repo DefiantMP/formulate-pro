@@ -1,7 +1,9 @@
 import type { VarianceRow } from '@/lib/calc-engine/types';
+import type { BlendRationale } from '@/lib/knownExcipients';
+import BlendRationalePanel from './BlendRationalePanel';
 import { fmt } from '@/lib/format';
 
-export type TabKey = 'output' | 'variance' | 'sop';
+export type TabKey = 'output' | 'variance' | 'sop' | 'rationale';
 
 export interface AddRowData {
   label: string;
@@ -89,6 +91,8 @@ interface OutputPanelProps {
   apiStockBreakdown?: ApiStockBreakdownRow[] | null;
   varianceRows: VarianceRow[];
   sopSteps: string[];
+  /** What each excipient is doing and whether its level is typical. */
+  rationale: BlendRationale | null;
   /** Overrides the default empty-state text — e.g. a regrind solve-mode validation or infeasibility error. */
   emptyMessage?: string | null;
 }
@@ -104,6 +108,7 @@ export default function OutputPanel({
   apiStockBreakdown,
   varianceRows,
   sopSteps,
+  rationale,
   emptyMessage,
 }: OutputPanelProps) {
   const limitingApi = apiStockBreakdown?.find((a) => a.isLimiting) ?? null;
@@ -128,7 +133,26 @@ export default function OutputPanel({
         >
           SOP
         </div>
+        <div
+          className={`tab${activeTab === 'rationale' ? ' active' : ''}`}
+          onClick={() => onTabChange('rationale')}
+        >
+          Why
+        </div>
       </div>
+
+      {activeTab === 'rationale' && (
+        <div className="card-body" style={{ flex: 1, overflowY: 'auto' }}>
+          {!hasResult || !rationale ? (
+            <div className="empty">
+              <i className="ti ti-help-circle" />
+              Enter values on the left to see what each excipient is doing
+            </div>
+          ) : (
+            <BlendRationalePanel rationale={rationale} />
+          )}
+        </div>
+      )}
 
       {activeTab === 'output' && (
         <div className="card-body" style={{ flex: 1, overflowY: 'auto' }}>
