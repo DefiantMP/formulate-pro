@@ -245,9 +245,11 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .lot-breakdown-val { color: var(--text-2); }
 
 .inputs-reset { position: relative; padding: 10px 0 2px; margin-top: 4px; border-top: 0.5px solid var(--border); display: flex; justify-content: flex-end; }
-.inputs-reset-confirm { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 900; width: 290px; padding: 12px; border-radius: 8px; background: var(--surface); border: 0.5px solid var(--border-md); box-shadow: 0 8px 24px rgba(0,0,0,0.12); text-align: left; }
 .newrun-wrap { position: relative; }
-.newrun-confirm { position: absolute; top: calc(100% + 6px); right: 0; z-index: 900; width: 290px; padding: 12px; border-radius: 8px; background: var(--surface); border: 0.5px solid var(--border-md); box-shadow: 0 8px 24px rgba(0,0,0,0.12); text-align: left; }
+/* Rendered at the page level by components/Popover.tsx so no card or column
+   can clip it; position, width and max-height are set inline from
+   lib/popoverPosition.ts. */
+.popover { position: fixed; z-index: 1200; padding: 12px; border-radius: 8px; background: var(--surface); border: 0.5px solid var(--border-md); box-shadow: 0 8px 24px rgba(0,0,0,0.14); text-align: left; }
 .newrun-confirm-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .newrun-confirm-desc { font-size: 11px; color: var(--text-2); line-height: 1.5; margin-bottom: 10px; }
 
@@ -257,8 +259,12 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 
 /* Upfront run-naming overlay — covers just the Inputs card (see FormulateApp's col-left
    wrapper) so Run History stays reachable while a new run is unnamed. */
-.name-run-overlay { position: absolute; inset: 0; z-index: 20; background: rgba(244,244,241,0.92); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; border-radius: 10px; padding: 20px; }
-.name-run-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 10px; padding: 18px; width: 100%; max-width: 260px; box-shadow: 0 10px 30px rgba(0,0,0,0.14); display: flex; flex-direction: column; gap: 10px; }
+/* align-items: flex-start + margin: auto on the card, rather than
+   align-items: center: a centred flex item taller than its container has its
+   overflowing top cut off and cannot be scrolled to. In a short window this
+   put the "Start run" button below the fold with no way to reach it. */
+.name-run-overlay { position: absolute; inset: 0; z-index: 20; background: rgba(244,244,241,0.92); backdrop-filter: blur(2px); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; border-radius: 10px; padding: 20px; }
+.name-run-card { background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 10px; padding: 18px; width: 100%; max-width: 260px; box-shadow: 0 10px 30px rgba(0,0,0,0.14); display: flex; flex-direction: column; gap: 10px; margin: auto; }
 .name-run-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .name-run-desc { font-size: 11px; color: var(--text-2); line-height: 1.4; }
 

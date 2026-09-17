@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import Popover from './Popover';
 import type { IngredientLine } from '@/lib/calc-engine/types';
 import { FRESH_FILLER_TYPES } from '@/lib/calc-engine/types';
 import { numOrZero } from '@/lib/format';
@@ -74,6 +75,7 @@ interface InputsPanelProps {
 export default function InputsPanel(props: InputsPanelProps) {
   const { mode, onModeChange, disabled = false } = props;
   const [confirmClear, setConfirmClear] = useState(false);
+  const clearRef = useRef<HTMLButtonElement>(null);
   const lotWeightSum = props.lots.reduce((sum, lot) => sum + numOrZero(lot.weightG), 0);
 
   return (
@@ -343,32 +345,42 @@ export default function InputsPanel(props: InputsPanelProps) {
       </fieldset>
 
       <div className="inputs-reset">
-        <button type="button" className="btn" onClick={() => setConfirmClear(true)} disabled={disabled}>
+        <button
+          ref={clearRef}
+          type="button"
+          className="btn"
+          onClick={() => setConfirmClear(true)}
+          disabled={disabled}
+        >
           <i className="ti ti-refresh" /> Reset values
         </button>
-        {confirmClear && (
-          <div className="inputs-reset-confirm">
-            <div className="newrun-confirm-desc" style={{ marginBottom: 8 }}>
-              Clear every value entered above and start this run&apos;s numbers again? The run keeps
-              its name — use <b>New run</b> at the top to start a different batch.
-            </div>
-            <div className="row">
-              <button
-                type="button"
-                className="btn btn-p"
-                onClick={() => {
-                  setConfirmClear(false);
-                  props.onClearValues();
-                }}
-              >
-                <i className="ti ti-refresh" /> Clear values
-              </button>
-              <button type="button" className="btn" onClick={() => setConfirmClear(false)}>
-                Cancel
-              </button>
-            </div>
+        <Popover
+          anchorRef={clearRef}
+          open={confirmClear}
+          onClose={() => setConfirmClear(false)}
+          prefer="above"
+          label="Clear the values on this run?"
+        >
+          <div className="newrun-confirm-desc" style={{ marginBottom: 8 }}>
+            Clear every value entered above and start this run&apos;s numbers again? The run keeps
+            its name — use <b>New run</b> at the top to start a different batch.
           </div>
-        )}
+          <div className="row">
+            <button
+              type="button"
+              className="btn btn-p"
+              onClick={() => {
+                setConfirmClear(false);
+                props.onClearValues();
+              }}
+            >
+              <i className="ti ti-refresh" /> Clear values
+            </button>
+            <button type="button" className="btn" onClick={() => setConfirmClear(false)}>
+              Cancel
+            </button>
+          </div>
+        </Popover>
       </div>
       </div>
     </div>

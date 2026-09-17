@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import Popover from './Popover';
 import type { Mode } from './FormulateApp';
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -34,6 +35,7 @@ export default function Topbar({
   canPrint,
 }: TopbarProps) {
   const [confirming, setConfirming] = useState(false);
+  const newRunRef = useRef<HTMLButtonElement>(null);
 
   function handleNewRun() {
     // Nothing entered yet, or nothing at risk — just start over. The confirm
@@ -73,37 +75,40 @@ export default function Topbar({
       </div>
       <div className="topbar-right">
         <div className="newrun-wrap">
-          <button className="btn" onClick={handleNewRun} title="Start another run">
+          <button ref={newRunRef} className="btn" onClick={handleNewRun} title="Start another run">
             <i className="ti ti-plus" /> New run
           </button>
-          {confirming && (
-            <div className="newrun-confirm">
-              <div className="newrun-confirm-title">Start another run?</div>
-              <div className="newrun-confirm-desc">
-                {autosaveStatus === 'error' ? (
-                  <>
-                    <b>{runName || 'This run'} has not saved.</b> Autosave failed, so clearing the
-                    form now loses what is on screen. Check Run history first.
-                  </>
-                ) : autosaveStatus === 'saving' ? (
-                  <>Still saving {runName || 'this run'} — give it a moment, then start the next one.</>
-                ) : (
-                  <>
-                    <b>{runName || 'This run'}</b> is saved in Run history and stays there. You are
-                    only clearing the form to enter the next batch.
-                  </>
-                )}
-              </div>
-              <div className="row">
-                <button className="btn btn-p" onClick={confirm} disabled={autosaveStatus === 'saving'}>
-                  <i className="ti ti-plus" /> Start new run
-                </button>
-                <button className="btn" onClick={() => setConfirming(false)}>
-                  Cancel
-                </button>
-              </div>
+          <Popover
+            anchorRef={newRunRef}
+            open={confirming}
+            onClose={() => setConfirming(false)}
+            label="Start another run?"
+          >
+            <div className="newrun-confirm-title">Start another run?</div>
+            <div className="newrun-confirm-desc">
+              {autosaveStatus === 'error' ? (
+                <>
+                  <b>{runName || 'This run'} has not saved.</b> Autosave failed, so clearing the
+                  form now loses what is on screen. Check Run history first.
+                </>
+              ) : autosaveStatus === 'saving' ? (
+                <>Still saving {runName || 'this run'} — give it a moment, then start the next one.</>
+              ) : (
+                <>
+                  <b>{runName || 'This run'}</b> is saved in Run history and stays there. You are
+                  only clearing the form to enter the next batch.
+                </>
+              )}
             </div>
-          )}
+            <div className="row">
+              <button className="btn btn-p" onClick={confirm} disabled={autosaveStatus === 'saving'}>
+                <i className="ti ti-plus" /> Start new run
+              </button>
+              <button className="btn" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+            </div>
+          </Popover>
         </div>
         <button
           className="btn"
