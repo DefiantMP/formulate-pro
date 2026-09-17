@@ -21,7 +21,12 @@ import type {
   FreshApiStockEntry,
 } from '@/lib/calc-engine/types';
 import { fmt, fmtK, numOrZero } from '@/lib/format';
-import { buildBlendRationale, lookupExcipient, type ExcipientRole } from '@/lib/knownExcipients';
+import {
+  buildBlendRationale,
+  lookupExcipient,
+  EXCIPIENT_ROLE_LABELS,
+  type ExcipientRole,
+} from '@/lib/knownExcipients';
 import Sidebar from './Sidebar';
 import Topbar, { type AutosaveStatus } from './Topbar';
 import InputsPanel from './InputsPanel';
@@ -1546,6 +1551,34 @@ export default function FormulateApp() {
               <li key={i}>{step}</li>
             ))}
           </ol>
+        </section>
+      )}
+
+      {blendRationale && blendRationale.items.length > 0 && (
+        <section className="print-section">
+          <h2>Why this blend</h2>
+          <div className="print-rationale-note">
+            What each excipient is doing and whether its level is typical. General
+            direct-compression reference points, not a product spec — a level outside a typical
+            range is unusual, not wrong. Materials the reference table does not recognise are
+            listed without a verdict.
+          </div>
+          <ul className="print-rationale-list">
+            {blendRationale.items.map((item) => (
+              <li key={item.name}>
+                <b>
+                  {item.name} — {item.percentOfBlend.toFixed(2)}%
+                  {item.profile ? ` · ${EXCIPIENT_ROLE_LABELS[item.profile.role]}` : ''}
+                </b>
+                {item.profile ? ` ${item.profile.purpose} ${item.message}` : ` ${item.message}`}
+              </li>
+            ))}
+            {blendRationale.gaps.map((gap) => (
+              <li key={gap.role}>
+                <b>No {EXCIPIENT_ROLE_LABELS[gap.role].toLowerCase()} in this blend.</b> {gap.message}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>
