@@ -1,13 +1,15 @@
 import { cookies } from 'next/headers';
 import { prisma } from './db';
-import { readSessionToken, SESSION_COOKIE, type SessionPayload } from './auth';
+import { readSessionToken, SESSION_COOKIE, sessionStillValid, type SessionPayload } from './auth';
 
 /**
  * The signed-in user for the current request, or null.
  *
  * Re-reads the User row rather than trusting the cookie's copy: role and
  * deletedAt can change after a token was issued, and a signature must not be
- * accepted from an account that has since been archived or demoted.
+ * accepted from an account that has since been archived or demoted. The
+ * same re-read enforces sessionsValidFrom, which is what makes a password
+ * reset or deactivation end sessions already issued.
  */
 export async function getCurrentUser() {
   const token = cookies().get(SESSION_COOKIE)?.value;
@@ -22,9 +24,11 @@ export async function getCurrentUser() {
   if (!payload) return null;
   const user = await prisma.user.findFirst({
     where: { id: payload.userId, deletedAt: null },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, sessionsValidFrom: true },
   });
-  return user ?? null;
+  if (!user || !sessionStillValid(payload.iat, user.sessionsValidFrom)) return null;
+  const { sessionsValidFrom: _cutoff, ...rest } = user;
+  return rest;
 }
 
 /** For GMP-gated writes: the acting user, or an error explaining the block. */

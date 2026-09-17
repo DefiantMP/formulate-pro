@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
+import AccountsCard from './AccountsCard';
 import { fmtDateTime } from '@/lib/format';
 import type { LotStatusEnforcement } from '@/lib/gmp';
 
@@ -18,7 +19,9 @@ export default function SettingsPage() {
   const [enabled, setEnabled] = useState(false);
   const [enforcement, setEnforcement] = useState<LotStatusEnforcement>('warn');
   const [log, setLog] = useState<ToggleLogEntry[] | null>(null);
-  const [actorName, setActorName] = useState('');
+  // The toggle is recorded against the signed-in account server-side, so the
+  // page only needs to know who that is — to say so, and to block when nobody is.
+  const [me, setMe] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [note, setNote] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,6 +41,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     load();
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : { user: null }))
+      .then((d) => setMe(d.user ?? null))
+      .catch(() => setMe(null));
   }, [load]);
 
   async function patch(body: Record<string, unknown>, failMsg: string) {
@@ -66,12 +73,11 @@ export default function SettingsPage() {
 
   async function confirmToggle() {
     const ok = await patch(
-      { enabled: !enabled, actorName, note: note.trim() || null },
+      { enabled: !enabled, note: note.trim() || null },
       'Failed to change GMP mode.'
     );
     if (ok) {
       setConfirming(false);
-      setActorName('');
       setNote('');
     }
   }
@@ -133,20 +139,17 @@ export default function SettingsPage() {
                     This is recorded permanently in the log below — who, when, and the state
                     change. The entry cannot be edited or removed afterwards.
                   </div>
-                  <div className="field">
-                    <label htmlFor="gmp-actor">Your name</label>
-                    <input
-                      id="gmp-actor"
-                      type="text"
-                      value={actorName}
-                      onChange={(e) => setActorName(e.target.value)}
-                      placeholder="Name or initials"
-                      autoFocus
-                    />
-                    <div className="field-hint">
-                      Free text — there is no login, so this is self-reported and not verified
-                      identity.
-                    </div>
+                  <div className="field-hint" style={{ marginBottom: 8 }}>
+                    {me ? (
+                      <>
+                        Recorded against your account: <b>{me.name}</b>.
+                      </>
+                    ) : (
+                      <>
+                        <b>Sign in first</b> — the change is recorded against your account, not a
+                        typed name.
+                      </>
+                    )}
                   </div>
                   <div className="field">
                     <label htmlFor="gmp-note">Reason (optional)</label>
@@ -156,6 +159,7 @@ export default function SettingsPage() {
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                       placeholder="e.g. Preparing for audit"
+                      autoFocus
                     />
                   </div>
                   <div className="row">
@@ -163,7 +167,7 @@ export default function SettingsPage() {
                       type="button"
                       className="btn btn-p"
                       onClick={confirmToggle}
-                      disabled={saving || !actorName.trim()}
+                      disabled={saving || !me}
                     >
                       <i className="ti ti-check" /> {saving ? 'Saving…' : 'Confirm and log'}
                     </button>
@@ -252,6 +256,8 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+
+          <AccountsCard meId={me?.id ?? null} />
         </div>
       </div>
     </div>

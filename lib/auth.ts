@@ -41,6 +41,30 @@ export interface SessionPayload {
   email: string;
   name: string;
   role: string;
+  /** Issued-at, in whole seconds. Set by the signer; absent on a payload
+   *  being built for signing. */
+  iat?: number;
+}
+
+/**
+ * Whether a session issued at `iatSeconds` survives the account's
+ * `sessionsValidFrom` cut-off, set when a password is reset or an account
+ * is deactivated. Without it, a reset would leave anyone already holding a
+ * session — the reason for the reset, often — signed in for up to a shift.
+ *
+ * Compared at whole-second precision, because that is all `iat` carries: a
+ * sign-in in the same second as the reset is kept rather than bounced.
+ */
+export function sessionStillValid(iatSeconds: number | undefined, sessionsValidFrom: Date | null): boolean {
+  if (!sessionsValidFrom) return true;
+  if (typeof iatSeconds !== 'number') return false;
+  return iatSeconds >= Math.floor(sessionsValidFrom.getTime() / 1000);
+}
+
+/** An admin may be demoted or deactivated only if another active admin
+ *  remains — otherwise nobody could ever grant a role again. */
+export function wouldRemoveLastAdmin(targetRole: string, activeAdminCount: number): boolean {
+  return targetRole === 'admin' && activeAdminCount <= 1;
 }
 
 export function hashPassword(plain: string): Promise<string> {
@@ -86,9 +110,9 @@ export async function readSessionToken(token: string | undefined): Promise<Sessi
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    const { userId, email, name, role } = payload as unknown as SessionPayload;
+    const { userId, email, name, role, iat } = payload as unknown as SessionPayload;
     if (!userId || !email) return null;
-    return { userId, email, name, role };
+    return { userId, email, name, role, iat };
   } catch {
     return null;
   }

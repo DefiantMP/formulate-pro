@@ -605,6 +605,10 @@ model User {
   // Soft delete, same reason as Run/SavedFormulation: a user who signed a
   // batch record cannot be erased without orphaning that signature.
   deletedAt    DateTime?
+  // Sessions issued before this moment are refused (lib/auth.ts
+  // sessionStillValid). Set on password reset and on deactivation, so a
+  // reset actually ends whatever session prompted it. Null means never set.
+  sessionsValidFrom DateTime?
 
   reviewedRuns         Run[]               @relation("RunReviewer")
   reviewedFormulations SavedFormulation[]  @relation("SavedFormulationReviewer")
@@ -614,6 +618,8 @@ model User {
   closedDeviations     RunDeviation[]      @relation("DeviationClosedBy")
   gmpToggles           GmpModeToggleLog[]
   lotAdjustments       LotAdjustment[]
+  passwordResets       PasswordResetToken[] @relation("ResetFor")
+  issuedPasswordResets PasswordResetToken[] @relation("ResetIssuedBy")
 
   @@index([email])
 }
@@ -644,4 +650,36 @@ model LotAdjustment {
   adjustedAt   DateTime @default(now())
 
   @@index([lotId])
+}
+
+// Admin-issued one-time password reset link (lib/passwordReset.ts). Only the
+// SHA-256 of the token is stored — the token itself is shown to the issuing
+// admin once. Rows are kept after use or revocation as a record of who reset
+// whose password, and when.
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("ResetFor", fields: [userId], references: [id])
+  issuedById  String
+  issuedBy    User      @relation("ResetIssuedBy", fields: [issuedById], references: [id])
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  // Set when a newer link is issued for the same user, or the account is
+  // deactivated — an older link must not outlive its replacement.
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Failed sign-in counter, keyed by the normalised email TYPED rather than by
+// account, so a lock looks identical for real and unknown emails
+// (lib/loginThrottle.ts). Deleted on a successful sign-in or password reset.
+model LoginThrottle {
+  email         String    @id
+  failedCount   Int       @default(0)
+  firstFailedAt DateTime?
+  lockedUntil   DateTime?
+  updatedAt     DateTime  @updatedAt
 }

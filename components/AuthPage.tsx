@@ -101,6 +101,11 @@ export default function AuthPage() {
         </div>
 
         {error && <div className="rm-inline-err">{error}</div>}
+        {mode === 'login' && (
+          <div className="field-hint" style={{ marginTop: 6 }}>
+            Forgot your password? Ask an admin for a reset link.
+          </div>
+        )}
 
         <button type="submit" className="btn btn-p" style={{ width: '100%', justifyContent: 'center', marginTop: 10 }} disabled={busy}>
           {busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account and sign in'}

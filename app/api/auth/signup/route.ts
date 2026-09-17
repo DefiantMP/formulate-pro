@@ -31,10 +31,13 @@ export async function POST(request: NextRequest) {
   if (pwProblem) return NextResponse.json({ error: pwProblem }, { status: 400 });
 
   const passwordHash = await hashPassword(password);
-  // Bootstrap: an empty instance needs one admin, or nobody could ever grant
-  // the role. Counting deleted users too, so archiving the last admin cannot
-  // reopen the bootstrap and hand the next signup admin rights.
-  const isFirstAccount = (await prisma.user.count()) === 0;
+  // Bootstrap: an instance with no active admin needs one, or nobody could
+  // ever grant a role. This used to count every user including deactivated
+  // ones, which left an instance whose accounts were all non-admins (or all
+  // deactivated) permanently without an admin. Counting ACTIVE admins cannot
+  // be abused to reopen the bootstrap, because the last active admin can be
+  // neither demoted nor deactivated (wouldRemoveLastAdmin in lib/auth.ts).
+  const isFirstAccount = (await prisma.user.count({ where: { role: 'admin', deletedAt: null } })) === 0;
   try {
     const user = await prisma.user.create({
       data: {
