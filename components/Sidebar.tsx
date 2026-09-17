@@ -69,9 +69,12 @@ export default function Sidebar() {
         <div className="nav-section" style={{ marginTop: 8 }}>
           Account
         </div>
-        <button className="nav-btn">
+        <Link
+          href="/products"
+          className={`nav-btn${pathname.startsWith('/products') ? ' active' : ''}`}
+        >
           <i className="ti ti-building-factory-2" /> Products
-        </button>
+        </Link>
         <Link href="/settings" className={`nav-btn${pathname.startsWith('/settings') ? ' active' : ''}`}>
           <i className="ti ti-settings" /> Settings
         </Link>

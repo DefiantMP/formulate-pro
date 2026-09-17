@@ -225,3 +225,174 @@ export function productsFrom(runs: Pick<RunForSummary, 'product'>[]): { product:
     .map(([product, runCount]) => ({ product, runCount }))
     .sort((a, b) => a.product.localeCompare(b.product));
 }
+
+/* ------------------------------------------------------------------------
+ * Product-level rollup — what the Products pages show.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * One figure across several runs of the same product.
+ *
+ * Median rather than mean, and the range is always carried alongside it: two
+ * 60mg runs and one 14mg run average to 44.7mg, a dose nobody has ever made.
+ * `varies` marks a figure whose spread is wide enough that quoting a single
+ * number would be misleading — the UI shows the range instead.
+ */
+export interface TypicalFigure {
+  median: number;
+  min: number;
+  max: number;
+  /** How many runs contributed a value. */
+  count: number;
+  varies: boolean;
+}
+
+/** Spread beyond this fraction of the median counts as "varies". 10% is wide
+ *  enough to absorb ordinary rounding between batches and narrow enough to
+ *  catch a genuinely different formulation filed under the same product. */
+export const VARIES_THRESHOLD = 0.1;
+
+export function summarizeFigure(values: number[]): TypicalFigure | null {
+  const nums = values.filter((v) => Number.isFinite(v));
+  if (nums.length === 0) return null;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  // A median of 0 with any spread is always "varies" — there is no meaningful
+  // percentage of zero to compare against.
+  const varies = median === 0 ? max !== min : (max - min) / Math.abs(median) > VARIES_THRESHOLD;
+  return { median, min, max, count: nums.length, varies };
+}
+
+export interface TypicalActive {
+  label: string;
+  /** Runs of this product that included an active with this label. */
+  runCount: number;
+  mgPerTablet: TypicalFigure | null;
+  potencyPercent: TypicalFigure | null;
+}
+
+export interface TypicalExcipient {
+  name: string;
+  runCount: number;
+  percentOfBlend: TypicalFigure | null;
+}
+
+export interface ProductSummary {
+  product: string;
+  runCount: number;
+  freshCount: number;
+  regrindCount: number;
+  firstRunAt: string;
+  lastRunAt: string;
+  /** COA outcomes recorded against this product's runs. */
+  passedCount: number;
+  failedCount: number;
+  coaRecordedCount: number;
+  tabletWeightG: TypicalFigure | null;
+  tabletCount: TypicalFigure | null;
+  actives: TypicalActive[];
+  excipients: TypicalExcipient[];
+  /** Fillers seen, most used first — a product that has switched filler shows both. */
+  fillers: { name: string; runCount: number }[];
+}
+
+/**
+ * Rolls a product's runs into the figures its page shows.
+ *
+ * Fresh and regrind runs are summarised together for counts and dates but
+ * only FRESH runs feed the typical recipe: a regrind's blend is mostly
+ * reworked material whose excipients came in with it, so folding its
+ * percentages into a recipe would describe a blend nobody ever weighed out.
+ * A product with only regrind runs therefore has no typical recipe, which is
+ * the honest answer rather than a fabricated one.
+ */
+/**
+ * Groups names that differ only in case or spacing — "EZTAB", "EZTab" and
+ * "EZTAB " are one material typed three ways, and reporting them as three
+ * fillers makes a settled product look like it keeps changing. The spelling
+ * shown is the one used most often (ties broken by first appearance), so the
+ * page still reads in the operator's own words.
+ */
+function groupByName<T>(entries: { name: string; value: T }[]): { name: string; values: T[] }[] {
+  const groups = new Map<string, { spellings: Map<string, number>; values: T[] }>();
+  for (const { name, value } of entries) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    const group = groups.get(key) ?? { spellings: new Map<string, number>(), values: [] as T[] };
+    group.spellings.set(trimmed, (group.spellings.get(trimmed) ?? 0) + 1);
+    group.values.push(value);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({
+    name: [...group.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0],
+    values: group.values,
+  }));
+}
+
+export function summarizeProduct(product: string, runs: PriorRunSummary[]): ProductSummary | null {
+  if (runs.length === 0) return null;
+  const byDate = [...runs].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  const fresh = runs.filter((r) => r.mode === 'fresh');
+
+  const activeGroups = groupByName(
+    fresh.flatMap((run) => run.actives.map((active) => ({ name: active.label, value: active })))
+  );
+  const excipientGroups = groupByName(
+    fresh.flatMap((run) => run.excipients.map((exc) => ({ name: exc.name, value: exc.percentOfBlend })))
+  );
+  const fillerGroups = groupByName(
+    fresh.flatMap((run) => (run.fillerName ? [{ name: run.fillerName, value: 1 }] : []))
+  );
+
+  return {
+    product,
+    runCount: runs.length,
+    freshCount: fresh.length,
+    regrindCount: runs.length - fresh.length,
+    firstRunAt: byDate[0].createdAt,
+    lastRunAt: byDate[byDate.length - 1].createdAt,
+    passedCount: runs.filter((r) => r.outcome === 'passed').length,
+    failedCount: runs.filter((r) => r.outcome === 'failed').length,
+    coaRecordedCount: runs.filter((r) => r.outcome !== 'not_recorded').length,
+    tabletWeightG: summarizeFigure(fresh.map((r) => r.tabletWeightG).filter((v): v is number => v !== null)),
+    tabletCount: summarizeFigure(fresh.map((r) => r.tabletCount).filter((v): v is number => v !== null)),
+    actives: activeGroups
+      .map(({ name, values }) => ({
+        label: name,
+        runCount: values.length,
+        mgPerTablet: summarizeFigure(values.map((e) => e.targetMgPerTablet)),
+        potencyPercent: summarizeFigure(values.map((e) => e.potencyPercent)),
+      }))
+      .sort((a, b) => b.runCount - a.runCount || a.label.localeCompare(b.label)),
+    excipients: excipientGroups
+      .map(({ name, values }) => ({
+        name,
+        runCount: values.length,
+        percentOfBlend: summarizeFigure(values),
+      }))
+      .sort((a, b) => b.runCount - a.runCount || a.name.localeCompare(b.name)),
+    fillers: fillerGroups
+      .map(({ name, values }) => ({ name, runCount: values.length }))
+      .sort((a, b) => b.runCount - a.runCount || a.name.localeCompare(b.name)),
+  };
+}
+
+/** Every product with runs, newest activity first — the Products list. */
+export function summarizeProducts(runs: PriorRunSummary[]): ProductSummary[] {
+  const byProduct = new Map<string, PriorRunSummary[]>();
+  for (const run of runs) {
+    const key = run.product?.trim();
+    if (!key) continue;
+    byProduct.set(key, [...(byProduct.get(key) ?? []), run]);
+  }
+  return [...byProduct.entries()]
+    .map(([product, rows]) => summarizeProduct(product, rows))
+    .filter((s): s is ProductSummary => s !== null)
+    .sort((a, b) => new Date(b.lastRunAt).getTime() - new Date(a.lastRunAt).getTime());
+}

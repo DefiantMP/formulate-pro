@@ -96,6 +96,13 @@ Operator UI shipped 2026-08-16 (`/raw-materials`, `/raw-materials/[id]`, `/lots/
 - **A flex-centred overlay taller than its container cannot be scrolled to.** `.name-run-overlay` centred its card with `align-items: center`; in a 900x300 window the "Start run" button sat below the fold, unreachable. Fixed with `align-items: flex-start` + `margin: auto` on the card, which centres when there is room and scrolls when there is not. Use that pattern, not `align-items: center`, for anything that can outgrow its box.
 - Verified live at 1024x768, 420x700, 280x260 and 900x300: panel fully on screen and every button reachable at each.
 
+## Products pages (2026-09-17)
+
+- **`/products` and `/products/[product]`** (`ProductsPage`, `ProductDetailPage`), reached from the sidebar's Products entry — the last inert nav button, now a real page. Both derive everything from run history via `summarizeProducts` / `summarizeProduct` in `lib/productHistory.ts`; there is still no Product table, for the same reason `/api/products` has none: a product is "something we have made batches of", so the runs ARE the list, and a separate record could drift out of step with them.
+- **The typical recipe is medians with ranges, never means.** `summarizeFigure` returns median + min/max + `varies` (spread > `VARIES_THRESHOLD`, 10% of the median); the UI shows a single number only when the figure is settled and the range when it is not. Averaging 60mg and 14mg batches yields a dose nobody ever pressed — the same "no averaging across runs" rule `PriorRunsPanel` already states.
+- **Only FRESH runs feed the recipe.** A regrind blend is mostly reworked material whose excipients came in with it, so folding its percentages in would describe a blend nobody weighed out. Regrind runs still count toward run totals and dates; a regrind-only product says it has no recipe rather than inventing one.
+- **Names are grouped case- and space-insensitively**, showing the most-used spelling (`groupByName`). Real data had one product's filler recorded as "EZTAB", "EZTab" and "EZTAB ", which read as three fillers — a settled product looking like it kept changing.
+
 ## Starting another run (2026-09-17)
 
 - **The topbar's button is "New run", not "Reset".** It always did clear the form and reopen the naming prompt, but operators read "Reset" as "wipe this run's saved record" and started their next batch by navigating away and back instead. Same action, named for the job; it confirms first (when the run has content) with a line saying the current run is already saved in Run history — reassurance, not a nag, so an empty form skips it. If autosave has failed or is mid-flight the confirm says so instead, and "Start new run" is disabled while saving.

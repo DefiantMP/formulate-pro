@@ -361,6 +361,29 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .status-failed { background: var(--danger-bg); color: var(--danger-text); }
 .status-issue { background: var(--warning-bg); color: var(--warning-text); }
 
+.prod-list-hdr, .prod-row { display: grid; grid-template-columns: 2fr 0.6fr 1fr 1.4fr 20px; gap: 10px; align-items: center; padding: 11px 14px; }
+.prod-list-hdr { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 0.5px solid var(--border); }
+.prod-row { border-bottom: 0.5px solid var(--border); font-size: 12px; color: var(--text-2); text-decoration: none; }
+.prod-row:last-child { border-bottom: none; }
+.prod-row:hover { background: var(--bg); }
+.prod-row b { color: var(--text); font-size: 13px; font-weight: 600; }
+.prod-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.prod-muted { color: var(--text-3); }
+.prod-back { font-size: 11px; color: var(--text-3); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; }
+.prod-back:hover { color: var(--brand); }
+.prod-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.prod-stats span { display: block; font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+.prod-stats strong { font-size: 15px; color: var(--text); font-weight: 600; }
+.prod-rec-row { display: grid; grid-template-columns: 2fr 1fr 0.8fr; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--border); font-size: 12px; color: var(--text-2); }
+.prod-rec-row:last-child { border-bottom: none; }
+.prod-rec-row b { color: var(--text); font-weight: 600; }
+.prod-rec-hdr { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.prod-run-row { display: grid; grid-template-columns: 2fr 0.8fr 1fr 1.4fr 20px; gap: 10px; align-items: center; padding: 11px 14px; border-bottom: 0.5px solid var(--border); font-size: 12px; color: var(--text-2); }
+.prod-run-row:last-child { border-bottom: none; }
+.prod-run-row b { color: var(--text); font-weight: 600; }
+.prod-varies { color: var(--warning-text); white-space: nowrap; }
+.prod-varies i { font-size: 11px; }
+
 /* Composition + outcome chart */
 .chart-block { margin-bottom: 16px; }
 .chart-status-legend { display: flex; gap: 14px; margin-top: 6px; padding: 0 8px; }
