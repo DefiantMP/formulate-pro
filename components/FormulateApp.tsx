@@ -1264,16 +1264,14 @@ export default function FormulateApp() {
     setShowNamePrompt(false);
   }
 
-  function resetForm() {
-    setLoadedRun(null);
-    setRunName('');
-    setRunProduct('');
+  /**
+   * Clears the entered values but keeps the run itself — its name, product and
+   * row in Run history. The "Reset values" control under Inputs: for retyping
+   * the numbers of the run you are on, not for starting a different one.
+   */
+  function clearValues() {
     setLotUsages([]);
     setUsageWarnings([]);
-    setShowNamePrompt(true);
-    setAutosaveStatus('idle');
-    savingInFlightRef.current = false;
-    dirtyRef.current = false;
     setApis([blankApi('', 'active')]);
     setFPotMethod('bulkPercent');
     setFTwt('');
@@ -1289,6 +1287,19 @@ export default function FormulateApp() {
     setRgTargetTablets('');
   }
 
+  /** Clears everything and reopens the naming prompt — the "New run" button.
+   *  A named run has already autosaved, so nothing is lost by starting another. */
+  function resetForm() {
+    setLoadedRun(null);
+    setRunName('');
+    setRunProduct('');
+    setShowNamePrompt(true);
+    setAutosaveStatus('idle');
+    savingInFlightRef.current = false;
+    dirtyRef.current = false;
+    clearValues();
+  }
+
   // Drives TipsCard's "Option B" tip — only relevant once potency is
   // actually being entered that way, not just because the mode supports it.
   const usingOptionB = mode === 'fresh' ? fPotMethod === 'mgPerUnit' : lots.some((lot) => lot.opt === 'b');
@@ -1302,7 +1313,8 @@ export default function FormulateApp() {
           mode={mode}
           runName={runName}
           autosaveStatus={autosaveStatus}
-          onReset={resetForm}
+          onNewRun={resetForm}
+          hasContent={!showNamePrompt && (!!runName || !!result)}
           onPrint={() => window.print()}
           canPrint={!!result}
         />
@@ -1312,6 +1324,7 @@ export default function FormulateApp() {
             <InputsPanel
               mode={mode}
               disabled={showNamePrompt}
+              onClearValues={clearValues}
               onModeChange={setMode}
               apis={apis}
               onUpdateApi={updateApi}
