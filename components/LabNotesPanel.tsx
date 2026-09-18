@@ -16,6 +16,19 @@ export interface LabNoteRecord {
   author: { name: string } | null;
   retractedBy: { name: string } | null;
   run: { id: string; label: string; product: string | null; createdAt: string } | null;
+  source?: 'typed' | 'text_file' | 'transcribed';
+  attachment?: { id: string; filename: string; mediaType: string } | null;
+}
+
+/** One uploaded file awaiting review, as returned by POST /api/imports. */
+interface PendingImport {
+  attachmentId: string;
+  filename: string;
+  kind: 'image' | 'pdf' | 'text' | 'docx';
+  method: 'text_file' | 'transcribed';
+  text: string;
+  illegibleCount: number;
+  reviewHints: string[];
 }
 
 interface RunOption {
@@ -57,6 +70,39 @@ export default function LabNotesPanel({
   const [noteRunId, setNoteRunId] = useState('');
   const [saving, setSaving] = useState(false);
   const [showRetracted, setShowRetracted] = useState(true);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [queue, setQueue] = useState<PendingImport[]>([]);
+  const [reading, setReading] = useState<string | null>(null);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  /**
+   * Read each chosen file in turn. Readings join a review queue; nothing is
+   * saved until the reviewer accepts it. A file that fails to read is
+   * reported by name and skipped — the others still come through.
+   */
+  async function importFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setImportErrors([]);
+    for (const file of Array.from(files)) {
+      setReading(file.name);
+      try {
+        const form = new FormData();
+        form.set('file', file);
+        form.set('purpose', 'note');
+        const res = await fetch('/api/imports', { method: 'POST', body: form });
+        const d = await res.json().catch(() => null);
+        if (!res.ok) {
+          setImportErrors((prev) => [...prev, `${file.name}: ${d?.error || 'could not be read'}`]);
+          continue;
+        }
+        setQueue((prev) => [...prev, d as PendingImport]);
+      } catch {
+        setImportErrors((prev) => [...prev, `${file.name}: could not reach the server`]);
+      }
+    }
+    setReading(null);
+    if (fileInput.current) fileInput.current.value = '';
+  }
 
   const scoped = !!(product || runId);
 
@@ -151,7 +197,46 @@ export default function LabNotesPanel({
           <button type="button" className="btn btn-p" onClick={add} disabled={saving || !body.trim()}>
             <i className="ti ti-plus" /> {saving ? 'Saving…' : 'Add note'}
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => fileInput.current?.click()}
+            disabled={!!reading}
+            title="Photos of handwritten notes, PDFs, Word or text files"
+          >
+            <i className="ti ti-file-upload" /> {reading ? 'Reading…' : 'Import notes'}
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.txt,.md,.docx,image/jpeg,image/png,application/pdf,text/plain"
+            onChange={(e) => importFiles(e.target.files)}
+          />
         </div>
+        {reading && <div className="field-hint">Reading {reading}… handwriting can take a few seconds.</div>}
+        {importErrors.map((err) => (
+          <div className="rm-inline-err" key={err}>
+            {err}
+          </div>
+        ))}
+        {queue.length > 0 && (
+          <ImportReview
+            key={queue[0].attachmentId}
+            item={queue[0]}
+            remaining={queue.length - 1}
+            fixedProduct={product}
+            fixedRunId={runId}
+            products={products}
+            runsForProduct={runsForProduct}
+            onSaved={(note) => {
+              setNotes((prev) => [note, ...(prev ?? [])]);
+              setQueue((prev) => prev.slice(1));
+            }}
+            onDiscard={() => setQueue((prev) => prev.slice(1))}
+          />
+        )}
         <div className="field-hint">
           Internal only — never shown to clients. Notes can&apos;t be edited; retract a wrong one and
           write it again.
@@ -270,12 +355,171 @@ function NoteItem({
         )}
       </div>
       <div className="labnote-body">{note.body}</div>
+      {note.attachment && (
+        <a className="labnote-source" href={`/api/attachments/${note.attachment.id}`} target="_blank" rel="noreferrer">
+          <i className="ti ti-paperclip" />
+          {note.source === 'transcribed' ? 'Transcribed from ' : 'Imported from '}
+          {note.attachment.filename} — view original
+        </a>
+      )}
       {retracted && (
         <div className="labnote-retraction">
           Retracted {fmtDateTime(note.retractedAt!)} by {note.retractedBy?.name ?? 'someone not signed in'}:{' '}
           {note.retractedReason}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Check one imported note against its original before it is saved.
+ *
+ * The original sits beside the editable text, so every word — and above all
+ * every number — can be compared. Transcribed notes carry the model's own
+ * doubts ([illegible] markers, review hints) up front, and cannot be saved
+ * while an [illegible] marker is left in: the reviewer must resolve it,
+ * even if only by writing "unreadable" in its place.
+ */
+function ImportReview({
+  item,
+  remaining,
+  fixedProduct,
+  fixedRunId,
+  products,
+  runsForProduct,
+  onSaved,
+  onDiscard,
+}: {
+  item: PendingImport;
+  remaining: number;
+  fixedProduct?: string;
+  fixedRunId?: string;
+  products: string[];
+  runsForProduct?: RunOption[];
+  onSaved: (note: LabNoteRecord) => void;
+  onDiscard: () => void;
+}) {
+  const [text, setText] = useState(item.text);
+  const [noteProduct, setNoteProduct] = useState('');
+  const [noteRunId, setNoteRunId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const unresolved = (text.match(/\[illegible\]/gi) ?? []).length;
+  const originalUrl = `/api/attachments/${item.attachmentId}`;
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/lab-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body: text,
+          product: fixedProduct ?? (noteProduct.trim() || null),
+          runId: fixedRunId ?? (noteRunId || null),
+          source: item.method,
+          attachmentId: item.attachmentId,
+        }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(d?.error || 'Could not save the note.');
+        return;
+      }
+      onSaved(d);
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="import-review">
+      <div className="import-review-hdr">
+        <div>
+          <b>Check this {item.method === 'transcribed' ? 'transcription' : 'import'}</b> — {item.filename}
+          {remaining > 0 && <span className="prod-muted"> · {remaining} more waiting</span>}
+        </div>
+        <a href={originalUrl} target="_blank" rel="noreferrer">
+          Open original <i className="ti ti-external-link" />
+        </a>
+      </div>
+      <div className="import-review-grid">
+        <div className="import-review-original">
+          {item.kind === 'image' ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={originalUrl} alt={`Original: ${item.filename}`} />
+          ) : (
+            <div className="empty">
+              <i className="ti ti-file-text" />
+              {item.kind === 'pdf' ? 'PDF' : item.kind === 'docx' ? 'Word document' : 'Text file'} — use “Open
+              original” to compare
+            </div>
+          )}
+        </div>
+        <div className="import-review-edit">
+          {item.method === 'transcribed' && (
+            <div className="field-hint" style={{ marginBottom: 6 }}>
+              Read by AI from the original. Check every number and word against it before saving.
+            </div>
+          )}
+          {item.reviewHints.length > 0 && (
+            <ul className="import-review-hints">
+              {item.reviewHints.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ul>
+          )}
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} />
+          {unresolved > 0 && (
+            <div className="warn-row">
+              <i className="ti ti-alert-triangle" />
+              <div>
+                {unresolved} [illegible] {unresolved === 1 ? 'spot' : 'spots'} left — replace each with what the
+                original says, or with “unreadable”, before saving.
+              </div>
+            </div>
+          )}
+          {!fixedProduct && !fixedRunId && (
+            <>
+              <input
+                type="text"
+                list="labnote-products"
+                placeholder="Product (optional)"
+                value={noteProduct}
+                onChange={(e) => setNoteProduct(e.target.value)}
+              />
+            </>
+          )}
+          {fixedProduct && !fixedRunId && runsForProduct && runsForProduct.length > 0 && (
+            <select value={noteRunId} onChange={(e) => setNoteRunId(e.target.value)}>
+              <option value="">Whole product (no specific batch)</option>
+              {runsForProduct.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label} · {new Date(r.createdAt).toLocaleDateString()}
+                </option>
+              ))}
+            </select>
+          )}
+          {error && <div className="rm-inline-err">{error}</div>}
+          <div className="popover-actions" style={{ marginTop: 8 }}>
+            <button type="button" className="btn btn-sm" onClick={onDiscard} disabled={saving}>
+              Discard
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-p"
+              onClick={save}
+              disabled={saving || !text.trim() || unresolved > 0}
+            >
+              {saving ? 'Saving…' : 'Save note'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

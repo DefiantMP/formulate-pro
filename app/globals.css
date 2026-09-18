@@ -405,6 +405,18 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .labnote-retract { margin-left: auto; background: none; border: none; color: var(--text-3); font-size: 11px; cursor: pointer; padding: 0 2px; }
 .labnote-retract:hover { color: var(--danger-text); }
 .labnote.retracted .labnote-body { text-decoration: line-through; color: var(--text-3); }
+.labnote-source { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-3); margin-top: 4px; text-decoration: none; }
+.labnote-source:hover { color: var(--brand); }
+.import-review { border: 1px solid var(--brand-border); border-radius: 10px; padding: 12px; margin-top: 10px; background: var(--surface); }
+.import-review-hdr { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.import-review-hdr a { font-size: 11px; color: var(--brand); text-decoration: none; display: inline-flex; align-items: center; gap: 3px; }
+.import-review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 900px) { .import-review-grid { grid-template-columns: 1fr; } }
+.import-review-original { border: 0.5px solid var(--border-md); border-radius: 8px; background: var(--bg); min-height: 160px; max-height: 420px; overflow: auto; display: flex; align-items: flex-start; justify-content: center; }
+.import-review-original img { max-width: 100%; height: auto; display: block; }
+.import-review-edit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.import-review-edit textarea { width: 100%; padding: 8px 9px; border: 0.5px solid var(--border-md); border-radius: 6px; font: inherit; font-size: 12px; color: var(--text); background: var(--surface); resize: vertical; outline: none; }
+.import-review-hints { margin: 0; padding: 6px 10px 6px 24px; font-size: 11px; color: var(--warning-text); background: var(--warning-bg); border-radius: 6px; }
 .labnote-retraction { font-size: 11px; color: var(--danger-text); margin-top: 4px; }
 
 /* Composition + outcome chart */
