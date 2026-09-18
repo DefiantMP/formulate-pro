@@ -13,3 +13,7 @@ prisma/dev.db-journal
 # relative to prisma/schema.prisma). A 0-byte file here once got committed
 # by a prisma command run from the repo root; ignore it so it cannot recur.
 dev.db
+
+# Operator formulation sheets kept alongside the project for reference —
+# production data, never committed.
+/7OHMZ Formulations*/
