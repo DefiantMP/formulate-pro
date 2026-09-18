@@ -41,3 +41,19 @@ export async function requireUser(): Promise<
   }
   return { ok: true, user };
 }
+
+/**
+ * The acting account for a write that must be attributable in GMP mode.
+ * GMP on: a signed-in user, or an error naming the action. GMP off: whoever
+ * is signed in, or null — a signed-out write is allowed and records nobody.
+ */
+export async function gmpActor(
+  action: string
+): Promise<{ ok: true; user: { id: string; name: string; email: string; role: string } | null } | { ok: false; error: string }> {
+  const user = await getCurrentUser();
+  const { getGmpSettings } = await import('./gmpSettings');
+  if (!user && (await getGmpSettings()).enabled) {
+    return { ok: false, error: `GMP mode: sign in to ${action} — it is recorded against your account.` };
+  }
+  return { ok: true, user };
+}

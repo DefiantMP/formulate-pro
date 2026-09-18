@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { gmpActor } from '@/lib/session';
 import { lotSpecStatus, lotSpecStatusInclude } from '@/lib/lotSpecStatus';
 import { LOT_SOURCE_TYPES, isLotSourceType } from '@/lib/rawMaterials';
 
@@ -73,6 +74,9 @@ export async function GET(request: NextRequest) {
 
 /** Receive a lot — the physical-arrival record. */
 export async function POST(request: NextRequest) {
+  const who = await gmpActor('receive a lot');
+  if (!who.ok) return NextResponse.json({ error: who.error }, { status: 401 });
+
   const body = await request.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
@@ -130,6 +134,7 @@ export async function POST(request: NextRequest) {
     const lot = await prisma.lot.create({
       data: {
         rawMaterialId,
+        receivedById: who.user?.id ?? null,
         lotLabel: lotLabel.trim(),
         receivedDate: received,
         quantityReceivedG,

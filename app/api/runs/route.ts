@@ -5,12 +5,17 @@ import { syncFormulationFromRun } from '@/lib/runFormulationSync';
 import { parseLotUsages, validateLotUsages, type LotForUsage } from '@/lib/runLotUsage';
 import { getGmpSettings } from '@/lib/gmpSettings';
 import { lotSpecStatus, lotSpecStatusInclude } from '@/lib/lotSpecStatus';
+import { getCurrentUser } from '@/lib/session';
 
 /** ?product= scopes to one product's run history, for prior-run suggestions. */
 export async function GET(request: NextRequest) {
   const product = request.nextUrl.searchParams.get('product');
   const runs = await prisma.run.findMany({
-    include: { reviewer: { select: { name: true } }, deviations: { select: { id: true, disposition: true } } },
+    include: {
+      reviewer: { select: { name: true } },
+      createdBy: { select: { name: true } },
+      deviations: { select: { id: true, disposition: true } },
+    },
     // deletedAt: null excludes archived runs by default — see DELETE
     // /api/runs/[id]. No way to include them from this endpoint; they're
     // still reachable directly (e.g. a PATCH by id still works) but never
@@ -37,6 +42,18 @@ export async function POST(request: NextRequest) {
   }
   if (!inputs || !result) {
     return NextResponse.json({ error: 'inputs and result are required' }, { status: 400 });
+  }
+
+  // Who saved the batch. With GMP mode on it must be someone: an unattributed
+  // batch record cannot be checked for self-review, and "who made this" is
+  // the first question an auditor asks. Off, a signed-out save is allowed
+  // and simply records nobody.
+  const creator = await getCurrentUser();
+  if (!creator && (await getGmpSettings()).enabled) {
+    return NextResponse.json(
+      { error: 'GMP mode: sign in to save a batch — it is recorded against your account.' },
+      { status: 401 }
+    );
   }
 
   // Which tracked lots this batch consumed. Optional — a run that does not
@@ -79,6 +96,7 @@ export async function POST(request: NextRequest) {
       inputs,
       result,
       verificationAcknowledgment: verificationAcknowledgment ?? undefined,
+      createdById: creator?.id ?? null,
     },
   });
 

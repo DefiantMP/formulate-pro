@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { gmpActor } from '@/lib/session';
 import { parseSpecCriterion, type SpecCriterionPayload } from '@/lib/rawMaterials';
 
 /**
@@ -25,6 +26,9 @@ import { parseSpecCriterion, type SpecCriterionPayload } from '@/lib/rawMaterial
  * created, which would silently loosen the spec.
  */
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  const who = await gmpActor('change a component spec');
+  if (!who.ok) return NextResponse.json({ error: who.error }, { status: 401 });
+
   const body = await request.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });

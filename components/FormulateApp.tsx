@@ -171,6 +171,7 @@ export default function FormulateApp() {
   const [usageWarnings, setUsageWarnings] = useState<string[]>([]);
   const [showNamePrompt, setShowNamePrompt] = useState(true);
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
 
   // Chrome/Firefox both let mouse-wheel/trackpad scroll over a *focused*
   // number input silently bump its value by `step` — no scrollbar cue, no
@@ -1171,9 +1172,14 @@ export default function FormulateApp() {
             body: JSON.stringify(payload),
           });
       if (!res.ok) {
+        // Keep the server's reason: "sign in (GMP mode)" and "this batch is
+        // approved" need action, and a bare "Autosave failed" hides which.
+        const d = await res.json().catch(() => null);
+        setAutosaveError(typeof d?.error === 'string' ? d.error : null);
         setAutosaveStatus('error');
         return;
       }
+      setAutosaveError(null);
       const saved: RunRecord & { usageWarnings?: string[] } = await res.json();
       setUsageWarnings(saved.usageWarnings ?? []);
       setRuns((prev) =>
@@ -1313,6 +1319,7 @@ export default function FormulateApp() {
           mode={mode}
           runName={runName}
           autosaveStatus={autosaveStatus}
+          autosaveError={autosaveError}
           onNewRun={resetForm}
           hasContent={!showNamePrompt && (!!runName || !!result)}
           onPrint={() => window.print()}

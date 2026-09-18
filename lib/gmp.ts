@@ -327,3 +327,79 @@ export function gmpActorLabel(
   if (actorId) return 'Account no longer exists (removed from the database directly)';
   return 'Not recorded';
 }
+
+/* ------------------------------------------------------------------------
+ * Attribution and separation-of-duties rules (2026-09-18 GMP audit).
+ *
+ * The audit found records that could be forged by typing a name: an OOS
+ * approval — the one action that clears a failed lot — and QC results. These
+ * rules make GMP-era signatures come from the signed-in account, and keep the
+ * person who made something from being the person who signs it off.
+ * ---------------------------------------------------------------------- */
+
+/** Roles that may give a sign-off. Mirrors canReview in lib/auth.ts; kept
+ *  here so the rule is readable without the auth module. */
+const SIGN_OFF_ROLES = ['reviewer', 'admin'];
+
+export interface Actor {
+  id: string;
+  role: string;
+}
+
+/**
+ * Who may approve an OOS investigation. With GMP mode on: a signed-in
+ * reviewer or admin, and not the account that opened it — an investigator
+ * approving their own conclusion is the retest-until-it-passes problem the
+ * OOS record exists to prevent. Off: anything goes, as before.
+ */
+export function oosApprovalError(
+  settings: Pick<GmpSettingsShape, 'enabled'>,
+  approver: Actor | null,
+  openedById: string | null
+): string | null {
+  if (!settings.enabled) return null;
+  if (!approver) return 'GMP mode: sign in to approve — the approval is recorded against your account.';
+  if (!SIGN_OFF_ROLES.includes(approver.role)) {
+    return 'GMP mode: approving an investigation needs the reviewer role.';
+  }
+  if (openedById && approver.id === openedById) {
+    return 'GMP mode: the person who opened this investigation cannot approve it.';
+  }
+  return null;
+}
+
+/**
+ * A batch's reviewer must not be the account that saved it (GMP mode on).
+ * Runs with no recorded creator — saved before accounts, or signed out with
+ * GMP off — cannot be checked, and are not blocked: refusing them would make
+ * old batches unreviewable.
+ */
+export function selfReviewError(
+  settings: Pick<GmpSettingsShape, 'enabled'>,
+  reviewerId: string | null,
+  createdById: string | null
+): string | null {
+  if (!settings.enabled || !reviewerId || !createdById) return null;
+  return reviewerId === createdById ? 'GMP mode: you cannot review a batch you saved yourself.' : null;
+}
+
+/** The fields that make up a batch's recorded composition. */
+export const RUN_COMPOSITION_FIELDS = ['inputs', 'result', 'mode'] as const;
+
+/**
+ * An approved batch's composition is frozen, whatever the GMP setting: an
+ * approval is a statement about specific numbers, and changing them
+ * afterwards while it still reads "approved" makes the approval a lie. The
+ * audit reproduced exactly that. To correct one, a reviewer sets it back to
+ * pending (which clears the approval), then it can be edited and reviewed
+ * again. Name and product are filing metadata and stay editable.
+ */
+export function approvedRunEditError(
+  reviewStatus: string | null | undefined,
+  changedFields: string[]
+): string | null {
+  if (reviewStatus !== 'approved') return null;
+  const frozen = changedFields.filter((f) => (RUN_COMPOSITION_FIELDS as readonly string[]).includes(f));
+  if (frozen.length === 0) return null;
+  return 'This batch has been approved, so its numbers can’t be changed. A reviewer must reopen it (set it back to pending) first.';
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isReviewStatus, reviewSubmissionError } from '@/lib/gmp';
+import { approvedRunEditError, isReviewStatus, reviewSubmissionError, selfReviewError } from '@/lib/gmp';
 import { getGmpSettings } from '@/lib/gmpSettings';
 import { getCurrentUser } from '@/lib/session';
 import { canReview } from '@/lib/auth';
@@ -67,6 +67,24 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'product must be a string or null' }, { status: 400 });
   }
 
+  // An approved batch's numbers are frozen (lib/gmp.ts approvedRunEditError).
+  // Checked against the stored status, and skipped when this same request is
+  // reopening it — a reviewer setting it back to pending is how a correction
+  // starts.
+  const existing = await prisma.run.findUnique({
+    where: { id: params.id },
+    select: { reviewStatus: true, createdById: true },
+  });
+  if (!existing) return NextResponse.json({ error: 'Run not found' }, { status: 404 });
+  const reopening = reviewStatus !== undefined && reviewStatus !== 'approved';
+  if (!reopening) {
+    const frozen = approvedRunEditError(
+      existing.reviewStatus,
+      ['inputs', 'result', 'mode'].filter((k) => k in body)
+    );
+    if (frozen) return NextResponse.json({ error: frozen }, { status: 409 });
+  }
+
   // QC review sign-off. Validated even with GMP mode off: if a reviewer is
   // recording a decision at all, an unexplained rejection is not a record —
   // the mode governs whether review is REQUIRED, not whether a submitted one
@@ -97,6 +115,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         );
       }
     }
+    const selfReview = selfReviewError(gmp, reviewer?.id ?? null, existing.createdById);
+    if (selfReview) return NextResponse.json({ error: selfReview }, { status: 403 });
     const problem = reviewSubmissionError(reviewStatus, reviewer?.name ?? 'unauthenticated', reviewNotes);
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
   }

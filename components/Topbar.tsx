@@ -10,6 +10,8 @@ interface TopbarProps {
   mode: Mode;
   runName: string;
   autosaveStatus: AutosaveStatus;
+  /** Why the last save was refused, when the server said. */
+  autosaveError?: string | null;
   /** Clears the form and reopens the naming prompt. */
   onNewRun: () => void;
   /** Whether the current run has anything in it worth warning about. */
@@ -29,6 +31,7 @@ export default function Topbar({
   mode,
   runName,
   autosaveStatus,
+  autosaveError,
   onNewRun,
   hasContent,
   onPrint,
@@ -68,8 +71,8 @@ export default function Topbar({
           </span>
         )}
         {autosaveStatus === 'error' && (
-          <span className="autosave-status error">
-            <i className="ti ti-alert-triangle" /> Autosave failed
+          <span className="autosave-status error" title={autosaveError ?? undefined}>
+            <i className="ti ti-alert-triangle" /> {autosaveError ? `Not saved — ${autosaveError}` : 'Autosave failed'}
           </span>
         )}
       </div>

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { OOS_DISPOSITIONS, isOosDisposition } from '@/lib/lotSpecStatus';
+import { oosApprovalError } from '@/lib/gmp';
+import { getCurrentUser } from '@/lib/session';
+import { getGmpSettings } from '@/lib/gmpSettings';
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const investigation = await prisma.oosInvestigation.findUnique({
@@ -99,7 +102,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (disposition !== undefined) data.disposition = disposition;
   if ('notes' in body) data.notes = notes ?? null;
 
+  // With GMP mode on, any change to an investigation needs a signed-in
+  // account, and approval needs a reviewer who did not open it
+  // (lib/gmp.ts oosApprovalError). The audit approved one "by" a reviewer
+  // who never saw it, signed out — approval is what clears a failed lot.
+  const actor = await getCurrentUser();
+  const gmp = await getGmpSettings();
+  if (gmp.enabled && !actor) {
+    return NextResponse.json(
+      { error: 'GMP mode: sign in to work on an investigation — changes are recorded against your account.' },
+      { status: 401 }
+    );
+  }
+
   if (approvedBy !== undefined) {
+    const approvalProblem = oosApprovalError(gmp, actor, existing.openedById);
+    if (approvalProblem) return NextResponse.json({ error: approvalProblem }, { status: 403 });
     const finalDisposition = (data.disposition as string | undefined) ?? existing.disposition;
     if (finalDisposition === 'pending') {
       return NextResponse.json(
@@ -121,7 +139,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
     // Both halves in the same write — see isInvalidatingInvestigation, which
     // requires both before it will honor any disposition.
-    data.approvedBy = approvedBy.trim();
+    data.approvedBy = gmp.enabled ? actor!.name : approvedBy.trim();
+    data.approvedById = actor?.id ?? null;
     data.approvedAt = new Date();
   }
 

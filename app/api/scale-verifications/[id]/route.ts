@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { computePassFail, type ToleranceType } from '@/lib/scaleVerification';
 import { prisma as db } from '@/lib/db';
-import { verifyPassword } from '@/lib/auth';
+import { verifyOrDummy } from '@/lib/auth';
+import { lockedMessage, lockMinutesRemaining, normaliseEmail, stateAfterFailure } from '@/lib/loginThrottle';
 import { weighVerificationError } from '@/lib/gmp';
 import { getGmpSettings } from '@/lib/gmpSettings';
 
@@ -39,13 +40,24 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (typeof verifierEmail !== 'string' || typeof verifierPassword !== 'string') {
       return NextResponse.json({ error: 'Verifier email and password are required' }, { status: 400 });
     }
-    const verifier = await db.user.findFirst({
-      where: { email: verifierEmail.trim().toLowerCase(), deletedAt: null },
-    });
-    const ok = verifier ? await verifyPassword(verifierPassword, verifier.passwordHash) : false;
+    // Same protections as sign-in: this is a password check, so it shares
+    // the per-email throttle (the audit guessed a verifier's password six
+    // times with no lock) and runs bcrypt even for an unknown email.
+    const key = normaliseEmail(verifierEmail);
+    const now = new Date();
+    const throttle = await db.loginThrottle.findUnique({ where: { email: key } });
+    const lockedFor = lockMinutesRemaining(throttle, now);
+    if (lockedFor > 0) return NextResponse.json({ error: lockedMessage(lockedFor) }, { status: 429 });
+    const verifier = await db.user.findFirst({ where: { email: key, deletedAt: null } });
+    const ok = await verifyOrDummy(verifierPassword, verifier?.passwordHash);
     if (!verifier || !ok) {
+      const next = stateAfterFailure(throttle, now);
+      await db.loginThrottle.upsert({ where: { email: key }, create: { email: key, ...next }, update: next });
+      const nowLocked = lockMinutesRemaining(next, now);
+      if (nowLocked > 0) return NextResponse.json({ error: lockedMessage(nowLocked) }, { status: 429 });
       return NextResponse.json({ error: 'Incorrect email or password' }, { status: 401 });
     }
+    if (throttle) await db.loginThrottle.deleteMany({ where: { email: key } });
 
     const gmp = await getGmpSettings();
     const problem = weighVerificationError(

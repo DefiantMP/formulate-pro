@@ -14,6 +14,9 @@ import {
   weighVerificationError,
   type GmpSettingsShape,
   gmpActorLabel,
+  oosApprovalError,
+  selfReviewError,
+  approvedRunEditError,
 } from './gmp';
 
 const OFF: GmpSettingsShape = { enabled: false, lotStatusEnforcement: 'warn' };
@@ -228,5 +231,48 @@ describe('gmpActorLabel', () => {
   it('never renders a row blank', () => {
     expect(gmpActorLabel(null, null, 'gone')).toMatch(/no longer exists/);
     expect(gmpActorLabel(null, '  ', null)).toBe('Not recorded');
+  });
+});
+
+describe('GMP attribution and separation of duties', () => {
+  const on = { enabled: true };
+  const off = { enabled: false };
+  const reviewer = { id: 'r1', role: 'reviewer' };
+  const operator = { id: 'o1', role: 'operator' };
+
+  it('lets anyone approve an OOS with GMP off, as before', () => {
+    expect(oosApprovalError(off, null, 'o1')).toBeNull();
+  });
+
+  it('requires a signed-in reviewer to approve an OOS with GMP on', () => {
+    expect(oosApprovalError(on, null, 'o1')).toMatch(/sign in/);
+    expect(oosApprovalError(on, operator, 'x')).toMatch(/reviewer role/);
+    expect(oosApprovalError(on, reviewer, 'o1')).toBeNull();
+    expect(oosApprovalError(on, { id: 'a1', role: 'admin' }, 'o1')).toBeNull();
+  });
+
+  // The audit reproduced this: an investigation opened and approved by one person.
+  it('refuses an OOS approval by the account that opened it', () => {
+    expect(oosApprovalError(on, reviewer, 'r1')).toMatch(/cannot approve/);
+  });
+
+  it('refuses self-review of a batch with GMP on only', () => {
+    expect(selfReviewError(on, 'u1', 'u1')).toMatch(/saved yourself/);
+    expect(selfReviewError(on, 'u2', 'u1')).toBeNull();
+    expect(selfReviewError(off, 'u1', 'u1')).toBeNull();
+  });
+
+  it('does not block review of batches with no recorded creator', () => {
+    expect(selfReviewError(on, 'u1', null)).toBeNull();
+  });
+
+  // The audit reproduced this too: an approved batch overwritten, still "approved".
+  it('freezes an approved batch’s composition but not its name or product', () => {
+    expect(approvedRunEditError('approved', ['inputs', 'result'])).toMatch(/can’t be changed/);
+    expect(approvedRunEditError('approved', ['mode'])).toMatch(/can’t be changed/);
+    expect(approvedRunEditError('approved', ['label', 'product'])).toBeNull();
+    expect(approvedRunEditError('pending', ['inputs'])).toBeNull();
+    expect(approvedRunEditError('rejected', ['inputs'])).toBeNull();
+    expect(approvedRunEditError(null, ['inputs'])).toBeNull();
   });
 });

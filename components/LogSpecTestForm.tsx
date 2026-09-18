@@ -1,5 +1,6 @@
 'use client';
 
+import { useGmpIdentity } from './useGmpIdentity';
 import { useState } from 'react';
 import { criterionLimits } from './SpecEditor';
 import type { SpecCriterionRecord, SpecTestType } from '@/lib/rawMaterials';
@@ -20,6 +21,7 @@ export default function LogSpecTestForm({ lotId, criteria, onLogged }: LogSpecTe
   const [passFail, setPassFail] = useState<boolean | null>(null);
   const [methodUsed, setMethodUsed] = useState('');
   const [testedBy, setTestedBy] = useState('');
+  const identity = useGmpIdentity();
   const [testedAt, setTestedAt] = useState(isoToDateInput(new Date()));
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -199,13 +201,25 @@ export default function LogSpecTestForm({ lotId, criteria, onLogged }: LogSpecTe
         </div>
         <div className="field">
           <label htmlFor="test-by">Tested by</label>
-          <input
-            id="test-by"
-            type="text"
-            value={testedBy}
-            onChange={(e) => setTestedBy(e.target.value)}
-            placeholder="optional"
-          />
+          {identity.gmpOn ? (
+            <div className="field-hint" id="test-by">
+              {identity.me ? (
+                <>
+                  GMP mode: recorded as <b>{identity.me.name}</b>, your signed-in account.
+                </>
+              ) : (
+                <b>GMP mode: sign in to log a result — it is recorded against your account.</b>
+              )}
+            </div>
+          ) : (
+            <input
+              id="test-by"
+              type="text"
+              value={testedBy}
+              onChange={(e) => setTestedBy(e.target.value)}
+              placeholder="optional"
+            />
+          )}
         </div>
         <div className="field">
           <label htmlFor="test-method">Method</label>

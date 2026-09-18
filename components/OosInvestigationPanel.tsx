@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useGmpIdentity } from './useGmpIdentity';
 import {
   OOS_DISPOSITIONS,
   OOS_DISPOSITION_EFFECTS,
@@ -79,6 +80,10 @@ interface OpenInvestigationFormProps {
 
 function OpenInvestigationForm({ lotId, testId, onDone, onCancel }: OpenInvestigationFormProps) {
   const [openedBy, setOpenedBy] = useState('');
+  const identity = useGmpIdentity();
+  // With GMP mode on the server records the signed-in account, so the typed
+  // name is not asked for — only a signed-in user.
+  const opener = identity.gmpOn ? identity.me?.name ?? '' : openedBy;
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -95,7 +100,7 @@ function OpenInvestigationForm({ lotId, testId, onDone, onCancel }: OpenInvestig
         body: JSON.stringify({
           lotId,
           failedLotSpecTestId: testId,
-          openedBy,
+          openedBy: opener,
           reasonForInvestigation: reason,
           notes: notes.trim() || null,
         }),
@@ -124,14 +129,26 @@ function OpenInvestigationForm({ lotId, testId, onDone, onCancel }: OpenInvestig
       <div className="oos-body">
         <div className="field">
           <label htmlFor={`oos-by-${testId}`}>Opened by</label>
-          <input
-            id={`oos-by-${testId}`}
-            type="text"
-            value={openedBy}
-            onChange={(e) => setOpenedBy(e.target.value)}
-            placeholder="Your name"
-            autoFocus
-          />
+          {identity.gmpOn ? (
+            <div className="field-hint" id={`oos-by-${testId}`}>
+              {identity.me ? (
+                <>
+                  GMP mode: recorded as <b>{identity.me.name}</b>, your signed-in account.
+                </>
+              ) : (
+                <b>GMP mode: sign in to open an investigation.</b>
+              )}
+            </div>
+          ) : (
+            <input
+              id={`oos-by-${testId}`}
+              type="text"
+              value={openedBy}
+              onChange={(e) => setOpenedBy(e.target.value)}
+              placeholder="Your name"
+              autoFocus
+            />
+          )}
         </div>
         <div className="field">
           <label htmlFor={`oos-reason-${testId}`}>Reason for investigation</label>
@@ -162,7 +179,7 @@ function OpenInvestigationForm({ lotId, testId, onDone, onCancel }: OpenInvestig
           <button
             type="submit"
             className="btn btn-p"
-            disabled={saving || !openedBy.trim() || !reason.trim()}
+            disabled={saving || !opener.trim() || !reason.trim()}
           >
             <i className="ti ti-check" /> {saving ? 'Opening…' : 'Open investigation'}
           </button>
@@ -188,6 +205,8 @@ function WorkInvestigationForm({ inv, onChanged }: WorkInvestigationFormProps) {
   );
   const [notes, setNotes] = useState(inv.notes ?? '');
   const [approvedBy, setApprovedBy] = useState('');
+  const identity = useGmpIdentity();
+  const approver = identity.gmpOn ? identity.me?.name ?? '' : approvedBy;
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -370,14 +389,27 @@ function WorkInvestigationForm({ inv, onChanged }: WorkInvestigationFormProps) {
             )}
             <div className="field">
               <label htmlFor={`oos-approver-${inv.id}`}>Approved by</label>
-              <input
-                id={`oos-approver-${inv.id}`}
-                type="text"
-                value={approvedBy}
-                onChange={(e) => setApprovedBy(e.target.value)}
-                placeholder="Your name"
-                autoFocus
-              />
+              {identity.gmpOn ? (
+                <div className="field-hint" id={`oos-approver-${inv.id}`}>
+                  {identity.me ? (
+                    <>
+                      GMP mode: approving as <b>{identity.me.name}</b>. Needs the reviewer role, and
+                      the person who opened the investigation can&apos;t approve it.
+                    </>
+                  ) : (
+                    <b>GMP mode: sign in as a reviewer to approve.</b>
+                  )}
+                </div>
+              ) : (
+                <input
+                  id={`oos-approver-${inv.id}`}
+                  type="text"
+                  value={approvedBy}
+                  onChange={(e) => setApprovedBy(e.target.value)}
+                  placeholder="Your name"
+                  autoFocus
+                />
+              )}
               <div className="field-hint">
                 The approval timestamp is recorded by the system at the moment you confirm.
               </div>
@@ -386,10 +418,10 @@ function WorkInvestigationForm({ inv, onChanged }: WorkInvestigationFormProps) {
               <button
                 type="button"
                 className="oos-approve-btn"
-                disabled={saving || !approvedBy.trim()}
+                disabled={saving || !approver.trim()}
                 onClick={() =>
                   patch(
-                    { ...currentEdits(), approvedBy },
+                    { ...currentEdits(), approvedBy: approver },
                     'Failed to approve this investigation.'
                   )
                 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { evaluateNumericResult } from '@/lib/lotSpecStatus';
+import { getCurrentUser } from '@/lib/session';
+import { getGmpSettings } from '@/lib/gmpSettings';
 
 /**
  * Log one test result against this lot and one criterion of its material's
@@ -105,6 +107,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     passFail = body.passFail;
   }
 
+  // Who logged it. With GMP mode on it must be a signed-in account, and
+  // testedBy is that account's name — a typed "tested by" proves nothing
+  // (the audit logged a failing result "tested by" someone who never
+  // touched it). Off, the typed name stands as before.
+  const tester = await getCurrentUser();
+  const gmp = await getGmpSettings();
+  if (gmp.enabled && !tester) {
+    return NextResponse.json(
+      { error: 'GMP mode: sign in to log a test result — it is recorded against your account.' },
+      { status: 401 }
+    );
+  }
+
   const test = await prisma.lotSpecTest.create({
     data: {
       lotId: lot.id,
@@ -113,7 +128,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       resultText: resultText ?? null,
       passFail,
       methodUsed: methodUsed ?? null,
-      testedBy: testedBy ?? null,
+      testedBy: gmp.enabled ? tester!.name : (testedBy ?? null),
+      testedById: tester?.id ?? null,
       testedAt: tested,
       notes: notes ?? null,
     },

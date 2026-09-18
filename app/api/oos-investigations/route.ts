@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { getCurrentUser } from '@/lib/session';
+import { getGmpSettings } from '@/lib/gmpSettings';
 import { OOS_DISPOSITIONS, isOosDisposition } from '@/lib/lotSpecStatus';
 
 /** ?lotId= scopes to one lot; ?disposition= filters; ?open=true returns only
@@ -66,7 +68,17 @@ export async function POST(request: NextRequest) {
   if (typeof failedLotSpecTestId !== 'string' || !failedLotSpecTestId.trim()) {
     return NextResponse.json({ error: 'failedLotSpecTestId is required' }, { status: 400 });
   }
-  if (typeof openedBy !== 'string' || !openedBy.trim()) {
+  // With GMP mode on, the opener is the signed-in account and any typed
+  // openedBy is replaced with its name; off, a typed name is still required.
+  const opener = await getCurrentUser();
+  const gmp = await getGmpSettings();
+  if (gmp.enabled && !opener) {
+    return NextResponse.json(
+      { error: 'GMP mode: sign in to open an investigation — it is recorded against your account.' },
+      { status: 401 }
+    );
+  }
+  if (!gmp.enabled && (typeof openedBy !== 'string' || !openedBy.trim())) {
     return NextResponse.json({ error: 'openedBy is required' }, { status: 400 });
   }
   if (typeof reasonForInvestigation !== 'string' || !reasonForInvestigation.trim()) {
@@ -102,7 +114,8 @@ export async function POST(request: NextRequest) {
     data: {
       lotId,
       failedLotSpecTestId,
-      openedBy: openedBy.trim(),
+      openedBy: gmp.enabled ? opener!.name : openedBy.trim(),
+      openedById: opener?.id ?? null,
       openedAt: opened,
       reasonForInvestigation: reasonForInvestigation.trim(),
       // Opens undecided: no findings, no retest judgment, no disposition,

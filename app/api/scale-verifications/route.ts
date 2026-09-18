@@ -64,15 +64,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const client = new Anthropic({ apiKey });
-  const outcome = await runScaleReading({ imageBase64, mediaType }, (params) => client.messages.create(params));
-  if (!outcome.ok) {
-    return NextResponse.json({ error: outcome.error }, { status: outcome.status });
-  }
-
   // The weigher is whoever is signed in — not a typed name. Verification is a
   // separate step (PATCH), performed by a second account, so only the weigher
   // half is checked here.
+  // Checked BEFORE the photo is sent to the model: refusing a signed-out
+  // weighing afterwards still paid for a reading that was thrown away.
   const gmp = await getGmpSettings();
   const actor = await getCurrentUser();
   if (gmp.enabled && !actor) {
@@ -80,6 +76,12 @@ export async function POST(request: NextRequest) {
       { error: 'GMP mode: sign in to record a weighing — it is attributed to your account.' },
       { status: 401 }
     );
+  }
+
+  const client = new Anthropic({ apiKey });
+  const outcome = await runScaleReading({ imageBase64, mediaType }, (params) => client.messages.create(params));
+  if (!outcome.ok) {
+    return NextResponse.json({ error: outcome.error }, { status: outcome.status });
   }
 
   const toleranceType = 'percent' as const;

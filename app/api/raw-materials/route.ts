@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { gmpActor } from '@/lib/session';
 import { hasIdentitySpec } from '@/lib/gmp';
 import { RAW_MATERIAL_CATEGORIES, isRawMaterialCategory } from '@/lib/rawMaterials';
 
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const who = await gmpActor('add a raw material');
+  if (!who.ok) return NextResponse.json({ error: who.error }, { status: 401 });
+
   const body = await request.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const material = await prisma.rawMaterial.create({
-      data: { name: name.trim(), category },
+      data: { name: name.trim(), category, createdById: who.user?.id ?? null },
     });
     return NextResponse.json(material, { status: 201 });
   } catch {

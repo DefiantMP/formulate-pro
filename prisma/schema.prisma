@@ -84,6 +84,11 @@ model Run {
   // live on RunLotUsage, so this adds no column to Run and no table rebuild.
   lotUsages          RunLotUsage[]
   labNotes      LabNote[]
+  // Who saved the batch. Nullable: runs from before accounts, and runs saved
+  // signed out with GMP mode off, have none. With GMP mode on a run cannot be
+  // saved signed out, and its reviewer must be a different account.
+  createdById   String?
+  createdBy     User?     @relation("RunCreator", fields: [createdById], references: [id])
 }
 
 // A saved regrind lot recipe: potency + excipient makeup, reusable across
@@ -307,6 +312,8 @@ model RawMaterial {
   lots Lot[]
   // At most one spec per raw material — enforced by @unique on the FK side.
   spec ComponentSpec?
+  createdById String?
+  createdBy   User?    @relation("RawMaterialCreatedBy", fields: [createdById], references: [id])
 }
 
 // A specific physical receipt of a raw material: one lot number, one
@@ -344,6 +351,9 @@ model Lot {
   // but not twice for the same one — this is what makes lotLabel usable as
   // the operator-facing identifier when scanning/searching.
   @@unique([rawMaterialId, lotLabel])
+  // Who received the lot into inventory. Required-by-sign-in with GMP on.
+  receivedById  String?
+  receivedBy    User?       @relation("LotReceivedBy", fields: [receivedById], references: [id])
 }
 
 // The QC spec a raw material's incoming lots are tested against — one per
@@ -429,6 +439,10 @@ model LotSpecTest {
   // does NOT on its own supersede an earlier failure — see the rollup rules
   // in lib/lotSpecStatus.ts and OosInvestigation below.
   @@index([lotId, specCriterionId])
+  // The account that logged the result; with GMP mode on, testedBy is set
+  // from it rather than typed.
+  testedById      String?
+  testedByUser    User?         @relation("SpecTestTestedBy", fields: [testedById], references: [id])
 }
 
 // An out-of-specification (OOS) investigation: the formal record of what a
@@ -475,6 +489,14 @@ model OosInvestigation {
 
   @@index([lotId])
   @@index([failedLotSpecTestId])
+  // The accounts behind openedBy / approvedBy. With GMP mode on these are
+  // set from the signed-in session and the typed names are overwritten with
+  // the account's name — a typed approver proves nothing, and approval is
+  // what clears a failed lot. Null on records from before accounts.
+  openedById          String?
+  openedByUser        User?       @relation("OosOpenedBy", fields: [openedById], references: [id])
+  approvedById        String?
+  approvedByUser      User?       @relation("OosApprovedBy", fields: [approvedById], references: [id])
 }
 
 // The relational link between a Run and the real physical Lots it consumed.
@@ -636,6 +658,12 @@ model User {
   lotAdjustments       LotAdjustment[]
   labNotes             LabNote[]            @relation("LabNoteAuthor")
   attachments          Attachment[]
+  runsCreated          Run[]                @relation("RunCreator")
+  oosOpened            OosInvestigation[]   @relation("OosOpenedBy")
+  oosApproved          OosInvestigation[]   @relation("OosApprovedBy")
+  specTestsLogged      LotSpecTest[]        @relation("SpecTestTestedBy")
+  lotsReceived         Lot[]                @relation("LotReceivedBy")
+  materialsCreated     RawMaterial[]        @relation("RawMaterialCreatedBy")
   retractedLabNotes    LabNote[]            @relation("LabNoteRetractedBy")
   passwordResets       PasswordResetToken[] @relation("ResetFor")
   issuedPasswordResets PasswordResetToken[] @relation("ResetIssuedBy")
