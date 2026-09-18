@@ -5,7 +5,7 @@ describe('parseLabNote', () => {
   it('trims and accepts a plain note', () => {
     expect(parseLabNote({ body: '  Capping at 0.58 g  ', product: ' OGS ' })).toEqual({
       ok: true,
-      value: { body: 'Capping at 0.58 g', product: 'OGS', runId: null },
+      value: { body: 'Capping at 0.58 g', product: 'OGS', runId: null, source: 'typed', attachmentId: null },
     });
   });
 
@@ -28,6 +28,22 @@ describe('parseLabNote', () => {
   it('accepts a run id and rejects a blank one', () => {
     expect(parseLabNote({ body: 'n', runId: 'r1' })).toMatchObject({ ok: true, value: { runId: 'r1' } });
     expect(parseLabNote({ body: 'n', runId: '  ' }).ok).toBe(false);
+  });
+});
+
+describe('imported notes', () => {
+  it('require their original file, and typed notes must not claim one', () => {
+    expect(parseLabNote({ body: 'n', source: 'transcribed' }).ok).toBe(false);
+    expect(parseLabNote({ body: 'n', source: 'text_file' }).ok).toBe(false);
+    expect(parseLabNote({ body: 'n', source: 'typed', attachmentId: 'a1' }).ok).toBe(false);
+    expect(parseLabNote({ body: 'n', source: 'transcribed', attachmentId: 'a1' })).toMatchObject({
+      ok: true,
+      value: { source: 'transcribed', attachmentId: 'a1' },
+    });
+  });
+
+  it('rejects an unknown source', () => {
+    expect(parseLabNote({ body: 'n', source: 'guessed', attachmentId: 'a1' }).ok).toBe(false);
   });
 });
 

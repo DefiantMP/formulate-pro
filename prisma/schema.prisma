@@ -136,6 +136,16 @@ model SavedFormulation {
   // column, same pattern as disintegrant/lubricant above. Added 2026-08-07.
   glidantName           String?
   glidantPercent        Float?
+  // Any further excipients beyond the one disintegrant/lubricant/glidant
+  // slots — [{ name, percentOfBlend }] — so sheets like RR77-PB9 (EZTAB
+  // alongside PVPP and magnesium stearate) fit whole. Added 2026-09-18,
+  // nullable: every earlier formulation simply has none.
+  otherExcipients       Json?
+  // Set when the formulation came from an uploaded sheet rather than being
+  // built in the app; the original is kept in attachment.
+  importedFrom          String?
+  attachmentId          String?
+  attachment            Attachment? @relation(fields: [attachmentId], references: [id])
   notes                 String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -625,6 +635,7 @@ model User {
   gmpToggles           GmpModeToggleLog[]
   lotAdjustments       LotAdjustment[]
   labNotes             LabNote[]            @relation("LabNoteAuthor")
+  attachments          Attachment[]
   retractedLabNotes    LabNote[]            @relation("LabNoteRetractedBy")
   passwordResets       PasswordResetToken[] @relation("ResetFor")
   issuedPasswordResets PasswordResetToken[] @relation("ResetIssuedBy")
@@ -714,8 +725,35 @@ model LabNote {
   retractedReason String?
   retractedById   String?
   retractedBy     User?    @relation("LabNoteRetractedBy", fields: [retractedById], references: [id])
+  // How the text got here: 'typed', 'text_file' (read verbatim from a .txt/
+  // .md/.docx) or 'transcribed' (read by AI from an image/PDF, then reviewed).
+  source          String   @default("typed")
+  attachmentId    String?
+  attachment      Attachment? @relation(fields: [attachmentId], references: [id])
 
   @@index([product])
   @@index([runId])
   @@index([createdAt])
+}
+
+// An uploaded original — the photo of a handwritten page, a scanned PDF, a
+// Word or text file — kept with the note or formulation it produced, so any
+// transcription can always be checked against its source. Stored in the
+// database rather than on disk so it can never be swept into git, and is
+// backed up with everything else. INTERNAL: served only to the app itself.
+model Attachment {
+  id           String   @id @default(cuid())
+  filename     String
+  mediaType    String
+  sizeBytes    Int
+  sha256       String
+  data         Bytes
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  labNotes     LabNote[]
+  formulations SavedFormulation[]
+
+  @@index([sha256])
 }

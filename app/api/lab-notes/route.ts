@@ -8,6 +8,7 @@ const include = {
   author: { select: { name: true } },
   retractedBy: { select: { name: true } },
   run: { select: { id: true, label: true, product: true, createdAt: true } },
+  attachment: { select: { id: true, filename: true, mediaType: true } },
 } as const;
 
 /**
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
     authorId = (await getCurrentUser())?.id ?? null;
   }
 
+  if (parsed.value.attachmentId) {
+    const exists = await prisma.attachment.findUnique({ where: { id: parsed.value.attachmentId }, select: { id: true } });
+    if (!exists) return NextResponse.json({ error: 'The uploaded original was not found.' }, { status: 400 });
+  }
+
   let runProduct: string | null = null;
   if (parsed.value.runId) {
     const run = await prisma.run.findUnique({ where: { id: parsed.value.runId }, select: { product: true } });
@@ -66,6 +72,8 @@ export async function POST(request: NextRequest) {
       product: effectiveNoteProduct(parsed.value.product, runProduct),
       runId: parsed.value.runId,
       authorId,
+      source: parsed.value.source,
+      attachmentId: parsed.value.attachmentId,
     },
     include,
   });

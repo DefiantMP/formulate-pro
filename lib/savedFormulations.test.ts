@@ -6,6 +6,8 @@ import {
   findRelevantCrossFormulationNotes,
   type CrossFormulationCandidate,
   type SavedFormulationRecord,
+  crossCheckSheetGrams,
+  parseOtherExcipients,
 } from './savedFormulations';
 
 function baseVersion(overrides: Partial<SavedFormulationRecord> = {}): SavedFormulationRecord {
@@ -312,5 +314,76 @@ describe('findRelevantCrossFormulationNotes', () => {
       'capping at compression'
     );
     expect(noMatch.estimatedTokens).toBe(0);
+  });
+});
+
+describe('other excipients and the imported-sheet cross-check', () => {
+  // The RR77-PB9 sheet: PVPP 4%, Mag 1%, EZTAB 10% as an extra excipient,
+  // Emdex by difference — a formulation that did not fit before 2026-09-18.
+  const rr77 = {
+    tabletWeightG: 0.69,
+    referenceBatchTablets: 10887,
+    actives: [{ label: '7OH', targetMgPerTablet: 60, potencyPercent: 76.4, source: '' }],
+    fillerName: 'Emdex',
+    disintegrantName: 'PVPP XL',
+    disintegrantPercent: 4,
+    lubricantName: 'Magnesium stearate',
+    lubricantPercent: 1,
+    glidantName: null,
+    glidantPercent: null,
+    otherExcipients: [{ name: 'EZTAB', percentOfBlend: 10 }],
+  };
+  const sheet = [
+    { name: '7OH', grams: 855.0 },
+    { name: 'Emdex', grams: 5530.23 },
+    { name: 'Magnesium Stearate', grams: 75.12 },
+    { name: 'EZTAB', grams: 751.2 },
+    { name: 'PVPP XL', grams: 300.48 },
+  ];
+
+  it('counts extra excipients in the filler-by-difference and grams', () => {
+    const d = deriveSavedFormulation(rr77);
+    expect(d.fillerGramsPerBatch).toBeCloseTo(5530.23, 1);
+    expect(d.otherExcipients[0]).toMatchObject({ name: 'EZTAB', percentOfBlend: 10 });
+    expect(d.otherExcipients[0].gramsPerBatch).toBeCloseTo(751.2, 1);
+  });
+
+  it('leaves formulations without extra excipients exactly as before', () => {
+    const { otherExcipients: _omit, ...legacy } = rr77;
+    const withNone = deriveSavedFormulation({ ...legacy, otherExcipients: [] });
+    const absent = deriveSavedFormulation(legacy);
+    expect(absent.fillerPercent).toBe(withNone.fillerPercent);
+    expect(absent.otherExcipients).toEqual([]);
+  });
+
+  it('confirms a correctly read sheet — every line checked, nothing flagged', () => {
+    const r = crossCheckSheetGrams(sheet, 7512.03, rr77, deriveSavedFormulation(rr77));
+    expect(r.mismatches).toEqual([]);
+    expect(r.unmatched).toEqual([]);
+    expect(r.checked).toBe(6);
+  });
+
+  it('catches a misread digit — potency read as 74.6 instead of 76.4', () => {
+    const misread = { ...rr77, actives: [{ ...rr77.actives[0], potencyPercent: 74.6 }] };
+    const r = crossCheckSheetGrams(sheet, 7512.03, misread, deriveSavedFormulation(misread));
+    expect(r.mismatches.map((m) => m.name)).toEqual(expect.arrayContaining(['7OH', 'Emdex']));
+  });
+
+  it('lists sheet lines it could not match instead of calling them wrong', () => {
+    const r = crossCheckSheetGrams(
+      [...sheet.filter((l) => l.name !== 'PVPP XL'), { name: 'Crospovidone', grams: 300.48 }],
+      null,
+      rr77,
+      deriveSavedFormulation(rr77)
+    );
+    expect(r.unmatched).toEqual(['Crospovidone']);
+    expect(r.mismatches).toEqual([]);
+  });
+
+  it('parses stored extra excipients defensively', () => {
+    expect(parseOtherExcipients(null)).toEqual([]);
+    expect(
+      parseOtherExcipients([{ name: ' EZTAB ', percentOfBlend: 10 }, { name: '', percentOfBlend: 2 }, { name: 'X', percentOfBlend: 140 }, 'junk'])
+    ).toEqual([{ name: 'EZTAB', percentOfBlend: 10 }]);
   });
 });

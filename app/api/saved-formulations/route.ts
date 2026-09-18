@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { effectiveLineageId, SAVED_FORMULATION_STATUSES, type SavedFormulationActive } from '@/lib/savedFormulations';
+import { effectiveLineageId, SAVED_FORMULATION_STATUSES, type SavedFormulationActive, parseOtherExcipients } from '@/lib/savedFormulations';
 
 export async function GET() {
   const formulations = await prisma.savedFormulation.findMany({
@@ -48,6 +48,9 @@ export async function POST(request: NextRequest) {
     status,
     outcomeNotes,
     equipmentNotes,
+    otherExcipients,
+    importedFrom,
+    attachmentId,
   } = body;
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -73,6 +76,27 @@ export async function POST(request: NextRequest) {
       { error: `status must be one of ${SAVED_FORMULATION_STATUSES.join(', ')}` },
       { status: 400 }
     );
+  }
+
+  // Extra excipients: all-or-nothing. Silently dropping one bad row would
+  // save a formulation whose filler-by-difference is quietly wrong.
+  let cleanOthers: ReturnType<typeof parseOtherExcipients> = [];
+  if (otherExcipients !== undefined && otherExcipients !== null) {
+    if (!Array.isArray(otherExcipients)) {
+      return NextResponse.json({ error: 'otherExcipients must be a list' }, { status: 400 });
+    }
+    cleanOthers = parseOtherExcipients(otherExcipients);
+    if (cleanOthers.length !== otherExcipients.length) {
+      return NextResponse.json(
+        { error: 'Every extra excipient needs a name and a percentage between 0 and 100' },
+        { status: 400 }
+      );
+    }
+  }
+  if (attachmentId !== undefined && attachmentId !== null) {
+    if (typeof attachmentId !== 'string' || !(await prisma.attachment.findUnique({ where: { id: attachmentId }, select: { id: true } }))) {
+      return NextResponse.json({ error: 'attachmentId does not reference an uploaded file' }, { status: 400 });
+    }
   }
 
   // Iterating from an existing formulation: inherit its lineage and bump the
@@ -113,6 +137,9 @@ export async function POST(request: NextRequest) {
       status: typeof status === 'string' ? status : 'untested',
       outcomeNotes: typeof outcomeNotes === 'string' && outcomeNotes.trim() ? outcomeNotes.trim() : null,
       equipmentNotes: typeof equipmentNotes === 'string' && equipmentNotes.trim() ? equipmentNotes.trim() : null,
+      otherExcipients: cleanOthers.length > 0 ? (cleanOthers as unknown as Prisma.InputJsonValue) : undefined,
+      importedFrom: typeof importedFrom === 'string' && importedFrom.trim() ? importedFrom.trim() : null,
+      attachmentId: typeof attachmentId === 'string' ? attachmentId : null,
     },
   });
 

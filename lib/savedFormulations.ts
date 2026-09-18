@@ -42,6 +42,11 @@ export interface SavedFormulationRecord {
   /** Improves powder flow (e.g. Silicon Dioxide) — added 2026-08-07, additive/nullable like disintegrant and lubricant. */
   glidantName: string | null;
   glidantPercent: number | null;
+  /** Excipients beyond the one disintegrant/lubricant/glidant slots (2026-09-18). Absent on older rows. */
+  otherExcipients?: OtherExcipient[] | null;
+  /** Filename of the uploaded sheet this came from, when imported. */
+  importedFrom?: string | null;
+  attachmentId?: string | null;
   notes: string | null;
   createdAt: string;
   /** Groups every version of one formulation together; null means this row is its own lineage root — see effectiveLineageId. */
@@ -66,6 +71,32 @@ export function effectiveLineageId(f: { id: string; lineageId: string | null }):
   return f.lineageId ?? f.id;
 }
 
+export interface OtherExcipient {
+  name: string;
+  percentOfBlend: number;
+}
+
+/**
+ * Reads the stored otherExcipients JSON, dropping anything malformed rather
+ * than letting one bad entry break the whole formulation page. Rows saved
+ * before the column existed have null, which is simply "none".
+ */
+export function parseOtherExcipients(raw: unknown): OtherExcipient[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (e): e is OtherExcipient =>
+        !!e &&
+        typeof e.name === 'string' &&
+        e.name.trim() !== '' &&
+        typeof e.percentOfBlend === 'number' &&
+        Number.isFinite(e.percentOfBlend) &&
+        e.percentOfBlend >= 0 &&
+        e.percentOfBlend <= 100
+    )
+    .map((e) => ({ name: e.name.trim(), percentOfBlend: e.percentOfBlend }));
+}
+
 export interface SavedFormulationActiveDerived extends SavedFormulationActive {
   percentOfBlend: number;
   gramsPerBatch: number;
@@ -79,6 +110,7 @@ export interface SavedFormulationDerived {
   disintegrantGramsPerBatch: number | null;
   lubricantGramsPerBatch: number | null;
   glidantGramsPerBatch: number | null;
+  otherExcipients: (OtherExcipient & { gramsPerBatch: number })[];
   totalBatchG: number;
   /**
    * How far actives + disintegrant + lubricant + glidant sit above 100%,
@@ -109,6 +141,8 @@ export function deriveSavedFormulation(f: {
   disintegrantPercent: number | null;
   lubricantPercent: number | null;
   glidantPercent: number | null;
+  /** Optional so every existing caller is unchanged; absent means none. */
+  otherExcipients?: OtherExcipient[] | null;
 }): SavedFormulationDerived {
   const totalBatchG = f.tabletWeightG * f.referenceBatchTablets;
 
@@ -118,8 +152,13 @@ export function deriveSavedFormulation(f: {
   });
 
   const combinedActivePercent = actives.reduce((sum, a) => sum + a.percentOfBlend, 0);
+  const others = f.otherExcipients ?? [];
   const fixedPercentSum =
-    combinedActivePercent + (f.disintegrantPercent ?? 0) + (f.lubricantPercent ?? 0) + (f.glidantPercent ?? 0);
+    combinedActivePercent +
+    (f.disintegrantPercent ?? 0) +
+    (f.lubricantPercent ?? 0) +
+    (f.glidantPercent ?? 0) +
+    others.reduce((sum, e) => sum + e.percentOfBlend, 0);
   const fillerPercent = Math.max(0, 100 - fixedPercentSum);
   const percentOverflow = Math.max(0, fixedPercentSum - 100);
 
@@ -132,6 +171,7 @@ export function deriveSavedFormulation(f: {
     disintegrantGramsPerBatch: f.disintegrantPercent != null ? totalBatchG * (f.disintegrantPercent / 100) : null,
     lubricantGramsPerBatch: f.lubricantPercent != null ? totalBatchG * (f.lubricantPercent / 100) : null,
     glidantGramsPerBatch: f.glidantPercent != null ? totalBatchG * (f.glidantPercent / 100) : null,
+    otherExcipients: others.map((e) => ({ ...e, gramsPerBatch: totalBatchG * (e.percentOfBlend / 100) })),
     totalBatchG,
   };
 }
@@ -360,4 +400,71 @@ Formulation version history (oldest to newest):
 ${versionBlocks.join('\n')}${crossSection}
 
 ${TROUBLESHOOT_SYSTEM_PROMPT_SUFFIX}`;
+}
+
+/* ------------------------------------------------------------------------
+ * Imported-sheet cross-check.
+ * ---------------------------------------------------------------------- */
+
+export interface ImportMismatch {
+  name: string;
+  sheetGrams: number;
+  calculatedGrams: number;
+}
+
+/** 0.05 g absorbs a sheet rounding to two decimals; anything wider is a real difference. */
+export const IMPORT_GRAMS_TOLERANCE = 0.05;
+
+/**
+ * Compares the grams an imported sheet lists with what the formulation, as
+ * read, actually calculates to. The AI reads numbers; this is how a misread
+ * digit gets caught — the same check that proved the operator's 43
+ * Tabulator sheets agree with the calc engine to 0.000 g.
+ *
+ * Matched by name, case- and space-insensitively. A sheet line that matches
+ * nothing is not a mismatch — the sheet may call PVPP "Crospovidone" — and
+ * `unmatched` lists them so the reviewer can see what was not checked.
+ */
+export function crossCheckSheetGrams(
+  sheet: { name: string; grams: number }[],
+  sheetTotalGrams: number | null,
+  f: {
+    actives: { label: string }[];
+    fillerName: string;
+    disintegrantName: string | null;
+    lubricantName: string | null;
+    glidantName: string | null;
+  },
+  d: SavedFormulationDerived
+): { mismatches: ImportMismatch[]; unmatched: string[]; checked: number } {
+  const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  const calculated = new Map<string, number>();
+  d.actives.forEach((a, i) => calculated.set(key(f.actives[i]?.label ?? a.label), a.gramsPerBatch));
+  calculated.set(key(f.fillerName), d.fillerGramsPerBatch);
+  if (f.disintegrantName && d.disintegrantGramsPerBatch != null) calculated.set(key(f.disintegrantName), d.disintegrantGramsPerBatch);
+  if (f.lubricantName && d.lubricantGramsPerBatch != null) calculated.set(key(f.lubricantName), d.lubricantGramsPerBatch);
+  if (f.glidantName && d.glidantGramsPerBatch != null) calculated.set(key(f.glidantName), d.glidantGramsPerBatch);
+  d.otherExcipients.forEach((e) => calculated.set(key(e.name), e.gramsPerBatch));
+
+  const mismatches: ImportMismatch[] = [];
+  const unmatched: string[] = [];
+  let checked = 0;
+  for (const line of sheet) {
+    const calc = calculated.get(key(line.name));
+    if (calc === undefined) {
+      unmatched.push(line.name);
+      continue;
+    }
+    checked++;
+    if (Math.abs(calc - line.grams) > IMPORT_GRAMS_TOLERANCE) {
+      mismatches.push({ name: line.name, sheetGrams: line.grams, calculatedGrams: calc });
+    }
+  }
+  if (sheetTotalGrams != null) {
+    checked++;
+    if (Math.abs(d.totalBatchG - sheetTotalGrams) > IMPORT_GRAMS_TOLERANCE) {
+      mismatches.push({ name: 'Total', sheetGrams: sheetTotalGrams, calculatedGrams: d.totalBatchG });
+    }
+  }
+  return { mismatches, unmatched, checked };
 }

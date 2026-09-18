@@ -42,6 +42,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       author: { select: { name: true } },
       retractedBy: { select: { name: true } },
       run: { select: { id: true, label: true, product: true, createdAt: true } },
+      attachment: { select: { id: true, filename: true, mediaType: true } },
     },
   });
   return NextResponse.json(note);

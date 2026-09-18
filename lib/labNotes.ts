@@ -20,12 +20,20 @@ export interface LabNoteInput {
   body: unknown;
   product?: unknown;
   runId?: unknown;
+  source?: unknown;
+  attachmentId?: unknown;
 }
+
+/** How a note's text got into the notebook. */
+export type LabNoteSource = 'typed' | 'text_file' | 'transcribed';
+export const LAB_NOTE_SOURCES: readonly LabNoteSource[] = ['typed', 'text_file', 'transcribed'];
 
 export interface CleanLabNote {
   body: string;
   product: string | null;
   runId: string | null;
+  source: LabNoteSource;
+  attachmentId: string | null;
 }
 
 /** Validates and normalises a new note, or says what is wrong with it. */
@@ -45,7 +53,19 @@ export function parseLabNote(input: LabNoteInput): { ok: true; value: CleanLabNo
   }
   const product = typeof input.product === 'string' && input.product.trim() ? input.product.trim() : null;
   const runId = typeof input.runId === 'string' ? input.runId.trim() : null;
-  return { ok: true, value: { body, product, runId } };
+  const source = input.source === undefined ? 'typed' : input.source;
+  if (!(LAB_NOTE_SOURCES as readonly unknown[]).includes(source)) {
+    return { ok: false, error: `source must be one of ${LAB_NOTE_SOURCES.join(', ')}.` };
+  }
+  // An imported note must point at its original; a typed one has none.
+  const attachmentId = typeof input.attachmentId === 'string' && input.attachmentId.trim() ? input.attachmentId.trim() : null;
+  if (source !== 'typed' && !attachmentId) {
+    return { ok: false, error: 'An imported note must keep its original file.' };
+  }
+  if (source === 'typed' && attachmentId) {
+    return { ok: false, error: 'A typed note has no original file.' };
+  }
+  return { ok: true, value: { body, product, runId, source: source as LabNoteSource, attachmentId } };
 }
 
 /** A retraction must say why — "retracted" with no reason is not a record. */
