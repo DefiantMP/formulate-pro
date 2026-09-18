@@ -343,8 +343,14 @@ export function summarizeProduct(product: string, runs: PriorRunSummary[]): Prod
   const activeGroups = groupByName(
     fresh.flatMap((run) => run.actives.map((active) => ({ name: active.label, value: active })))
   );
+  // Only excipients actually in the blend. Every saved batch stores every
+  // default excipient, including those set to 0%, and counting those listed
+  // "EZTAB 0% — in 3 of 3 runs" on a product that never used EZTAB. Same rule
+  // as the SOP and the Why tab: 0% is not an ingredient.
   const excipientGroups = groupByName(
-    fresh.flatMap((run) => run.excipients.map((exc) => ({ name: exc.name, value: exc.percentOfBlend })))
+    fresh.flatMap((run) =>
+      run.excipients.filter((exc) => exc.percentOfBlend > 0).map((exc) => ({ name: exc.name, value: exc.percentOfBlend }))
+    )
   );
   const fillerGroups = groupByName(
     fresh.flatMap((run) => (run.fillerName ? [{ name: run.fillerName, value: 1 }] : []))

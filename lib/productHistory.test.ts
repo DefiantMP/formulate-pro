@@ -298,6 +298,18 @@ describe('summarizeProduct', () => {
     expect(s.actives[0]).toMatchObject({ label: '7OH', runCount: 2 });
   });
 
+  // Found with the sandbox sample data: every saved batch stores every default
+  // excipient, so unused ones appeared as "EZTAB 0% — in 3 of 3 runs".
+  it('leaves out excipients at 0%, and counts only the runs that used one', () => {
+    const s = summarizeProduct('PB50', [
+      run({ excipients: [{ name: 'Magnesium stearate', percentOfBlend: 1 }, { name: 'EZTAB', percentOfBlend: 0 }] }),
+      run({ excipients: [{ name: 'Magnesium stearate', percentOfBlend: 1 }, { name: 'EZTAB', percentOfBlend: 10 }] }),
+    ])!;
+    expect(s.excipients.find((e) => e.name === 'EZTAB')).toMatchObject({ runCount: 1, percentOfBlend: { median: 10 } });
+    const none = summarizeProduct('PB50', [run({ excipients: [{ name: 'Silicon Dioxide', percentOfBlend: 0 }] })])!;
+    expect(none.excipients).toEqual([]);
+  });
+
   it('returns null for a product with no runs', () => {
     expect(summarizeProduct('PB50', [])).toBeNull();
   });
