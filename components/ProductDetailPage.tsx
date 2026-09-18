@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
+import LabNotesPanel from './LabNotesPanel';
 import { fmt, fmtDate } from '@/lib/format';
 import {
   OUTCOME_LABELS,
@@ -255,6 +256,22 @@ export default function ProductDetailPage({ product }: { product: string }) {
                       <div />
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ flexShrink: 0 }}>
+                <div className="card-hdr">
+                  <div className="card-hdr-title">
+                    <i className="ti ti-notes" />
+                    Lab notes
+                  </div>
+                </div>
+                <div className="card-body">
+                  <LabNotesPanel
+                    product={product}
+                    runsForProduct={runs.map((r) => ({ id: r.runId, label: r.label, createdAt: r.createdAt }))}
+                    emptyText={`No notes on ${product} yet.`}
+                  />
                 </div>
               </div>
 

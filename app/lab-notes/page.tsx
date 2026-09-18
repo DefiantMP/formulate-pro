@@ -1,11 +1,5 @@
-import PlaceholderPage from '@/components/PlaceholderPage';
+import LabNotesPage from '@/components/LabNotesPage';
 
 export default function LabNotes() {
-  return (
-    <PlaceholderPage
-      title="Lab notes"
-      icon="notes"
-      description="Freeform notes for the R&D team here."
-    />
-  );
+  return <LabNotesPage />;
 }

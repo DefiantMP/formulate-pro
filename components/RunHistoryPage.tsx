@@ -6,6 +6,7 @@ import { defaultIngredients } from '@/lib/calc-engine';
 import { fmt } from '@/lib/format';
 import RunReviewPanel from './RunReviewPanel';
 import RunIdentityEditor from './RunIdentityEditor';
+import LabNotesPanel from './LabNotesPanel';
 import { productsFrom } from '@/lib/productHistory';
 import { gmpFirstEnabledAt, isGrandfathered } from '@/lib/gmp';
 import type { RunRecord } from './RunHistoryPanel';
@@ -438,6 +439,11 @@ export default function RunHistoryPage() {
                                 </div>
                               ))
                             )}
+                          </div>
+
+                          <div>
+                            <div className="rh-detail-hdr">Lab notes</div>
+                            <LabNotesPanel runId={run.id} emptyText="No notes on this batch yet." />
                           </div>
 
                           <div className="rh-danger-row">

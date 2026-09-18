@@ -83,6 +83,7 @@ model Run {
   // Prisma requires it to declare the relation, but the column and FK both
   // live on RunLotUsage, so this adds no column to Run and no table rebuild.
   lotUsages          RunLotUsage[]
+  labNotes      LabNote[]
 }
 
 // A saved regrind lot recipe: potency + excipient makeup, reusable across
@@ -623,6 +624,8 @@ model User {
   closedDeviations     RunDeviation[]      @relation("DeviationClosedBy")
   gmpToggles           GmpModeToggleLog[]
   lotAdjustments       LotAdjustment[]
+  labNotes             LabNote[]            @relation("LabNoteAuthor")
+  retractedLabNotes    LabNote[]            @relation("LabNoteRetractedBy")
   passwordResets       PasswordResetToken[] @relation("ResetFor")
   issuedPasswordResets PasswordResetToken[] @relation("ResetIssuedBy")
 
@@ -687,4 +690,32 @@ model LoginThrottle {
   firstFailedAt DateTime?
   lockedUntil   DateTime?
   updatedAt     DateTime  @updatedAt
+}
+
+// The lab's shared notebook (lib/labNotes.ts). INTERNAL ONLY — trial and
+// error, client remarks, floor problems; never shown to a client.
+// No edit path by design: a wrong note is retracted with a reason and stays
+// visible, so the notebook records what was known when (same rule as
+// LotAdjustment).
+model LabNote {
+  id        String   @id @default(cuid())
+  body      String
+  // Product name as used on Run.product. A plain string, not a relation,
+  // because products are derived from runs — there is no Product table.
+  product   String?
+  runId     String?
+  run       Run?     @relation(fields: [runId], references: [id])
+  // Nullable like the other identity FKs: with GMP mode off a note may be
+  // written signed out.
+  authorId  String?
+  author    User?    @relation("LabNoteAuthor", fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  retractedAt     DateTime?
+  retractedReason String?
+  retractedById   String?
+  retractedBy     User?    @relation("LabNoteRetractedBy", fields: [retractedById], references: [id])
+
+  @@index([product])
+  @@index([runId])
+  @@index([createdAt])
 }
