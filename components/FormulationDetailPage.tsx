@@ -188,7 +188,31 @@ export default function FormulationDetailPage({ id }: FormulationDetailPageProps
                     </div>
                   </div>
                 )}
+                {derived!.otherExcipients.map((e) => (
+                  <div className="add-row" key={e.name}>
+                    <div className="add-lbl">
+                      <i className="ti ti-circle-plus" />
+                      {e.name}
+                    </div>
+                    <div className="add-val">
+                      {e.percentOfBlend.toFixed(2)}% · {fmt(e.gramsPerBatch, 1)} g
+                    </div>
+                  </div>
+                ))}
               </div>
+
+              {formulation.attachmentId && (
+                <a
+                  className="labnote-source"
+                  style={{ marginTop: 10 }}
+                  href={`/api/attachments/${formulation.attachmentId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <i className="ti ti-paperclip" />
+                  Imported from {formulation.importedFrom ?? 'an uploaded sheet'} — view original
+                </a>
+              )}
 
               {formulation.notes && (
                 <>

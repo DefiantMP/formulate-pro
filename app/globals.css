@@ -390,6 +390,17 @@ input::placeholder { color: var(--text-3); opacity: 1; font-style: italic; }
 .prod-varies { color: var(--warning-text); white-space: nowrap; }
 .prod-varies i { font-size: 11px; }
 
+.import-banner { margin: 12px 14px 0; padding: 11px 13px; border: 1px solid var(--brand-border); border-radius: 10px; background: var(--surface); font-size: 12px; color: var(--text-2); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.import-banner-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.import-banner-top b { color: var(--text); }
+.import-banner-top .btn { flex-shrink: 0; text-decoration: none; }
+.import-banner-line { display: flex; gap: 6px; align-items: flex-start; font-size: 11px; line-height: 1.5; padding: 6px 9px; border-radius: 6px; background: var(--bg); }
+.import-banner-line.ok { background: var(--brand-bg); color: var(--brand); }
+.import-banner-line.warn { background: var(--warning-bg); color: var(--warning-text); }
+.import-banner-line.bad { background: var(--danger-bg); color: var(--danger-text); }
+.import-banner-line ul { margin: 4px 0 6px; padding-left: 18px; }
+.other-exc-row .row { gap: 6px; }
+
 /* Lab notes */
 .labnotes-compose { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .labnotes-compose textarea { width: 100%; padding: 8px 9px; border: 0.5px solid var(--border-md); border-radius: 6px; font: inherit; font-size: 12px; color: var(--text); background: var(--surface); resize: vertical; outline: none; }

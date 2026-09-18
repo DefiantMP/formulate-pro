@@ -141,8 +141,11 @@ export function deriveSavedFormulation(f: {
   disintegrantPercent: number | null;
   lubricantPercent: number | null;
   glidantPercent: number | null;
-  /** Optional so every existing caller is unchanged; absent means none. */
-  otherExcipients?: OtherExcipient[] | null;
+  /** Optional so every existing caller is unchanged; absent means none.
+   *  Accepts the raw stored JSON — validated here, so every caller that
+   *  passes a record straight through (detail page, troubleshooting chat)
+   *  is protected from a malformed entry. */
+  otherExcipients?: unknown;
 }): SavedFormulationDerived {
   const totalBatchG = f.tabletWeightG * f.referenceBatchTablets;
 
@@ -152,7 +155,7 @@ export function deriveSavedFormulation(f: {
   });
 
   const combinedActivePercent = actives.reduce((sum, a) => sum + a.percentOfBlend, 0);
-  const others = f.otherExcipients ?? [];
+  const others = parseOtherExcipients(f.otherExcipients);
   const fixedPercentSum =
     combinedActivePercent +
     (f.disintegrantPercent ?? 0) +
@@ -384,6 +387,7 @@ export function buildTroubleshootSystemPrompt(
       v.disintegrantName ? `Disintegrant: ${v.disintegrantName} ${v.disintegrantPercent ?? 0}%` : null,
       v.lubricantName ? `Lubricant: ${v.lubricantName} ${v.lubricantPercent ?? 0}%` : null,
       v.glidantName ? `Glidant: ${v.glidantName} ${v.glidantPercent ?? 0}%` : null,
+      ...derived.otherExcipients.map((e) => `Other: ${e.name} ${e.percentOfBlend}%`),
     ]
       .filter(Boolean)
       .join('; ');

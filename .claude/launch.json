@@ -4,9 +4,21 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "dev-scratch-db",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "DATABASE_URL=file:/private/tmp/claude-501/-Users-mattoxpretto-Documents-formulate-pro/855bfe4f-355f-433b-b96f-0a552a072ce1/scratchpad/authtest.db exec npx next dev -p 3100"
+      ],
+      "port": 3100
     }
   ]
 }

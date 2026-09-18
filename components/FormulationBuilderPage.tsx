@@ -9,7 +9,9 @@ import type { ChatMessage } from './ChatPanel';
 import GuidedFormulationWizard from './GuidedFormulationWizard';
 import type { RunRecord } from './RunHistoryPanel';
 import {
+  crossCheckSheetGrams,
   deriveSavedFormulation,
+  parseOtherExcipients,
   PERCENT_SUM_TOLERANCE,
   SAVED_FORMULATION_STATUSES,
   savedFormulationStatusLabel,
@@ -18,6 +20,22 @@ import {
   type SavedFormulationStatus,
 } from '@/lib/savedFormulations';
 import { numOrZero, fmt } from '@/lib/format';
+import type { ExtractedFormulation } from '@/lib/documentReading';
+
+/** What the Formulations "Import" button hands the builder, via sessionStorage. */
+export interface FormulationImportDraft {
+  attachmentId: string;
+  filename: string;
+  method: 'text_file' | 'transcribed';
+  formulation: ExtractedFormulation;
+}
+export const IMPORT_DRAFT_PREFIX = 'formulate-import:';
+
+interface OtherDraft {
+  id: string;
+  name: string;
+  percent: string;
+}
 
 export interface ActiveDraft {
   id: string;
@@ -40,6 +58,8 @@ function blankActive(): ActiveDraft {
 interface FormulationBuilderPageProps {
   /** When set, this draft pre-fills from and iterates that formulation — see the "Iterate" button on FormulationDetailPage. */
   iterateFromId?: string;
+  /** When set, this draft pre-fills from an imported sheet (see FormulationsLibraryPage's Import). */
+  importDraftKey?: string;
 }
 
 /**
@@ -57,7 +77,7 @@ interface FormulationBuilderPageProps {
  * needed and no orphaned empty version is left behind if the user abandons
  * the edit.
  */
-export default function FormulationBuilderPage({ iterateFromId }: FormulationBuilderPageProps) {
+export default function FormulationBuilderPage({ iterateFromId, importDraftKey }: FormulationBuilderPageProps) {
   const router = useRouter();
 
   const [builderMode, setBuilderMode] = useState<'quick' | 'guided'>('quick');
@@ -72,6 +92,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
   const [lubricantPercent, setLubricantPercent] = useState('2');
   const [glidantName, setGlidantName] = useState('');
   const [glidantPercent, setGlidantPercent] = useState('');
+  const [others, setOthers] = useState<OtherDraft[]>([]);
+  const [importInfo, setImportInfo] = useState<FormulationImportDraft | null>(null);
+  const [mismatchAcknowledged, setMismatchAcknowledged] = useState(false);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<SavedFormulationStatus>('untested');
   const [outcomeNotes, setOutcomeNotes] = useState('');
@@ -108,6 +131,13 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         setLubricantPercent(data.lubricantPercent != null ? String(data.lubricantPercent) : '');
         setGlidantName(data.glidantName ?? '');
         setGlidantPercent(data.glidantPercent != null ? String(data.glidantPercent) : '');
+        setOthers(
+          parseOtherExcipients(data.otherExcipients).map((e, i) => ({
+            id: `other-${i}-${Date.now()}`,
+            name: e.name,
+            percent: String(e.percentOfBlend),
+          }))
+        );
         // Outcome fields (status/outcomeNotes/equipmentNotes) deliberately
         // reset for the new iteration rather than copying the parent's —
         // the parent's describe what already happened to it, not this
@@ -120,6 +150,57 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
       cancelled = true;
     };
   }, [iterateFromId]);
+
+  // Pre-fill from an imported sheet. Every field the reading could not fill
+  // with confidence is left EMPTY rather than defaulted — a blank that must be
+  // filled is safer than a plausible default nobody checked. The excipient
+  // slots are cleared first for the same reason: the builder's own defaults
+  // (PVPP 5%, Mag 2%) must never survive into an imported formulation.
+  useEffect(() => {
+    if (!importDraftKey) return;
+    let draft: FormulationImportDraft | null = null;
+    try {
+      const raw = sessionStorage.getItem(IMPORT_DRAFT_PREFIX + importDraftKey);
+      draft = raw ? (JSON.parse(raw) as FormulationImportDraft) : null;
+    } catch {
+      draft = null;
+    }
+    if (!draft) return;
+    const f = draft.formulation;
+    const numStr = (n: number | null) => (n == null ? '' : String(n));
+    setImportInfo(draft);
+    setName(f.name ?? '');
+    setTabletWeightG(numStr(f.tabletWeightG));
+    setReferenceBatchTablets(numStr(f.referenceBatchTablets));
+    setActives(
+      f.actives.length
+        ? f.actives.map((a) => ({
+            id: makeActiveId(),
+            label: a.label,
+            targetMgPerTablet: numStr(a.targetMgPerTablet),
+            potencyPercent: numStr(a.potencyPercent),
+            source: '',
+          }))
+        : [blankActive()]
+    );
+    setFillerName(f.fillerName ?? '');
+    const take = (role: string) => f.excipients.find((e) => e.role === role) ?? null;
+    const dis = take('disintegrant');
+    const lub = take('lubricant');
+    const gli = take('glidant');
+    setDisintegrantName(dis?.name ?? '');
+    setDisintegrantPercent(numStr(dis?.percentOfBlend ?? null));
+    setLubricantName(lub?.name ?? '');
+    setLubricantPercent(numStr(lub?.percentOfBlend ?? null));
+    setGlidantName(gli?.name ?? '');
+    setGlidantPercent(numStr(gli?.percentOfBlend ?? null));
+    setOthers(
+      f.excipients
+        .filter((e) => e !== dis && e !== lub && e !== gli)
+        .map((e, i) => ({ id: `other-${i}-${Date.now()}`, name: e.name, percent: numStr(e.percentOfBlend) }))
+    );
+    setNotes(f.notes ?? '');
+  }, [importDraftKey]);
 
   // Sampled once for the Guided wizard's step-1 tablet-weight guidance —
   // deliberately drawn from this app's own saved data (never hardcoded
@@ -183,8 +264,40 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
       disintegrantPercent: disintegrantPercent === '' ? null : numOrZero(disintegrantPercent),
       lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
       glidantPercent: glidantPercent === '' ? null : numOrZero(glidantPercent),
+      otherExcipients: others
+        .filter((o) => o.name.trim() && o.percent !== '')
+        .map((o) => ({ name: o.name.trim(), percentOfBlend: numOrZero(o.percent) })),
     });
-  }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent, glidantPercent]);
+  }, [tabletWeightNum, referenceBatchNum, actives, disintegrantPercent, lubricantPercent, glidantPercent, others]);
+
+  // Recalculate the imported sheet and compare it with the grams the sheet
+  // itself lists — how a misread digit is caught. Live, so correcting a field
+  // clears its flag.
+  const importCheck = useMemo(() => {
+    if (!importInfo || importInfo.formulation.sheetGrams.length === 0) return null;
+    return crossCheckSheetGrams(
+      importInfo.formulation.sheetGrams,
+      importInfo.formulation.sheetTotalGrams,
+      {
+        actives: actives.map((a, i) => ({ label: a.label.trim() || `Active ${i + 1}` })),
+        fillerName,
+        disintegrantName: disintegrantName.trim() || null,
+        lubricantName: lubricantName.trim() || null,
+        glidantName: glidantName.trim() || null,
+      },
+      derived
+    );
+  }, [importInfo, actives, fillerName, disintegrantName, lubricantName, glidantName, derived]);
+  const mismatchCount = importCheck?.mismatches.length ?? 0;
+  useEffect(() => {
+    setMismatchAcknowledged(false);
+  }, [mismatchCount]);
+
+  const othersValid = others.every(
+    (o) =>
+      (o.name.trim() === '' && o.percent === '') ||
+      (o.name.trim() !== '' && o.percent !== '' && numOrZero(o.percent) >= 0 && numOrZero(o.percent) <= 100)
+  );
 
   // Filler is calculated by difference (100% - everything else), so the
   // blend sums to 100% by construction UNLESS actives + disintegrant +
@@ -208,7 +321,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
     referenceBatchNum > 0 &&
     fillerName.trim() !== '' &&
     actives.every((a) => a.label.trim() !== '' && numOrZero(a.targetMgPerTablet) > 0 && numOrZero(a.potencyPercent) > 0) &&
-    percentagesValid;
+    percentagesValid &&
+    othersValid &&
+    (mismatchCount === 0 || mismatchAcknowledged);
 
   async function save() {
     if (!canSave) return;
@@ -226,6 +341,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         lubricantPercent: number | null;
         glidantName: string | null;
         glidantPercent: number | null;
+        otherExcipients: { name: string; percentOfBlend: number }[];
+        importedFrom?: string;
+        attachmentId?: string;
         notes: string | null;
         parentId?: string;
         status: SavedFormulationStatus;
@@ -248,6 +366,10 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         lubricantPercent: lubricantPercent === '' ? null : numOrZero(lubricantPercent),
         glidantName: glidantName.trim() || null,
         glidantPercent: glidantPercent === '' ? null : numOrZero(glidantPercent),
+        otherExcipients: others
+          .filter((o) => o.name.trim() && o.percent !== '')
+          .map((o) => ({ name: o.name.trim(), percentOfBlend: numOrZero(o.percent) })),
+        ...(importInfo ? { importedFrom: importInfo.filename, attachmentId: importInfo.attachmentId } : {}),
         notes: notes.trim() || null,
         ...(iterateFromId ? { parentId: iterateFromId } : {}),
         status,
@@ -264,6 +386,13 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
         return;
       }
       const saved: { id: string } = await res.json();
+      if (importDraftKey) {
+        try {
+          sessionStorage.removeItem(IMPORT_DRAFT_PREFIX + importDraftKey);
+        } catch {
+          /* private browsing — nothing to clean up */
+        }
+      }
       router.push(`/formulations/${saved.id}`);
     } catch {
       alert('Failed to save formulation.');
@@ -298,7 +427,9 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
             <span className="mode-chip">
               {iterateFromId
                 ? `Iterating from ${parent ? `v${parent.version} — ${parent.name}` : '…'}`
-                : 'Draft — not a saved run'}
+                : importInfo
+                  ? 'Imported — check before saving'
+                  : 'Draft — not a saved run'}
             </span>
           </div>
           <div className="topbar-right">
@@ -323,6 +454,61 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
             </button>
           </div>
         </div>
+        {importInfo && (
+          <div className="import-banner">
+            <div className="import-banner-top">
+              <div>
+                <b>Imported from {importInfo.filename}</b>
+                {importInfo.method === 'transcribed' ? ' — read by AI. ' : ' — read from the file. '}
+                Check every value against the original before saving. Anything the reading was unsure of is left
+                blank for you to fill in.
+              </div>
+              <a href={`/api/attachments/${importInfo.attachmentId}`} target="_blank" rel="noreferrer" className="btn btn-sm">
+                <i className="ti ti-external-link" /> Open original
+              </a>
+            </div>
+            {importInfo.formulation.uncertainFields.length > 0 && (
+              <div className="import-banner-line warn">
+                <i className="ti ti-alert-triangle" /> Unsure about: {importInfo.formulation.uncertainFields.join('; ')}
+              </div>
+            )}
+            {importCheck === null ? (
+              <div className="import-banner-line">
+                <i className="ti ti-info-circle" /> The sheet lists no gram amounts, so the reading could not be
+                cross-checked — check the numbers by eye.
+              </div>
+            ) : importCheck.mismatches.length === 0 ? (
+              <div className="import-banner-line ok">
+                <i className="ti ti-circle-check" /> All {importCheck.checked} amounts on the sheet match what these
+                values calculate to.
+                {importCheck.unmatched.length > 0 && ` Not matched by name, so not checked: ${importCheck.unmatched.join(', ')}.`}
+              </div>
+            ) : (
+              <div className="import-banner-line bad">
+                <div>
+                  <i className="ti ti-alert-octagon" /> {importCheck.mismatches.length} amount
+                  {importCheck.mismatches.length === 1 ? '' : 's'} on the sheet disagree with what these values
+                  calculate to — usually a misread number:
+                  <ul>
+                    {importCheck.mismatches.map((m) => (
+                      <li key={m.name}>
+                        <b>{m.name}</b>: sheet {fmt(m.sheetGrams, 2)} g, calculated {fmt(m.calculatedGrams, 2)} g
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="recovery-ack">
+                    <input
+                      type="checkbox"
+                      checked={mismatchAcknowledged}
+                      onChange={(e) => setMismatchAcknowledged(e.target.checked)}
+                    />
+                    I&apos;ve checked these against the original and the values are right
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {builderMode === 'guided' ? (
           <div className="content">
             <GuidedFormulationWizard
@@ -553,6 +739,55 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                   </div>
                 </div>
 
+                {others.map((o) => (
+                  <div className="lot-field-grid other-exc-row" style={{ marginTop: 8 }} key={o.id}>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>Other excipient</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. EZTAB"
+                        value={o.name}
+                        onChange={(e) =>
+                          setOthers((prev) => prev.map((x) => (x.id === o.id ? { ...x, name: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label>% of blend</label>
+                      <div className="row">
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          step="0.1"
+                          value={o.percent}
+                          onChange={(e) =>
+                            setOthers((prev) => prev.map((x) => (x.id === o.id ? { ...x, percent: e.target.value } : x)))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          title="Remove this excipient"
+                          onClick={() => setOthers((prev) => prev.filter((x) => x.id !== o.id))}
+                        >
+                          <i className="ti ti-x" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ marginTop: 8 }}
+                  onClick={() => setOthers((prev) => [...prev, { id: `other-new-${Date.now()}`, name: '', percent: '' }])}
+                >
+                  <i className="ti ti-plus" /> Add another excipient
+                </button>
+                {!othersValid && (
+                  <div className="rm-inline-err">Each extra excipient needs a name and a percentage from 0 to 100.</div>
+                )}
+
                 <div className="hr" />
                 <div className="sub-lbl">Outcome (this version)</div>
                 <div className="field">
@@ -702,6 +937,17 @@ export default function FormulationBuilderPage({ iterateFromId }: FormulationBui
                       </div>
                     </div>
                   )}
+                  {derived.otherExcipients.map((e) => (
+                    <div className="add-row" key={e.name}>
+                      <div className="add-lbl">
+                        <i className="ti ti-circle-plus" />
+                        {e.name}
+                      </div>
+                      <div className="add-val">
+                        {e.percentOfBlend.toFixed(2)}% · {fmt(e.gramsPerBatch, 1)} g
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
