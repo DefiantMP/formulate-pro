@@ -5,6 +5,8 @@ import Sidebar from './Sidebar';
 import { defaultIngredients } from '@/lib/calc-engine';
 import { fmt } from '@/lib/format';
 import RunReviewPanel from './RunReviewPanel';
+import RunIdentityEditor from './RunIdentityEditor';
+import { productsFrom } from '@/lib/productHistory';
 import { gmpFirstEnabledAt, isGrandfathered } from '@/lib/gmp';
 import type { RunRecord } from './RunHistoryPanel';
 
@@ -144,6 +146,9 @@ export default function RunHistoryPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [justSavedId, setJustSavedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Narrows the list to runs with no product — the ones missing from the
+  // Products page, which are the reason this filter exists.
+  const [onlyUnfiled, setOnlyUnfiled] = useState(false);
 
   // Extracted so a review or deviation write can refresh the list in place —
   // the drafts map is rebuilt from the reloaded rows so an in-progress COA
@@ -231,6 +236,12 @@ export default function RunHistoryPage() {
     }
   }
 
+  const knownProducts = productsFrom(runs).map((p) => p.product);
+  const unfiledCount = runs.filter((r) => !r.product?.trim()).length;
+  // Once the last unfiled run is given a product the filter has nothing to
+  // show, so it falls back to all runs rather than an empty list.
+  const visibleRuns = onlyUnfiled && unfiledCount > 0 ? runs.filter((r) => !r.product?.trim()) : runs;
+
   return (
     <div className="app">
       <Sidebar />
@@ -244,6 +255,24 @@ export default function RunHistoryPage() {
           {/* flexShrink: 0 — see RunHistoryPanel.tsx: without this, expanding
               a row's COA detail overflows the card and gets silently clipped
               instead of .rh-page scrolling to reveal it. */}
+          {!loading && unfiledCount > 0 && (
+            <div className="rh-filter">
+              <button
+                type="button"
+                className={`rh-filter-btn${onlyUnfiled ? '' : ' active'}`}
+                onClick={() => setOnlyUnfiled(false)}
+              >
+                All runs ({runs.length})
+              </button>
+              <button
+                type="button"
+                className={`rh-filter-btn${onlyUnfiled ? ' active' : ''}`}
+                onClick={() => setOnlyUnfiled(true)}
+              >
+                No product ({unfiledCount})
+              </button>
+            </div>
+          )}
           <div className="card" style={{ flexShrink: 0 }}>
             {loading ? (
               <div className="empty">
@@ -265,13 +294,18 @@ export default function RunHistoryPage() {
                   <div>Tablets</div>
                   <div />
                 </div>
-                {runs.map((run) => {
+                {visibleRuns.map((run) => {
                   const isOpen = expanded.has(run.id);
                   const draft = drafts[run.id] ?? draftFromRun(run);
                   return (
                     <div className="rh-row" key={run.id}>
                       <button className="rh-row-summary" onClick={() => toggleExpanded(run.id)}>
-                        <div className="rh-cell-name">{run.label}</div>
+                        <div className="rh-cell-name">
+                          {run.label}
+                          <div className={`rh-cell-product${run.product ? '' : ' none'}`}>
+                            {run.product || 'No product'}
+                          </div>
+                        </div>
                         <div className="rh-cell">
                           <span className={`run-tag ${run.mode === 'fresh' ? 'tag-fr' : 'tag-rg'}`}>
                             {run.mode === 'fresh' ? 'Fresh' : 'Regrind'}
@@ -285,6 +319,15 @@ export default function RunHistoryPage() {
 
                       {isOpen && (
                         <div className="rh-detail">
+                          <RunIdentityEditor
+                            runId={run.id}
+                            label={run.label}
+                            product={run.product ?? null}
+                            knownProducts={knownProducts}
+                            onSaved={(patch) =>
+                              setRuns((prev) => prev.map((r) => (r.id === run.id ? { ...r, ...patch } : r)))
+                            }
+                          />
                           <div>
                             <div className="rh-detail-hdr">Materials used</div>
                             {summarizeMaterials(run).length === 0 ? (
