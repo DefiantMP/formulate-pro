@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import RecoveryCodeReveal from './RecoveryCodeReveal';
 
 type Mode = 'login' | 'signup' | 'recover';
@@ -20,7 +20,34 @@ type Mode = 'login' | 'signup' | 'recover';
  */
 export default function AuthPage() {
   const router = useRouter();
+  const inviteToken = useSearchParams().get('invite');
   const [mode, setMode] = useState<Mode>('login');
+  // Invite-only (lib/invites.ts): "Create account" is offered only with a
+  // live invite link, or on a brand-new instance with no admin yet.
+  const [access, setAccess] = useState<{
+    loaded: boolean;
+    bootstrap: boolean;
+    invite: { email: string; role: string } | null;
+    inviteError: string | null;
+  }>({ loaded: false, bootstrap: false, invite: null, inviteError: null });
+
+  useEffect(() => {
+    const qs = inviteToken ? `?token=${encodeURIComponent(inviteToken)}` : '';
+    fetch(`/api/auth/invite${qs}`)
+      .then(async (res) => ({ ok: res.ok, d: await res.json().catch(() => null) }))
+      .then(({ ok, d }) => {
+        const invite = ok && d?.email ? { email: d.email as string, role: d.role as string } : null;
+        setAccess({ loaded: true, bootstrap: !!d?.bootstrap, invite, inviteError: ok ? null : d?.error ?? null });
+        if (invite) {
+          setMode('signup');
+          setEmail(invite.email);
+        } else if (d?.bootstrap) {
+          setMode('signup');
+        }
+      })
+      .catch(() => setAccess((a) => ({ ...a, loaded: true })));
+  }, [inviteToken]);
+  const canSignUp = access.bootstrap || !!access.invite;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,7 +100,11 @@ export default function AuthPage() {
       }
       let recoveryCode: string | null = null;
       if (mode === 'signup') {
-        const d = await post('/api/auth/signup', { name, email, password }, 'Could not create the account.');
+        const d = await post(
+          '/api/auth/signup',
+          { name, email, password, inviteToken: access.invite ? inviteToken : undefined },
+          'Could not create the account.'
+        );
         if (!d) return;
         recoveryCode = d.recoveryCode;
       }
@@ -106,9 +137,14 @@ export default function AuthPage() {
         <div className="logo-name" style={{ fontSize: 20 }}>Formulate</div>
         <div className="logo-tag" style={{ marginBottom: 14 }}>Pro · Beta</div>
 
+        {access.inviteError && (
+          <div className="rm-inline-err" style={{ marginBottom: 10 }}>
+            {access.inviteError}
+          </div>
+        )}
         {mode === 'recover' ? (
           <div className="sub-lbl" style={{ marginBottom: 10 }}>Reset a forgotten password</div>
-        ) : (
+        ) : !canSignUp ? null : (
           <div className="mode-toggle">
             <button type="button" className={`m-btn${mode === 'login' ? ' active' : ''}`} onClick={() => switchMode('login')}>
               Sign in
@@ -126,14 +162,28 @@ export default function AuthPage() {
               <input id="auth-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name or initials" />
             </div>
             <div className="field-hint" style={{ marginBottom: 10 }}>
-              New accounts are for operators only. Only an admin can grant the reviewer role.
+              {access.invite ? (
+                <>
+                  You&apos;ve been invited as {access.invite.role === 'reviewer' ? 'a reviewer' : 'an operator'}.
+                </>
+              ) : (
+                <>This is the first account, so it becomes the admin. Everyone after it joins by invitation.</>
+              )}
             </div>
           </>
         )}
 
         <div className="field">
           <label htmlFor="auth-email">Email</label>
-          <input id="auth-email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+          <input
+            id="auth-email"
+            type="text"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            readOnly={mode === 'signup' && !!access.invite}
+            title={mode === 'signup' && access.invite ? 'This invite is for this email address' : undefined}
+          />
         </div>
 
         {mode === 'recover' && (
@@ -177,10 +227,9 @@ export default function AuthPage() {
           </>
         )}
 
-        {mode !== 'recover' && (
+        {mode === 'login' && access.loaded && !canSignUp && (
           <div className="field-hint" style={{ marginTop: 12 }}>
-            Signing in is only required for GMP-mode actions. With GMP mode off the app is
-            usable without an account.
+            Accounts are by invitation — ask an admin for an invite link.
           </div>
         )}
       </form>

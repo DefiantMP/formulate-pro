@@ -723,6 +723,11 @@ textarea.rm-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px r
 .acct-row-off b { color: var(--text-2); }
 .acct-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .acct-link { margin-bottom: 10px; }
+.acct-invite { margin-bottom: 12px; }
+.acct-invite-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px auto; gap: 8px; }
+@media (max-width: 700px) { .acct-invite-row { grid-template-columns: 1fr; } }
+.acct-invite-pending { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 0.5px solid var(--border); font-size: 11px; color: var(--text-2); }
+.acct-invite-pending b { color: var(--text); }
 .acct-pw-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .acct-pw-grid input { width: 100%; box-sizing: border-box; }
 .acct-link-row { display: flex; gap: 6px; }

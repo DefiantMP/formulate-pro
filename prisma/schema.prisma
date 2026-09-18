@@ -667,6 +667,8 @@ model User {
   retractedLabNotes    LabNote[]            @relation("LabNoteRetractedBy")
   passwordResets       PasswordResetToken[] @relation("ResetFor")
   issuedPasswordResets PasswordResetToken[] @relation("ResetIssuedBy")
+  invitesIssued        Invite[]             @relation("InviteIssuedBy")
+  inviteUsed           Invite[]             @relation("InviteUsedBy")
 
   @@index([email])
 }
@@ -784,4 +786,25 @@ model Attachment {
   formulations SavedFormulation[]
 
   @@index([sha256])
+}
+
+// One-time sign-up link bound to one email (lib/invites.ts). Accounts are
+// invite-only once an admin exists. Only the SHA-256 of the token is stored;
+// rows are kept after use or cancellation as the record of who let whom in.
+model Invite {
+  id         String    @id @default(cuid())
+  email      String
+  // 'operator' | 'reviewer' — admin is never granted by a link.
+  role       String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  revokedAt  DateTime?
+  issuedById String
+  issuedBy   User      @relation("InviteIssuedBy", fields: [issuedById], references: [id])
+  usedById   String?
+  usedBy     User?     @relation("InviteUsedBy", fields: [usedById], references: [id])
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
 }
